@@ -137,12 +137,12 @@ Complex prebuilt callbacks:
 
 Records losses. To activate: `cbs.withLoss()`
 Uses:
-`learner.Loss.train`: list of all training losses over all epochs and batches (length = #epochs * #batches)
-`learner.Loss.valid`: list of all validation losses over all epochs and batches (length = #epochs * #batches)
-`learner.Loss.plot()`: plots the 2 above
-`Learner.Loss.epoch.train`: list of average training epoch losses (length = #epochs)
-`Learner.Loss.epoch.valid`: list of average validation epoch losses (length = #epochs)
-`Learner.Loss.epoch.plot`: plots the 2 above
+- `learner.Loss.train`: list of all training losses over all epochs and batches (length = #epochs * #batches)
+- `learner.Loss.valid`: list of all validation losses over all epochs and batches (length = #epochs * #batches)
+- `learner.Loss.plot()`: plots the 2 above
+- `Learner.Loss.epoch.train`: list of average training epoch losses (length = #epochs)
+- `Learner.Loss.epoch.valid`: list of average validation epoch losses (length = #epochs)
+- `Learner.Loss.epoch.plot`: plots the 2 above
 
 #### HookModule
 
@@ -151,7 +151,8 @@ Record inputs and outputs of the modules. To activate: `cbs.withHookModule()`
 This is a bit complicated, so let's see a few examples first. `learner.HookModule.withMeanRecorder()` will record the mean forward in/out and backward in/out of each module. This means that you can access it later, like:
 - `learner.HookModule[0].forward.means`: returns a list of output means of the first module/layer
 - `learner.HookModule[0].backward.means`: returns a list of output gradient means of the first module/layer
-- `learner.HookModule[0].name`: name of the module
+
+Actually implementing it by yourself is a bit complicated, so you should read over the source code to get a better feeling. For normal usage, feel free to display elements (like `learner.HookModule`, `learner.HookModule[0]`, ...) right on your cell, as they provide detailed guidance.
 
 #### HookParam
 
@@ -162,17 +163,25 @@ If your network has `Linear` and `Conv2d`, both of which has parameters, then th
 Uses:
 - `learner.HookParam.plot()`: plots everything
 
+#### ParamFinder
+
+Finds the best parameter value for training. To activate: `cbs.withParamFinder("lr")`
+
+Replace "lr" with any parameters you want figure out. When everything is setup properly, you can train it normally for a little bit (optional, but just to give the network some familiarity with the problem), then do `learner.ParamFinder.run()`.
+
+This searches in the range of $10^{-6}$ to $10^2$
+
 ---
 
-## Learner
+## learner
 
 Actually this one is pretty simple. Think of it as just a container for the model, data, optimizer, and loss function. It handles basic stuff like the main training loop, and it also manages the callback mechanism:
 - `learner.configure(model, data, opt, lossFunction)`: Configures the learner. All of these has to be configured before running. You can configure them at initialization (`Learner(...)`), or at run time (`learner.run(3, ...)`)
 - `learner.run(epochs, ...)`: Runs for a number of epochs
 
 All checkpoints available:
-- `startRun`, `endRun`, `cancelRun`: before, after run, and when run is cancelled
-- `startEpoch`, `endEpoch`, `cancelEpoch`: before, after epoch, and when epoch is cancelled
+- `startRun`, `endRun`, `cancelRun`: Before, after run, and when run is cancelled
+- `startEpoch`, `endEpoch`, `cancelEpoch`: Before, after epoch, and when epoch is cancelled
 - `startValidBatches`: Each epoch has 2 phases, 1 train and 1 validation. This sits between them
 - `startBatch`, `endBatch`, `cancelBatch`: before, after batch, and when batch is cancelled
 - `endPass`: After passed data to the model
@@ -180,3 +189,16 @@ All checkpoints available:
 - `startBackward`: Before backprop. Return anything (not `None`) to not execute this
 - `startStep`: Before step. Return anything (not `None`) to not execute this
 - `startZeroGrad`: Before zero gradients. Return anything (not `None`) to not execute this
+- `suspend`: Before detaching callback for temporary suspension
+- `restore`: After being reattached to `Callbacks` after temporary suspension
+
+There's also a quick and dirty `nn.Module` called `Lambda`. This basically transforms a regular function into a module.
+
+---
+
+## schedule
+
+A schedule is just a function mapping from $[0, 1]$ to a real value. When used together with the `ParamScheduler` callback, it will change the network parameter to that specific real value. Using `ParamScheduler` is quite easy though:
+- `ParamScheduler("lr", <schedule>)`: just a typical constructor. Then you can add this `Callback` to the learner
+
+Everything else are tools to create schedules easily.

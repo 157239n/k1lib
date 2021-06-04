@@ -3,3 +3,5 @@ __pycache__
 build
 k1lib.egg-info
 **.jupyterlab-workspace
+trash
+dist
