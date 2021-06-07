@@ -2,25 +2,29 @@
 import k1lib as _k1lib
 import matplotlib.pyplot as _plt
 class SliceablePlot:
-    def __init__(self, plotF, _slice=slice(None, None, None), alphaSlice=None, attrs=[], docs=""):
+    def __init__(self, plotF, slices=[slice(None, None, None)], alphaSlice=None, attrs=[], docs=""):
         self.plotF = plotF
-        self.slice = _slice
+        self.slices = slices
         self.alphaSlice = alphaSlice # slice using list of strings or string
         self.attrs = attrs
         self.docs = docs
+    @property
+    def squeezedSlices(self): return _k1lib.squeeze(self.slices)
     def __getattr__(self, attr):
-        return SliceablePlot(self.plotF, self.slice, self.alphaSlice, self.attrs + [attr], self.docs)
-    def __getitem__(self, _slice):
-        if type(_slice) == slice:
-            return SliceablePlot(self.plotF, _slice, self.alphaSlice, self.attrs, self.docs)
-        else: return SliceablePlot(self.plotF, self.slice, _slice, self.attrs, self.docs)
+        return SliceablePlot(self.plotF, self.squeezedSlices, self.alphaSlice, self.attrs + [attr], self.docs)
+    def __getitem__(self, idx):
+        if type(idx) == slice:
+            return SliceablePlot(self.plotF, [idx], self.alphaSlice, self.attrs, self.docs)
+        if type(idx) == tuple and all([type(elem) == slice for elem in idx]):
+            return SliceablePlot(self.plotF, idx, self.alphaSlice, self.attrs, self.docs)
+        return SliceablePlot(self.plotF, self.squeezedSlices, idx, self.attrs, self.docs)
     def __repr__(self):
         if self.alphaSlice == None:
-            if len(self.attrs) > 0: self.plotF(self.slice, attrs=self.attrs)
-            else: self.plotF(self.slice)
+            if len(self.attrs) > 0: self.plotF(self.squeezedSlices, attrs=self.attrs)
+            else: self.plotF(self.squeezedSlices)
         else:
             if len(self.attrs) > 0:
-                self.plotF(self.slice, self.alphaSlice, attrs=self.attrs)
-            else: self.plotF(self.slice, self.alphaSlice)
+                self.plotF(self.squeezedSlices, self.alphaSlice, attrs=self.attrs)
+            else: self.plotF(self.squeezedSlices, self.alphaSlice)
         return f"""Sliceable plot. Can...
 - p[a:b]: to focus on a specific range of the plot{self.docs}"""

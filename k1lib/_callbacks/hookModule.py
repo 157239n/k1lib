@@ -2,167 +2,127 @@
 from k1lib.callbacks import Callback, Callbacks
 import k1lib
 from functools import partial
-from k1lib import getFirst as _getFirst
+from k1lib import squeeze
 import matplotlib.pyplot as plt
+import torch.nn as nn
+class Handles:
+    def __init__(self):
+        self.forward = None; self.backward = None
+    def remove(self):
+        self.forward.remove(); self.forward = None
+        self.backward.remove(); self.backward = None
+    @property
+    def active(self):
+        if self.forward != None and self.backward != None: return True
+        elif self.forward == None and self.backward == None: return False
+        raise Exception("Supposed to be unreachable")
+class ModuleData:
+    def __init__(self):
+        self.forward = k1lib.Object().withAutoDeclare(lambda: [])
+        self.backward = k1lib.Object().withAutoDeclare(lambda: [])
+    def _plot(self, axes, field:str, rangeSlice:slice):
+        forwardData = self.forward[field]
+        backwardData = self.backward[field]
+        fR, bR = k1lib.Range.proportionalSlice(len(forwardData), len(backwardData), rangeSlice)
+        axes[0].plot(fR.range, forwardData[fR.slice], alpha=0.5)
+        axes[1].plot(bR.range, backwardData[bR.slice], alpha=0.5)
+    def __repr__(self):
+        return """Module's saved data. can...
+- d.forward: to get data stored during forward pass
+- d.backward: to get data stored during backward pass"""
+def hook(fns, *args): [fn(*args) for fn in fns]
+class Module:
+    def __init__(self, module:nn.Module):
+        self.module = module
+        self.handles = Handles()
+        self.data = ModuleData()
+        self.name = module.__class__.__name__
+    def registerHooks(self, forwardFns, backwardFns):
+        self.handles.forward = self.module.register_forward_hook(partial(hook, forwardFns, self.data.forward))
+        self.handles.backward = self.module.register_backward_hook(partial(hook, backwardFns, self.data.backward))
+        return self
+    def unregisterHooks(self): self.handles.remove()
+    def __repr__(self):
+        return f"""Module `{self.name}`. Use...
+- m.data: to get data stored
+- m.module: to get actual nn.Module object
+- m.plot("means", "stds"): to plot simple statistics"""
+class Function:
+    def __init__(self, f, name=None):
+        self.f = f
+        self.name = name or "f(<no name>)"
+    def __call__(self, *args, **kwargs):
+        self.f(*args, **kwargs)
 @k1lib.patch(Callback.cls)
-class HookModule(Callback, k1lib.ListContainer):
-    """Records means and std of output of individual
-    modules on both forward and backward pass. Erases
-    info before each run.
-
-    Args:
-        persistent: whether to save results across runs.
-            This comes in handy if your network is pretty
-            heavy. If false, then can execute `.reset()` to
-            reset everything
-
-    Can pass through additional forward and backward
-    callbacks. There are several methods for that:
-        .withForwardHook(). This literally just appends the
-            hook to the variable `.forwardFns`
-        .withBackwardHook(). This literally just appends the
-            hook to the variable `.backwardFns`
-        .withHook(). Just calls the 2 functions above
-
-    You can manipulate `.forwardFns` and `.backwardFns`
-    directly. But if you need quality of life stuff, here
-    are more methods:
-        .clearHooks()
-
-    After a learner is created and bound with a Callbacks,
-    you can add a hook like this:
-    >>> learner.HookModule.withMeanRecorder()
-
-    There are a few built in hooks that you can check out:
-        .withMeanRecorder()
-        .withStdRecorder()
-        .withMinRecorder()
-        .withMaxRecorder()
-        .withHistRecorder()
-
-    By default, this will analyze `learner.model`, but
-    you can change that like this:
-    >>> learner.HookModule.module = <intended nn.Module object>
-
-    After a run, you can access a module's data by exploring these:
-    >>> learner.HookModule[i].forward.<field>
-    >>> learner.HookModule[i].backward.<field>
-    `<field>` is any field you pass to `data` in the hook
-    you passed to `.withHook`
-
-    If your field is just a simple list of numbers, you
-    can plot all values in all modules using `.plot()`:
-    >>> learner.HookModule.plot()"""
-    def __init__(self, persistent:bool):
+class HookModule(Callback):
+    def __init__(self, persistent:bool=False):
         super(HookModule, self).__init__()
-        # ListContainer structure: [{name: ..., forward: {}, backward: {}}]. forward and backward are reference objects to store data
-        self._handles = [] # the hook handles returned by pytorch at startRun, so that we can remove them later on
-        self.forwardFns = []; self.backwardFns = [] # lsit of forward and backward hooks
-        self.cleanFns = []; self._module = None
-        self.running = False # state variable, to make sure we exit (free hooks) once and only once
-        self.simpleFields = [] # list of fields:str that are pretty simple, and only saves a single number/pass/module, like "means". This is just to aid usability in the .plot() function
+        self.modules = []; self._nnModules = None
+        self.forwardFns = []; self.backwardFns = []; self.cleanFns = []
         self.persistent = persistent
     @property
-    def module(self): return self._module or self.model.modules()
-    @module.setter
-    def module(self, module): self._module = module
+    def nnModules(self): return self._nnModules or self.model.modules()
+    @nnModules.setter
+    def nnModules(self, nnModules): self._nnModules = nnModules
     def reset(self):
         """Intended to be called by end user only, to reset
         everything if choose to persist results across runs."""
         self._end(); self._start()
     def startRun(self):
-        if (not self.persistent) or (len(self._handles) == 0):
-            self._start()
-    def _wrappingUp(self):
+        if (not self.persistent) or (len(self.modules) == 0): self._start()
+    def _registerHooks(self):
+        for module in self.modules:
+            module.registerHooks(self.forwardFns, self.backwardFns)
+    def _unregisterHooks(self):
+        for module in self.modules: module.unregisterHooks()
+    def endRun(self):
         if not self.persistent: self._end()
-    def endRun(self): self._wrappingUp()
-    def cancelBatch(self): self._wrappingUp()
-    def cancelEpoch(self): self._wrappingUp()
-    def cancelRun(self): self._wrappingUp()
-    def suspend(self): self._unregisterHooks()
-    def restore(self): self._registerHooks()
-    def __getstate__(self):
-        state = super().__getstate__()
-        del state["_handles"]
-        return state
+    def suspend(self):
+        self.actuallyRestore = len(self) == 0 or self[0].handles.active
+        if self.actuallyRestore: self._unregisterHooks()
+    def restore(self):
+        if self.actuallyRestore:
+            self._registerHooks()
+            self.actuallyRestore = False
+    def __getitem__(self, idx):
+        if type(idx) == int: return self.modules[idx]
+        answer = HookModule(self.persistent)
+        answer.modules = self.modules[idx]
+        return answer
+    def __len__(self): return len(self.modules)
     def __repr__(self):
         f = '\n'.join([f'  - {fn.name or str(fn)}' for fn in self.forwardFns])
+        f = "" if f == "" else f"Forward hooks:\n{f}\n"
         b = '\n'.join([f'  - {fn.name or str(fn)}' for fn in self.backwardFns])
+        b = "" if b == "" else f"Backward hooks:\n{b}\n"
         n = '\n'.join([f'  {i}. {data.name}' for i, data in enumerate(self)])
-        return f"""{super()._reprHead} with {len(self)} modules:\n{n}\n
-Forward hooks:\n{f}
-Backward hooks:\n{b}
-
+        return f"""{super()._reprHead} with {len(self)} modules:\n{n}\n{f}{b}
 Use...
 - m.plot("means", "stds"): to plot simple statistics
 - m[i]: to get a specific module
+- m[a:b]: to get a new HookModule with selected modules
 - m.withHook(hookCb): to hook a specific callback
 {super()._reprCan}"""
-def hook(fns, *args): [fn(*args) for fn in fns]
-@k1lib.patch(HookModule)
-def _registerHooks(self): # helper method only
-    for module, data in zip(self.module, self):
-        self._handles.append(module.register_forward_hook(partial(hook, self.forwardFns, data.forward)))
-        self._handles.append(module.register_backward_hook(partial(hook, self.backwardFns, data.backward)))
-@k1lib.patch(HookModule)
-def _unregisterHooks(self): # helper method only
-    for handle in self._handles:
-        handle.remove()
 @k1lib.patch(HookModule)
 def _start(self):
-    self.clear()
-    self._handles = []
-    for module in self.module:
-        data = k1lib.Object.fromDict({"forward": k1lib.Object().withAutoDeclare(k1lib.Object.listGenerator)\
-                                          .withRepr("Use .means, .stds, or other custom fields you defined in your hook"),
-                                      "backward": k1lib.Object().withAutoDeclare(k1lib.Object.listGenerator)\
-                                          .withRepr("Use .means, .stds, or other custom fields you defined in your hook"),
-                                      "name": module.__class__.__name__})
-        data.repr = f"Module `{data.name}`. Use...\n- m.forward for data stored during forward pass\n- m.backward for data stored during backward pass"
-        self.append(data)
+    self.modules = []
+    for nnModule in self.nnModules:
+        self.modules.append(Module(nnModule))
     self._registerHooks()
 @k1lib.patch(HookModule)
 def _end(self):
-    if self.running: # make sure to only execute once when training ends
-        for moduleData in self:
-            for cleanFn in self.cleanFns:
-                cleanFn(moduleData.forward, moduleData.backward)
-        self._unregisterHooks()
-        self.running = False
-def plotF(self, _slice, fields, attrs=[]):
-    """Plots every simple (1 number saved/pass/module) fields.
-
-    Args:
-        fields: list of fields, like `["means", "stds"]`. Defaults to every simple fields
-        _slice: custom slice across all graphs
-    """
-    if type(fields) == str: fields = [fields]
-    logScale = "log" if "log" in attrs else "linear"
-    def _plot(i, objF, title): # plots forward OR backward data of all modules of a particular field, assuming it's an array
-        plt.subplot(len(fields), 2, i)
-        for data in self: # display all modules
-            obj = objF(data)
-            plt.plot(range(len(obj))[_slice], obj[_slice], alpha=0.5)
-        plt.title(title); plt.yscale(logScale)
-    plt.figure(figsize=(10, 3*len(fields)), dpi=100)
-    for i, field in enumerate(fields):
-        _plot(i*2+1, lambda m: getattr(m.forward, field), f"Forward {field}")
-        _plot(i*2+2, lambda m: getattr(m.backward, field), f"Backward {field}")
-    plt.figlegend([data.name for data in self], loc='center right'); plt.show()
-@k1lib.patch(HookModule)
-def plot(self, *fields):
-    if len(fields) == 0: fields = self.simpleFields
-    return k1lib.viz.SliceablePlot(partial(plotF, self), alphaSlice=fields, docs="""
-- p["means", "stds"]: to display plots of 2 variables
-- p["means"].log: to display plot using log scale""")
+    for module in self.modules:
+        for cleanFn in self.cleanFns:
+            cleanFn(module.data)
+    self._unregisterHooks()
 @k1lib.patch(HookModule)
 def withForwardHook(self, hook:callable, name=None):
-    """Adds a hook to the forward pass. See `.withHook()` for more information"""
-    hook.name = name; self.forwardFns += [hook]; return self
+    """Adds a hook to the forward pass. See `.withHook()`"""
+    self.forwardFns += [Function(hook, name)]; return self
 @k1lib.patch(HookModule)
 def withBackwardHook(self, hook:callable, name=None):
-    """Adds a hook to the backward pass. See `.withHook()` for more information"""
-    hook.name = name; self.backwardFns += [hook]; return self
+    """Adds a hook to the backward pass. See `.withHook()`"""
+    self.backwardFns += [Function(hook, name)]; return self
 @k1lib.patch(HookModule)
 def withHook(self, hook:callable, name=None):
     """Adds a hook to both the forward and backward pass.
@@ -193,26 +153,47 @@ def withHook(self, hook:callable, name=None):
 def clearHooks(self):
     self.forwardFns = []; self.backwardFns = []
     self.cleanFns = []; return self
-def meanCb(data, m, inp, out): data.means.append(_getFirst(out).data.mean().item())
+def meanCb(data, m, inp, out):
+    data.means.append(squeeze(out).data.mean().item())
 @k1lib.patch(HookModule)
-def withMeanRecorder(self):
-    self.simpleFields.append("means");
-    return self.withHook(meanCb, "mean")
-def stdCb(data, m, inp, out): data.stds.append(_getFirst(out).data.std().item())
+def withMeanRecorder(self): return self.withHook(meanCb, "mean")
+def stdCb(data, m, inp, out):
+    data.stds.append(squeeze(out).data.std().item())
 @k1lib.patch(HookModule)
-def withStdRecorder(self):
-    self.simpleFields.append("stds");
-    return self.withHook(stdCb, "std")
-def minCb(data, m, inp, out): data.mins.append(_getFirst(out).data.min().item())
+def withStdRecorder(self): return self.withHook(stdCb, "std")
+def minCb(data, m, inp, out):
+    data.mins.append(squeeze(out).data.min().item())
 @k1lib.patch(HookModule)
-def withMinRecorder(self):
-    self.simpleFields.append("mins");
-    return self.withHook(minCb, "min")
-def maxCb(data, m, inp, out): data.maxs.append(_getFirst(out).data.max().item())
+def withMinRecorder(self): return self.withHook(minCb, "min")
+def maxCb(data, m, inp, out):
+    data.maxs.append(squeeze(out).data.max().item())
 @k1lib.patch(HookModule)
-def withMaxRecorder(self):
-    self.simpleFields.append("maxs");
-    return self.withHook(maxCb, "max")
+def withMaxRecorder(self): return self.withHook(maxCb, "max")
 @k1lib.patch(Callbacks, docs=HookModule)
 def withHookModule(self, persistent=True):
     return self.append(HookModule(persistent).withMeanRecorder().withStdRecorder())
+def plotF(modules:list, fields, rangeSlice, attrs=[]):
+    yscale = "log" if "log" in attrs else "linear"
+
+    fig, axes = plt.subplots(len(fields), 2, figsize=(10, 3*len(fields)), dpi=100)
+    axes = axes.reshape((-1, 2))
+    for axs, field in zip(axes, fields):
+        for module in modules:
+            module.data._plot(axs, field, rangeSlice)
+        axs[0].set_title(f"Forward {field}"); axs[0].set_yscale(yscale)
+        axs[1].set_title(f"Backward {field}"); axs[1].set_yscale(yscale)
+    plt.figlegend([f"{i}. {module.name}" for i, module in enumerate(modules)], loc='center right'); plt.show()
+@k1lib.patch(HookModule)
+@k1lib.patch(Module)
+def plot(self, *fields):
+    """Plots every simple (1 number saved/pass/module) fields"""
+    modules = [self] if type(self) == Module else self
+    if len(fields) == 0:
+        fields = []; forwardData = modules[0].data.forward
+        for field in forwardData.state.keys():
+            if field.startswith("_"): continue
+            fieldData = forwardData[field]
+            if type(fieldData) == list and k1lib.isNumeric(fieldData[0]):
+                fields.append(field)
+    return k1lib.viz.SliceablePlot(partial(plotF, modules, fields), docs="""
+- p.log: to display plot using log scale""")
