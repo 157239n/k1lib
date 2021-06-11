@@ -132,7 +132,7 @@ l = newL(); l.ParamFinder.plot(samples=1000)[:0.99]
 
 
     
-![png](readme/output_12_1.png)
+![png](https://raw.githubusercontent.com/157239n/k1lib/master/readme/output_12_1.png)
     
 
 
@@ -181,7 +181,7 @@ l.Loss.plot()
 
 
     
-![png](readme/output_16_0.png)
+![png](https://raw.githubusercontent.com/157239n/k1lib/master/readme/output_16_0.png)
     
 
 
@@ -205,7 +205,7 @@ l.Loss.plot()[120:]
 
 
     
-![png](readme/output_18_0.png)
+![png](https://raw.githubusercontent.com/157239n/k1lib/master/readme/output_18_0.png)
     
 
 
@@ -257,7 +257,7 @@ l.HookParam.plot()
 
 
     
-![png](readme/output_21_0.png)
+![png](https://raw.githubusercontent.com/157239n/k1lib/master/readme/output_21_0.png)
     
 
 
@@ -279,7 +279,7 @@ l.HookParam[::2].plot()[50:]
 
 
     
-![png](readme/output_23_0.png)
+![png](https://raw.githubusercontent.com/157239n/k1lib/master/readme/output_23_0.png)
     
 
 
@@ -301,7 +301,7 @@ l.HookModule.plot()
 
 
     
-![png](readme/output_25_0.png)
+![png](https://raw.githubusercontent.com/157239n/k1lib/master/readme/output_25_0.png)
     
 
 
