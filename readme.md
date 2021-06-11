@@ -6,6 +6,7 @@ Table of contents:
 - [Overview](#overview)
     - [ParamFinder](#paramfinder)
     - [Loss](#loss)
+    - [LossLandscape](#loss-landscape)
     - [HookParam](#hookparam)
     - [HookModule](#hookmodule)
 - [CSS module selector](#css-module-selector)
