@@ -2,11 +2,30 @@
 from k1lib.callbacks import Callback, Callbacks
 import k1lib, torch, numpy as np
 import matplotlib.pyplot as plt
+@k1lib.patch(Callback.cls)
 class LossLandscape(Callback):
     """Plots the loss landscape of the network. Display
     this in your cell for more."""
-    def __init__(self):
-        super(LossLandscape, self).__init__()
+    def __init__(self): super().__init__()
+    def _calc(self, i, ax, _range, vector1, vector2):
+        res = 50; _range = k1lib.Range(_range); model = self.learner.model
+        x, y = torch.meshgrid(torch.linspace(*_range, res), torch.linspace(*_range, res))
+        z = np.empty((res, res))
+        with torch.no_grad():
+            originalParams = model.exportParams()
+            for ix, _ in enumerate(x):
+                for iy, _ in enumerate(y):
+                    for param, og, v1, v2 in zip(model.parameters(), originalParams, vector1, vector2):
+                        param.data = og + x[ix, iy] * v1 + y[ix, iy] * v2
+                    self.cbs("startPass")
+                    self.learner.y = self.learner.model(self.xb)
+                    self.cbs("endPass")
+                    self.cbs("startLoss"); self.learner.loss = self.lossF(self.y, self.yb).detach().item(); self.cbs("endLoss")
+                    z[ix, iy] = self.loss
+                    print(f"\rProgress: {round(100*(ix+iy/res)/res)}%     ", end="")
+            model.importParams(originalParams)
+        ax.plot_surface(x, y, z, cmap=plt.cm.coolwarm)
+        print(f"     {i+1}/8 Finished {_range} range       ", end="")
     def plot(self):
         print() # nice new line
         self.cbs.suspend(["HookModule", "HookParam", "ProgressBar", "ParamScheduler", "Loss", "Autosave"])
@@ -15,40 +34,17 @@ class LossLandscape(Callback):
         self.cbs("startBatch"); k1lib.clearLine()
         model = self.learner.model
         def getVectors(): return model.getParamsVector(), model.getParamsVector()
-        def calc(i, ax, _range, vector1, vector2):
-            res = 50; _range = k1lib.Range(_range)
-            x, y = torch.meshgrid(torch.linspace(*_range, res), torch.linspace(*_range, res))
-            z = np.empty((res, res))
-            with torch.no_grad():
-                originalParams = model.exportParams()
-                for ix, _ in enumerate(x):
-                    for iy, _ in enumerate(y):
-                        for param, og, v1, v2 in zip(model.parameters(), originalParams, vector1, vector2):
-                            param.data = og + x[ix, iy] * v1 + y[ix, iy] * v2
-                        self.cbs("startPass")
-                        self.learner.y = self.learner.model(self.xb)
-                        self.cbs("endPass")
-                        self.cbs("startLoss"); self.learner.loss = self.lossF(self.y, self.yb).detach().item(); self.cbs("endLoss")
-                        z[ix, iy] = self.loss
-                        print(f"\rProgress: {round(100*(ix+iy/res)/res)}%     ", end="")
-                model.importParams(originalParams)
-            ax.plot_surface(x, y, z, cmap=plt.cm.coolwarm)
-            print(f"     {i+1}/8 Finished {_range} range       ", end="")
-            return x, y, z
         fig, axes = plt.subplots(2, 4, subplot_kw={"projection": "3d"}, figsize=(16, 8), dpi=120)
-        def calcRow(i, axes, *args):
-            calc(i*4+0, axes[0], [-.1, .1], *args)
-            calc(i*4+1, axes[1], [-.32, .32], *args)
-            calc(i*4+2, axes[2], [-1, 1], *args)
-            calc(i*4+3, axes[3], [-3.2, 3.2], *args)    
-        calcRow(0, axes[0], *getVectors())
-        calcRow(1, axes[1], *getVectors())
+        ranges = [.1, .32, 1, 3.2]
+        for i, ax in enumerate(axes):
+            vectors = getVectors()
+            for j, _range in enumerate(ranges):
+                self._calc(i*4+j, ax[j], [-_range, _range], *vectors)
         self.cbs("endBatch"); self.cbs("endEpoch"); self.cbs("endRun")
-        plt.show()
-        self.cbs.restore()
+        plt.show(); self.cbs.restore()
     def __repr__(self):
-        return f"{super().__repr__()}, use...\n" +\
-                "- `.plot()` for the 3 main plots"
-Callbacks.withLossLandscape = lambda self: self.append(LossLandscape())
-Callbacks.withLossLandscape.__doc__ = LossLandscape.__doc__
-Callback.cls.LossLandscape = LossLandscape
+        return f"""{self._reprHead}, use...
+- ll.plot(): to plot everything
+{self._reprCan}"""
+@k1lib.patch(Callbacks, docs=LossLandscape)
+def withLossLandscape(self): return self.append(LossLandscape())

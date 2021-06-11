@@ -7,17 +7,15 @@ import matplotlib.pyplot as plt
 class ProgressBar(Callback):
     """Displays the current progress, epoch and batch while running."""
     def startRun(self):
-        self.startTime = time.time(); self.step = 0
-        self._maxNBatches = 1 # for aesthetic purposes
+        self.startTime = time.time(); self.step = 0; self.learner.progress = 0
     def startBatch(self):
         self.learner.elapsedTime = time.time() - self.startTime
         self.step += 1
-        self.learner.progress = (self.batch / self.nBatches + self.epoch) / self.epochs
+        self.learner.progress = (self.batch / self.batches + self.epoch) / self.epochs
         if self.step % 10 == 0:
-            self._maxNBatches = max(self._maxNBatches, self.nBatches)
             a = str(round(100 * self.progress)).rjust(3)
             b = f"{self.epoch}/{self.epochs}".rjust(k1lib.numDigits(self.epochs) * 2 + 1)
-            c = f"{self.batch}/{self.nBatches}".rjust(k1lib.numDigits(self._maxNBatches) * 2 + 1)
+            c = f"{self.batch}/{self.batches}".rjust(k1lib.numDigits(self.batches) * 2 + 1)
             d = f"{round(self.elapsedTime, 2)}".rjust(6)
             print(f"\rProgress: {a}%, epoch: {b}, batch: {c}, elapsed: {d}s  ", end="")
 @k1lib.patch(Callbacks, docs=ProgressBar)
@@ -29,7 +27,6 @@ def plotF(losses, _slice): # actual function stored by the sliceable plot
         plt.subplot(1, 2, 1); plt.plot(tR.range, losses.train[tR.slice]); plt.title(f"Train loss")
         plt.subplot(1, 2, 2); plt.plot(vR.range, losses.valid[vR.slice]); plt.title(f"Valid loss")
     except: pass
-    plt.show()
 def commonPlot(obj):
     return k1lib.viz.SliceablePlot(partial(plotF, obj), docs="""\n\nReminder: the actual slice you put in is for the training plot. The valid loss's plot will update automatically to be in the same time frame""")
 def nonEmptyList(_list):
@@ -51,8 +48,7 @@ class Loss(Callback):
         self._trainLosses = []; self._validLosses = []
         self.order = 17
     def endLoss(self):
-        if self.model.training:
-            self._trainLosses.append(self.loss)
+        if self.model.training: self._trainLosses.append(self.loss)
         else: self._validLosses.append(self.loss)
     def endEpoch(self):
         self.train.extend(self._trainLosses); self.epoch.train.append(np.mean(nonEmptyList(self._trainLosses)))

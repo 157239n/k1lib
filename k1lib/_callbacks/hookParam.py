@@ -39,9 +39,16 @@ class HookParam(Callback):
         if type(idx) == int: return self.params[idx]
         answer = HookParam(); answer.params = self.params[idx]; return answer
     def __len__(self): return len(self.params)
+    def _selected(self, name):
+        splits = name.split(".")
+        try:
+            mS = self.moduleSelector
+            for split in splits[:-1]: mS = mS[split]
+            return "all" in mS.selectedProps or "HookParam" in mS.selectedProps
+        except KeyError: return False
     def startRun(self):
         if len(self) == 0: # set things up first time only
-            self.params = [Param(k, v) for k, v in self.model.named_parameters()]
+            self.params = [Param(k, v) for k, v in self.model.named_parameters() if self._selected(k)]
     def startBatch(self): [param.update() for param in self.params]
     def __repr__(self):
         s = f", {len(self[0].data)} means and stds each" if len(self) > 0 else ""
@@ -52,9 +59,8 @@ Use...
 - cb[i]: to view a single param
 - cb[a:b]: to get a new HookParam with selected params
 {super()._reprCan}"""
-def plotF(params, rangeSlice, attrs=[]):
+def plotF(params, rangeSlice):
     if type(params) == Param: params = [params]
-    yscale = "log" if "log" in attrs else "linear"
     fields = params[0].data.state.keys()
     fig, axes = plt.subplots(2, 2, figsize=(10, 6), dpi=100)
     axes = axes.flatten()
@@ -62,10 +68,10 @@ def plotF(params, rangeSlice, attrs=[]):
         for param in params:
             r = k1lib.Range(len(fieldData := param.data[field]))[rangeSlice]
             ax.plot(r.range, fieldData[r.slice])
-        ax.set_title(field.capitalize()); ax.set_yscale(yscale)
-    plt.figlegend([p.name for p in params], loc='right'); plt.show()
+        ax.set_title(field.capitalize())
+    plt.figlegend([p.name for p in params], loc='right')
 @k1lib.patch(HookParam)
 @k1lib.patch(Param)
 def plot(self): return k1lib.viz.SliceablePlot(partial(plotF, self))
-@k1lib.patch(Callbacks)
+@k1lib.patch(Callbacks, docs=HookParam)
 def withHookParam(self): return self.append(HookParam())

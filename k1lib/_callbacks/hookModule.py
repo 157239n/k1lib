@@ -55,15 +55,50 @@ class Function:
         self.f(*args, **kwargs)
 @k1lib.patch(Callback.cls)
 class HookModule(Callback):
+    """Records means and std of output of individual
+    modules on both forward and backward pass. Erases
+    info before each run.
+    Args:
+        persistent: whether to save results across runs.
+            This comes in handy if your network is pretty
+            heavy. If false, then can execute `.reset()` to
+            reset everything
+    Can pass through additional forward and backward
+    callbacks. There are several methods for that:
+        .withForwardHook(). This literally just appends the
+            hook to the variable `.forwardFns`
+        .withBackwardHook(). This literally just appends the
+            hook to the variable `.backwardFns`
+        .withHook(). Just calls the 2 functions above
+    You can manipulate `.forwardFns` and `.backwardFns`
+    directly. But if you need quality of life stuff, here
+    are more methods:
+        .clearHooks()
+    After a learner is created and bound with a Callbacks,
+    you can add a hook like this:
+    >>> learner.HookModule.withMeanRecorder()
+    There are a few built in hooks that you can check out:
+        .withMeanRecorder()
+        .withStdRecorder()
+        .withMinRecorder()
+        .withMaxRecorder()
+        .withHistRecorder()
+    By default, this will analyze `learner.model`, but
+    you can change that like this:
+    >>> learner.HookModule.module = <intended nn.Module object>
+    After a run, you can access a module's data by exploring these:
+    >>> learner.HookModule[i].forward.<field>
+    >>> learner.HookModule[i].backward.<field>
+    `<field>` is any field you pass to `data` in the hook
+    you passed to `.withHook`
+    If your field is just a simple list of numbers, you
+    can plot all values in all modules using `.plot()`:
+    >>> learner.HookModule.plot()"""
     def __init__(self, persistent:bool=False):
         super(HookModule, self).__init__()
-        self.modules = []; self._nnModules = None
+        self.modules = []
         self.forwardFns = []; self.backwardFns = []; self.cleanFns = []
         self.persistent = persistent
-    @property
-    def nnModules(self): return self._nnModules or self.model.modules()
-    @nnModules.setter
-    def nnModules(self, nnModules): self._nnModules = nnModules
     def reset(self):
         """Intended to be called by end user only, to reset
         everything if choose to persist results across runs."""
@@ -106,8 +141,8 @@ Use...
 @k1lib.patch(HookModule)
 def _start(self):
     self.modules = []
-    for nnModule in self.nnModules:
-        self.modules.append(Module(nnModule))
+    for nnModule, sel in zip(self.model.modules(), self.moduleSelector.modules()):
+        if sel.selected("HookModule"): self.modules.append(Module(nnModule))
     self._registerHooks()
 @k1lib.patch(HookModule)
 def _end(self):
@@ -172,17 +207,15 @@ def withMaxRecorder(self): return self.withHook(maxCb, "max")
 @k1lib.patch(Callbacks, docs=HookModule)
 def withHookModule(self, persistent=True):
     return self.append(HookModule(persistent).withMeanRecorder().withStdRecorder())
-def plotF(modules:list, fields, rangeSlice, attrs=[]):
-    yscale = "log" if "log" in attrs else "linear"
-
+def plotF(modules:list, fields, rangeSlice):
     fig, axes = plt.subplots(len(fields), 2, figsize=(10, 3*len(fields)), dpi=100)
     axes = axes.reshape((-1, 2))
     for axs, field in zip(axes, fields):
         for module in modules:
             module.data._plot(axs, field, rangeSlice)
-        axs[0].set_title(f"Forward {field}"); axs[0].set_yscale(yscale)
-        axs[1].set_title(f"Backward {field}"); axs[1].set_yscale(yscale)
-    plt.figlegend([f"{i}. {module.name}" for i, module in enumerate(modules)], loc='center right'); plt.show()
+        axs[0].set_title(f"Forward {field}")
+        axs[1].set_title(f"Backward {field}")
+    plt.figlegend([f"{i}. {module.name}" for i, module in enumerate(modules)], loc='center right')
 @k1lib.patch(HookModule)
 @k1lib.patch(Module)
 def plot(self, *fields):
@@ -195,5 +228,4 @@ def plot(self, *fields):
             fieldData = forwardData[field]
             if type(fieldData) == list and k1lib.isNumeric(fieldData[0]):
                 fields.append(field)
-    return k1lib.viz.SliceablePlot(partial(plotF, modules, fields), docs="""
-- p.log: to display plot using log scale""")
+    return k1lib.viz.SliceablePlot(partial(plotF, modules, fields))

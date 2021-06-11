@@ -1,7 +1,10 @@
-__pycache__
+**/__pycache__
 **.ipynb_checkpoints
 build
 k1lib.egg-info
 **.jupyterlab-workspace
 trash
 dist
+**autosave-0.pth
+**autosave-1.pth
+**autosave-2.pth

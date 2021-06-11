@@ -24,6 +24,7 @@ class Callback:
         self.learner = None; self.cbs = None; self.suspended = False
         self.name = name or self.__class__.__name__
         self.order = 10 # can be modified by subclasses. A smaller order will be executed first
+        self.dependsOn = set(); self.dependents = set()
     def suspend(self): self.suspended = True
     def restore(self): self.suspended = False
     def __getattr__(self, attr):
@@ -116,9 +117,9 @@ class Callbacks:
         self.timings[checkpoint] += time.time() - beginTime
         return answer
     def __getattr__(self, attr):
-        if attr == "cbsDict": raise AttributeError()
+        if attr == "cbsDict": raise AttributeError(attr)
         if attr in self.cbsDict: return self.cbsDict[attr]
-        else: raise AttributeError
+        else: raise AttributeError(attr)
     def __getstate__(self):
         state = dict(self.__dict__); del state["_learner"]; return state
     def __setstate__(self, state):
@@ -152,12 +153,24 @@ Use...
         if advanced: cbs.withHookModule().withHookParam()
         return cbs
 @k1lib.patch(Callbacks)
+def resolveDependencies(self):
+    for cb in self.cbs: cb.dependents = set()
+    for cb in self.cbs:
+        for cb2 in self.cbs:
+            if cb2.__class__.__name__ in cb.dependsOn:
+                cb2.dependents.add(cb)
+@k1lib.patch(Callbacks)
 def suspend(self, cbsClasses:list):
+    cbsClasses = set(cbsClasses)
+    self.resolveDependencies()
+    def explore(cb:Callback):
+        cbsClasses.add(cb.__class__.__name__)
+        for dept in cb.dependents: explore(dept)
+    [explore(cb) for cb in self.cbs if cb.__class__.__name__ in cbsClasses]
     stackFrame = []
     for cb in self.cbs:
-        for cbsClass in cbsClasses:
-            if cb.__class__.__name__ == cbsClass:
-                stackFrame.append(cb); break
+        if cb.__class__.__name__ in cbsClasses:
+            stackFrame.append(cb)
     for cb in stackFrame: # do this cause if not, self.cbs will be modified while looping over it
         cb.suspend(); cb.detach()
     self.suspendStack.append(stackFrame)

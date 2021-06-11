@@ -7,13 +7,11 @@ class BatchLimit(Callback):
     def __init__(self, limit):
         super().__init__()
         self.limit = limit if limit != None else float("inf")
-    def startEpoch(self):
-        self.currentBatch = 0
+    def startEpoch(self): self.currentBatch = 0
     def startBatch(self):
         if self.currentBatch >= self.limit:
             raise k1lib.CancelEpochException()
-    def endBatch(self):
-        self.currentBatch += 1
+    def endBatch(self): self.currentBatch += 1
 @k1lib.patch(Callbacks, docs=BatchLimit)
 def withBatchLimit(self, limit, name=None): return self.append(BatchLimit(limit), name)
 @k1lib.patch(Callback.cls)
@@ -22,13 +20,11 @@ class EpochLimit(Callback):
     def __init__(self, limit):
         super().__init__()
         self.limit = limit if limit != None else float("inf")
-    def startRun(self):
-        self.currentEpoch = 0
+    def startRun(self): self.currentEpoch = 0
     def startEpoch(self):
         if self.currentEpoch >= self.limit:
             raise k1lib.CancelRunException()
-    def endEpoch(self):
-        self.currentEpoch += 1
+    def endEpoch(self): self.currentEpoch += 1
 @k1lib.patch(Callbacks, docs=EpochLimit)
 def withEpochLimit(self, limit, name=None): return self.append(EpochLimit(limit), name)
 @k1lib.patch(Callback.cls)
@@ -36,11 +32,9 @@ class CancelOnExplosion(Callback):
     """Cancels the run if any of the parameters are larger than a certain limit"""
     def __init__(self, limit=1e6):
         super().__init__()
-        self.order = 18; self.limit = limit
-        self.progress = 0; self.triggered = False
+        self.order = 18; self.limit = limit; self.triggered = False
     def startRun(self): self.triggered = False
     def startBatch(self):
-        self.progress = self.learner.progress
         for p in self.model.parameters():
             o = p.detach()
             if o.max() > self.limit or o.min() < -self.limit:
@@ -61,9 +55,7 @@ Args:
     loss (float): <obv>
     epochMode (bool): false if use batch loss, true if use valid epoch loss"""
     def __init__(self, loss, epochMode=False):
-        super().__init__()
-        self.loss = loss
-        self.epochMode = epochMode
+        super().__init__(); self.loss = loss; self.epochMode = epochMode
     def endBatch(self):
         if self.epochMode:
             if not hasattr(self, "Loss"): return

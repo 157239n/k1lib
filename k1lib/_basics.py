@@ -19,6 +19,7 @@ class Object:
         self._defaultValueGenerator = defaultValueGenerator; return self
     def __getitem__(self, idx): return getattr(self, idx)
     def __setitem__(self, idx, value): setattr(self, idx, value)
+    def __contains__(self, item): return item in self.__dict__
     def __getattr__(self, attr):
         if attr.startswith("_"): raise AttributeError()
         if self._defaultValueGenerator != None:
@@ -37,12 +38,21 @@ def close(a, b):
     test(_torch.allclose(_torch.tensor(a), _torch.tensor(b)))
 def textToHtml(text:str) -> str:
     return text.replace("\n", "<br>").replace(" ", "&nbsp;")
-def clearLine(): print("\r" + " "*80 + "\r", end="")
+def clearLine():
+    """Prints a character that clears the current line"""
+    print("\r" + " "*80 + "\r", end="")
 def tab(text:str) -> str:
     """Adds a tab before each line"""
     return "\n".join(["    " + line for line in text.split("\n")])
-def isNumeric(x) -> bool: return isinstance(x, (int, float, _np.float, _np.int))
+def isNumeric(x) -> bool:
+    """Returns whether object is actually a number"""
+    return isinstance(x, (int, float, _np.float, _np.int))
 def patch(_class:type, name=None, docs=None):
+    """Patches a function to a class/object.
+Args:
+    _class: object to patch function. Can also be a type
+    name (optional): name of patched function, if different from current
+    docs (optional): docs of patched function. Can be object with __doc__ attr"""
     def inner(_function):
         _docs = docs
         if _docs != None and type(_docs) is not str: _docs = _docs.__doc__
@@ -51,10 +61,14 @@ def patch(_class:type, name=None, docs=None):
         return _function
     return inner
 def squeeze(_list):
+    """If list only has 1 element, rethrn that element, else return original list"""
     if isinstance(_list, (tuple, list)) and len(_list) == 1: return _list[0]
     return _list
-def raiseEx(ex): raise ex
+def raiseEx(ex):
+    """Raises a specific exception. Useful in lambdas"""
+    raise ex
 def smooth(arr, consecutives=5):
+    """Smoothes out array, so that y values are averages of the neighbors"""
     answer = []; s = 0
     for i, elem in enumerate(arr):
         s += elem
@@ -62,15 +76,20 @@ def smooth(arr, consecutives=5):
             answer.append(s / consecutives); s = 0
     return answer
 def numDigits(num): return len(f"{num}")
+def limitLines(s, limit=10):
+    """If input string is too long, truncates it and adds ellipsis"""
+    if len(splits := s.split("\n")) > limit:
+        return "\n".join(splits[:limit]) + "\n....."
+    else: return s
 class Range:
     def __init__(self, start=0, stop=None):
         if (isNumeric(start) and isNumeric(stop)):
             self.start, self.stop = start, stop
         elif isNumeric(start) and stop == None:
             self.start, self.stop = 0, start
-        elif type(start) in [range, slice, Range]:
+        elif isinstance(start, (range, slice, Range)):
             self.start, self.stop = start.start, start.stop
-        elif type(start) == list or type(start) == tuple:
+        elif isinstance(start, (list, tuple)):
             self.start, self.stop = start[0], start[-1]
         else: raise Exception(f"Don't understand {start} and {stop}")
         self.delta = self.stop - self.start
@@ -82,10 +101,10 @@ class Range:
         raise Exception(f"Can't get index {index} of range [{self.start}, {self.stop}]")
     def _common(self, x, f):
         if isNumeric(x): return f(x)
-        if type(x) == list or type(x) == tuple:
+        if isinstance(x, (list, tuple)):
             return [self._common(elem, f) for elem in x]
-        if isinstance(x, Range):
-            return Range(self._common(x.start, f), self._common(x.stop, f))
+        if isinstance(x, (range, slice, Range)):
+            return Range(self._common(x.start if x.start != None else 0, f), self._common(x.stop if x.stop != None else 1, f))
         raise Exception(f"Doesn't understand {x}")
     def __iter__(self): yield self.start; yield self.stop
     def toUnit(self, x):
@@ -109,6 +128,9 @@ class Range:
         ar2 = r1.toRange(r2, (ar1 := r1[r1Slice]))
         return ar1, ar2
     def __str__(self): return f"[{self.start}, {self.stop}]"
+    def __eq__(self, _range):
+        _range = Range(_range)
+        return abs(_range.start - self.start) < 1e-9 and abs(_range.stop - self.stop) < 1e-9
     def __repr__(self):
         return f"""A range of numbers: [{self.start}, {self.stop}]. Can do:
 - r.toUnit(x): will convert x from range [{self.start}, {self.stop}] to [0, 1]
