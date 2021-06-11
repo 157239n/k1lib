@@ -222,6 +222,24 @@ l.Loss.plot()[120:]
 
 Notice how original train range is `[0, 250]`, and valid range is `[0, 60]`. When sliced with `[120:]`, train's range sliced as planned from the middle to end, and valid's range adapting and also sliced from middle to end (`[30:]`).
 
+### LossLandscape
+
+
+```python
+l.LossLandscape.plot()
+```
+
+    
+    Progress: 100%          8/8 Finished [-3.2, 3.2] range                          
+
+
+    
+![png](https://raw.githubusercontent.com/157239n/k1lib/master/readme/output_20_1.png)
+    
+
+
+Oh and yeah, this callback can give you a quick view into how the landscape is. The center point (0, 0) is always the lowest portion of the landscape, so that tells us the network has learned stuff.
+
 ### HookParam
 
 
@@ -257,7 +275,7 @@ l.HookParam.plot()
 
 
     
-![png](https://raw.githubusercontent.com/157239n/k1lib/master/readme/output_21_0.png)
+![png](https://raw.githubusercontent.com/157239n/k1lib/master/readme/output_24_0.png)
     
 
 
@@ -279,7 +297,7 @@ l.HookParam[::2].plot()[50:]
 
 
     
-![png](https://raw.githubusercontent.com/157239n/k1lib/master/readme/output_23_0.png)
+![png](https://raw.githubusercontent.com/157239n/k1lib/master/readme/output_26_0.png)
     
 
 
@@ -301,7 +319,7 @@ l.HookModule.plot()
 
 
     
-![png](https://raw.githubusercontent.com/157239n/k1lib/master/readme/output_25_0.png)
+![png](https://raw.githubusercontent.com/157239n/k1lib/master/readme/output_28_0.png)
     
 
 
