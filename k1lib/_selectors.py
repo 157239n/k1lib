@@ -2,10 +2,7 @@
 import torch.nn as nn
 import k1lib, re
 def getParts(s): return [a for elem in s.split(":")[0].split(">") if elem for a in elem.split(" ") if a]
-def getProps(s):
-    splits = s.split(":")
-    if len(splits) == 1: return ["all"]
-    return [elem for elem in splits[1].split(",") if elem]
+def getProps(s): return [elem for elem in s.split(":")[1].split(",") if elem]
 class ModuleSelector:
     def __init__(self, parent, name:str, nnModule:nn.Module):
         self.parent = parent; self.name = name; self.nnModule = nnModule
@@ -17,11 +14,10 @@ class ModuleSelector:
             selectors = [] + selectors + self.parent.indirectSelectors + self.parent.directSelectors
             self.indirectSelectors += self.parent.indirectSelectors
         for selector in selectors:
-            if selector == "all": self.selectedProps = ["all"]; break
             parts = getParts(selector)
             matches = parts[0] == self.nnModule.__class__.__name__ or parts[0] == "#" + self.name or parts[0] == "*"
             if len(parts) == 1:
-                if matches: self.selectedProps = getProps(selector)
+                if matches: self.selectedProps += getProps(selector)
             else:
                 a = selector.find(">"); a = a if a > 0 else float("inf")
                 b = selector.find(" "); b = b if b > 0 else float("inf")
@@ -52,7 +48,14 @@ class ModuleSelector:
         if len(self._children) > 0: answer += "\n"
         answer += k1lib.tab("\n".join([child.__repr__(intro=False) for name, child in self._children.items()]))
         return answer
-def select(model:nn.Module, selectors):
+def _filter(selectors:str) -> list:
+    # filtering unwanted characters and quirky spaces
+    selectors = [re.sub("(^\s+)|(\s+$)", "", re.sub("\s\s+", " ", line)).replace(" >", ">").replace("> ", ">").replace(" :", ":").replace(": ", ":").replace(" ,", ",").replace(", ", ",").replace(" \n", "\n").replace("\n ", "\n") for line in selectors.split("\n") if line != ""]
+    # adding "all" to all selectors with no props specified
+    selectors = [selector if ":" in selector else f"{selector}:all" for selector in selectors]
+    # expanding comma-delimited selectors
+    return [f"{segment}:{selector.split(':')[1]}" for selector in selectors for segment in selector.split(":")[0].split(",")]
+def select(model:nn.Module, selectors:str) -> ModuleSelector:
     root = ModuleSelector(None, "root", model)
-    root.parse([re.sub("\s\s+", " ", line).replace(" >", ">").replace("> ", ">").replace(" :", ":").replace(": ", ":").replace(" ,", ",").replace(", ", ",").replace(" \n", "\n").replace("\n ", "\n") for line in selectors.split("\n") if line != ""])
+    root.parse(_filter(selectors))
     return root

@@ -4,7 +4,7 @@ class Learner:
     def __init__(self):
         self.model = None; self.data = None; self.opt = None
         self.lossF = None; self._cbs = None; self.fileName = None
-        self.css = "all"
+        self.css = "*:all"
         self.cbs = k1lib.Callbacks().withBasics().withQOL().withAdvanced()
     @property
     def cbs(self): return self._cbs
@@ -15,16 +15,17 @@ class Learner:
     @css.setter
     def css(self, css):
         self._css = css
-        if self.model != None: self.moduleSelector = k1lib._select(self.model, self.css)
+        if self.model != None: self.selector = k1lib._select(self.model, self.css)
     def __getattr__(self, attr):
         if attr == "cbs": raise AttributeError()
         return getattr(self.cbs, attr)
     def __getstate__(self):
         answer = dict(self.__dict__)
-        del answer["moduleSelector"]
+        del answer["selector"]
         return answer
     def __setstate__(self, state):
         self.__dict__.update(state)
+        self.css = self.css
         self.cbs.learner = self
     def evaluate(self): pass # supposed to be overriden, to provide functionality here
     @property
@@ -46,7 +47,7 @@ Use...
 - l.lossF = ...: to specify a loss function
 - l.css = ...: to select modules using CSS
 - l.cbs = ...: to use a custom `Callbacks` object
-- l.moduleSelector: to get the modules selected by `l.css`
+- l.selector: to get the modules selected by `l.css`
 - l.run(epochs): to run the network
 - l.Loss: to get a specific callback, this case "Loss"\n\n"""
 @k1lib.patch(Learner)

@@ -141,7 +141,7 @@ Use...
 @k1lib.patch(HookModule)
 def _start(self):
     self.modules = []
-    for nnModule, sel in zip(self.model.modules(), self.moduleSelector.modules()):
+    for nnModule, sel in zip(self.model.modules(), self.selector.modules()):
         if sel.selected("HookModule"): self.modules.append(Module(nnModule))
     self._registerHooks()
 @k1lib.patch(HookModule)

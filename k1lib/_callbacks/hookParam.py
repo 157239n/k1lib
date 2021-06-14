@@ -42,7 +42,7 @@ class HookParam(Callback):
     def _selected(self, name):
         splits = name.split(".")
         try:
-            mS = self.moduleSelector
+            mS = self.selector
             for split in splits[:-1]: mS = mS[split]
             return "all" in mS.selectedProps or "HookParam" in mS.selectedProps
         except KeyError: return False

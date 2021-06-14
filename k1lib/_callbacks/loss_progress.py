@@ -7,11 +7,11 @@ import matplotlib.pyplot as plt
 class ProgressBar(Callback):
     """Displays the current progress, epoch and batch while running."""
     def startRun(self):
-        self.startTime = time.time(); self.step = 0; self.learner.progress = 0
+        self.startTime = time.time(); self.step = 0; self.progress = 0
     def startBatch(self):
-        self.learner.elapsedTime = time.time() - self.startTime
+        self.elapsedTime = time.time() - self.startTime
         self.step += 1
-        self.learner.progress = (self.batch / self.batches + self.epoch) / self.epochs
+        self.progress = (self.batch / self.batches + self.epoch) / self.epochs
         if self.step % 10 == 0:
             a = str(round(100 * self.progress)).rjust(3)
             b = f"{self.epoch}/{self.epochs}".rjust(k1lib.numDigits(self.epochs) * 2 + 1)
