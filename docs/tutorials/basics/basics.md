@@ -22,14 +22,6 @@ Let's see an example:
 from k1lib.imports import *
 ```
 
-
-<style>div.jp-OutputArea-output pre {white-space: pre;}</style>
-
-
-
-<style>div.output_area pre {white-space: pre;}</style>
-
-
 [`k1lib.imports`](k1lib/imports.py) is just a file that imports lots of common utilities, so that importing stuff is easier and quicker.
 
 
