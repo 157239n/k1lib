@@ -16,9 +16,17 @@ If you only care about the bioinformatics side of this, and don't want anything 
 pip install --no-deps k1lib
 ```
 
+## Repo?
+
+It's at https://github.com/157239n/k1lib/
+
 ## Docs
 
 2 places:
 
 - Official docs: [k1lib.github.io](https://k1lib.github.io)
 - Example notebooks: https://github.com/157239n/k1lib/blob/master/docs/tutorials/
+
+## Contact
+
+If you found bugs, open a new issue on the repo itself. If you want to have a chat, then email 157239q@gmail.com
