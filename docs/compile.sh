@@ -10,3 +10,6 @@ rm -r _build
 #sphinx-apidoc -o . ../k1lib
 make html
 
+rm -r ../../k1lib.github.io/*
+cp -r _build/html/* ../../k1lib.github.io/
+
