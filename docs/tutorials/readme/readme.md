@@ -1,124 +1,109 @@
-k1lib
-=====
+# k1lib
 
-PyTorch is awesome, and it provides a very effective way to execute ML
-code fast. What it lacks is surrounding infrastructure to make general
-debugging and discovery process better. Other more official wrapper
-frameworks sort of don’t make sense to me, so this is an attempt at
-recreating a robust suite of tools that makes sense.
+PyTorch is awesome, and it provides a very effective way to execute ML code fast. What it lacks is surrounding infrastructure to make general debugging and discovery process better. Other more official wrapper frameworks sort of don't make sense to me, so this is an attempt at recreating a robust suite of tools that makes sense.
 
-Table of contents: - `Overview <#overview>`__ -
-`ParamFinder <#paramfinder>`__ - `Loss <#loss>`__ -
-`LossLandscape <#loss-landscape>`__ - `HookParam <#hookparam>`__ -
-`HookModule <#hookmodule>`__ - `CSS module
-selector <#css-module-selector>`__ - `Data loader <#data-loader>`__ -
-`Callbacks <#callbacks>`__
+Table of contents:
+- [Overview](#overview)
+    - [ParamFinder](#paramfinder)
+    - [Loss](#loss)
+    - [LossLandscape](#loss-landscape)
+    - [HookParam](#hookparam)
+    - [HookModule](#hookmodule)
+- [CSS module selector](#css-module-selector)
+- [Data loader](#data-loader)
+- [Callbacks](#callbacks)
 
-Let’s see an example:
+Let's see an example:
 
-Overview
---------
-
-.. code:: ipython3
-
-    from k1lib.imports import *
+## Overview
 
 
+```python
+from k1lib.imports import *
+```
 
-.. raw:: html
 
-    <style>div.jp-OutputArea-output pre {white-space: pre;}</style>
+<style>div.jp-OutputArea-output pre {white-space: pre;}</style>
 
 
 
-.. raw:: html
-
-    <style>div.output_area pre {white-space: pre;}</style>
+<style>div.output_area pre {white-space: pre;}</style>
 
 
-```k1lib.imports`` <k1lib/imports.py>`__ is just a file that imports
-lots of common utilities, so that importing stuff is easier and quicker.
-
-.. code:: ipython3
-
-    class SkipBlock(nn.Module):
-        def __init__(self, hiddenDim=10):
-            super().__init__()
-            def gen(): return nn.Linear(hiddenDim, hiddenDim), nn.LeakyReLU()
-            self.seq = nn.Sequential(*gen(), *gen(), *gen())
-        def forward(self, x):
-            return self.seq(x) + x
-
-.. code:: ipython3
-
-    class Network(nn.Module):
-        def __init__(self, hiddenDim=10, blocks=3, block=SkipBlock):
-            super().__init__()
-            layers = [nn.Linear(1, hiddenDim), nn.LeakyReLU()]
-            layers += [block(hiddenDim) for _ in range(blocks)]
-            layers += [nn.Linear(hiddenDim, 1)]
-            self.bulk = nn.Sequential(*layers)
-        def forward(self, x):
-            return self.bulk(x)
-
-Here is our network. Just a normal feed-forward network, with skip
-blocks in the middle.
-
-.. code:: ipython3
-
-    def newL(*args, **kwargs):
-        l = k1lib.Learner()
-        l.model = Network(*args, **kwargs)
-        l.data = k1lib.data.Data.fromDataset(k1lib.data.FunctionDataset.exp, batchSize=64)
-        l.opt = optim.Adam(l.model.parameters(), lr=1e-2)
-        l.lossF = lambda x, y: ((x.squeeze() - y)**2).mean()
-    
-        l.cbs.withModifyBatch(lambda x, y: (x[:, None], y))
-        l.cbs.withDType(torch.float32);
-        l.cbs.withCancelOnLowLoss(1, epochMode=True)
-        l.css = """SkipBlock #0: HookParam
-    SkipBlock: HookModule"""
-    
-        def evaluate(self):
-            xbs, ybs, ys = self.Recorder.record(1, 3)
-            xbs = torch.vstack(xbs).squeeze()
-            ybs = torch.vstack([yb[:, None] for yb in ybs]).squeeze()
-            ys = torch.vstack(ys).squeeze()
-            plt.plot(xbs, ys.detach(), ".")
-        l.evaluate = partial(evaluate, l)
-        return l
-    l = newL()
-    l.run(10);
+[`k1lib.imports`](k1lib/imports.py) is just a file that imports lots of common utilities, so that importing stuff is easier and quicker.
 
 
-.. parsed-literal::
+```python
+class SkipBlock(nn.Module):
+    def __init__(self, hiddenDim=10):
+        super().__init__()
+        def gen(): return nn.Linear(hiddenDim, hiddenDim), nn.LeakyReLU()
+        self.seq = nn.Sequential(*gen(), *gen(), *gen())
+    def forward(self, x):
+        return self.seq(x) + x
+```
+
+
+```python
+class Network(nn.Module):
+    def __init__(self, hiddenDim=10, blocks=3, block=SkipBlock):
+        super().__init__()
+        layers = [nn.Linear(1, hiddenDim), nn.LeakyReLU()]
+        layers += [block(hiddenDim) for _ in range(blocks)]
+        layers += [nn.Linear(hiddenDim, 1)]
+        self.bulk = nn.Sequential(*layers)
+    def forward(self, x):
+        return self.bulk(x)
+```
+
+Here is our network. Just a normal feed-forward network, with skip blocks in the middle.
+
+
+```python
+def newL(*args, **kwargs):
+    l = k1lib.Learner()
+    l.model = Network(*args, **kwargs)
+    l.data = k1lib.data.Data.fromDataset(k1lib.data.FunctionDataset.exp, batchSize=64)
+    l.opt = optim.Adam(l.model.parameters(), lr=1e-2)
+    l.lossF = lambda x, y: ((x.squeeze() - y)**2).mean()
+
+    l.cbs.withModifyBatch(lambda x, y: (x[:, None], y))
+    l.cbs.withDType(torch.float32);
+    l.cbs.withCancelOnLowLoss(1, epochMode=True)
+    l.css = """SkipBlock #0: HookParam
+SkipBlock: HookModule"""
+
+    def evaluate(self):
+        xbs, ybs, ys = self.Recorder.record(1, 3)
+        xbs = torch.vstack(xbs).squeeze()
+        ybs = torch.vstack([yb[:, None] for yb in ybs]).squeeze()
+        ys = torch.vstack(ys).squeeze()
+        plt.plot(xbs, ys.detach(), ".")
+    l.evaluate = partial(evaluate, l)
+    return l
+l = newL()
+l.run(10);
+```
 
     /home/kelvin/anaconda3/envs/torch/lib/python3.8/site-packages/torch/nn/modules/module.py:974: UserWarning: Using a non-full backward hook when the forward contains multiple autograd Nodes is deprecated and will be removed in future versions. This hook will be missing some grad_input. Please use register_full_backward_hook to get the documented behavior.
       warnings.warn("Using a non-full backward hook when the forward contains multiple autograd Nodes "
 
 
-.. parsed-literal::
-
     Progress:  39%, epoch:  3/10, batch: 148/157, elapsed:   1.71s  Run cancelled: Low loss 1 ([4.137817813504126, 6.064462519461109, 1.03841807140458, 0.618931788109964] actual) achieved!.
     Saved to autosave-2.pth
 
 
-Here is where things get a little more interesting. ``k1lib.Learner`` is
-the main wrapper where training will take place. It has 4 basic
-parameters that must be set before training: model, data loader,
-optimizer, and loss function.
+Here is where things get a little more interesting. `k1lib.Learner` is the main wrapper where training will take place. It has 4 basic parameters that must be set before training: model, data loader, optimizer, and loss function.
 
-   **Tip**: docs are tailored for each object so you can do
-   ``print(obj)`` or just ``obj`` in a code cell
+>**Tip**: docs are tailored for each object so you can do `print(obj)` or just `obj` in a code cell
 
-.. code:: ipython3
 
-    l.cbs
+```python
+l.cbs
+```
 
 
 
-
-.. parsed-literal::
 
     Callbacks:
     - Autosave
@@ -149,30 +134,27 @@ optimizer, and loss function.
 
 
 
-There’re lots of Callbacks. What they are will be discussed later, but
-here’s a tour of a few of them:
+There're lots of Callbacks. What they are will be discussed later, but here's a tour of a few of them:
 
-ParamFinder
-~~~~~~~~~~~
-
-.. code:: ipython3
-
-    l = newL(); l.ParamFinder.plot(samples=1000)[:0.99]
+### ParamFinder
 
 
-.. parsed-literal::
+```python
+l = newL(); l.ParamFinder.plot(samples=1000)[:0.99]
+```
 
     Progress:   0%, epoch:    3/1000, batch:  78/157, elapsed:   1.25s  Run cancelled: Loss increases significantly.
     Suggested param: 0.011785347069983639
 
 
 
-.. image:: output_12_1.png
+    
+![png](output_12_1.png)
+    
 
 
 
 
-.. parsed-literal::
 
     Sliceable plot. Can...
     - p[a:b]: to focus on a specific range of the plot
@@ -182,24 +164,18 @@ ParamFinder
 
 
 
-As advertised, this callback searches for a perfect parameter for the
-network.
+As advertised, this callback searches for a perfect parameter for the network.
 
-Loss
-~~~~
-
-.. code:: ipython3
-
-    l = newL(); l.run(10); l.Loss
+### Loss
 
 
-.. parsed-literal::
+```python
+l = newL(); l.run(10); l.Loss
+```
 
     /home/kelvin/anaconda3/envs/torch/lib/python3.8/site-packages/torch/nn/modules/module.py:974: UserWarning: Using a non-full backward hook when the forward contains multiple autograd Nodes is deprecated and will be removed in future versions. This hook will be missing some grad_input. Please use register_full_backward_hook to get the documented behavior.
       warnings.warn("Using a non-full backward hook when the forward contains multiple autograd Nodes "
 
-
-.. parsed-literal::
 
     Progress:  20%, epoch:  1/10, batch: 152/157, elapsed:   0.83s  Run cancelled: Low loss 1 ([2.2685133757129794, 0.42127063630088685] actual) achieved!.
     Saved to autosave-2.pth
@@ -207,7 +183,6 @@ Loss
 
 
 
-.. parsed-literal::
 
     Callback `Loss`, use...
     - cb.train: for all training losses over all epochs and batches (#epochs * #batches)
@@ -220,18 +195,19 @@ Loss
 
 
 
-.. code:: ipython3
 
-    l.Loss.plot()
-
-
-
-.. image:: output_16_0.png
+```python
+l.Loss.plot()
+```
 
 
+    
+![png](output_16_0.png)
+    
 
 
-.. parsed-literal::
+
+
 
     Sliceable plot. Can...
     - p[a:b]: to focus on a specific range of the plot
@@ -241,21 +217,21 @@ Loss
 
 
 
-Data type returned is ``k1lib.viz.SliceablePlot``, so you can zoom the
-plot in a specific range, like this:
-
-.. code:: ipython3
-
-    l.Loss.plot()[120:]
+Data type returned is `k1lib.viz.SliceablePlot`, so you can zoom the plot in a specific range, like this:
 
 
+```python
+l.Loss.plot()[120:]
+```
 
-.. image:: output_18_0.png
+
+    
+![png](output_18_0.png)
+    
 
 
 
 
-.. parsed-literal::
 
     Sliceable plot. Can...
     - p[a:b]: to focus on a specific range of the plot
@@ -265,57 +241,49 @@ plot in a specific range, like this:
 
 
 
-Notice how original train range is ``[0, 250]``, and valid range is
-``[0, 60]``. When sliced with ``[120:]``, train’s range sliced as
-planned from the middle to end, and valid’s range adapting and also
-sliced from middle to end (``[30:]``).
+Notice how original train range is `[0, 250]`, and valid range is `[0, 60]`. When sliced with `[120:]`, train's range sliced as planned from the middle to end, and valid's range adapting and also sliced from middle to end (`[30:]`).
 
-LossLandscape
-~~~~~~~~~~~~~
-
-.. code:: ipython3
-
-    l.LossLandscape.plot()
+### LossLandscape
 
 
-.. parsed-literal::
+```python
+l.LossLandscape.plot()
+```
 
     
     Progress: 100%          8/8 Finished [-3.16, 3.16] range                        
 
 
-.. image:: output_20_1.png
+    
+![png](output_20_1.png)
+    
 
 
-.. code:: ipython3
 
-    l.LossLandscape.plot()
-
-
-.. parsed-literal::
+```python
+l.LossLandscape.plot()
+```
 
     
     Progress: 100%          8/8 Finished [-3.16, 3.16] range                        
 
 
-.. image:: output_21_1.png
+    
+![png](output_21_1.png)
+    
 
 
-Oh and yeah, this callback can give you a quick view into how the
-landscape is. The center point (0, 0) is always the lowest portion of
-the landscape, so that tells us the network has learned stuff.
+Oh and yeah, this callback can give you a quick view into how the landscape is. The center point (0, 0) is always the lowest portion of the landscape, so that tells us the network has learned stuff.
 
-HookParam
-~~~~~~~~~
+### HookParam
 
-.. code:: ipython3
 
-    l.HookParam
+```python
+l.HookParam
+```
 
 
 
-
-.. parsed-literal::
 
     Callback `HookParam`: 6 params, 315 means and stds each:
       0. bulk.2.seq.0.weight
@@ -336,40 +304,19 @@ HookParam
 
 
 
-.. code:: ipython3
 
-    l.HookParam.plot()
-
-
-
-.. image:: output_25_0.png
+```python
+l.HookParam.plot()
+```
 
 
-
-
-.. parsed-literal::
-
-    Sliceable plot. Can...
-    - p[a:b]: to focus on a specific range of the plot
-    - p.yscale("log"): to perform operation as if you're using plt
-
-
-
-This tracks parameters’ means, stds, mins and maxs while training. You
-can also display only certain number of parameters:
-
-.. code:: ipython3
-
-    l.HookParam[::2].plot()[50:]
-
-
-
-.. image:: output_27_0.png
+    
+![png](output_25_0.png)
+    
 
 
 
 
-.. parsed-literal::
 
     Sliceable plot. Can...
     - p[a:b]: to focus on a specific range of the plot
@@ -377,21 +324,21 @@ can also display only certain number of parameters:
 
 
 
-HookModule
-~~~~~~~~~~
-
-.. code:: ipython3
-
-    l.HookModule.plot()
+This tracks parameters' means, stds, mins and maxs while training. You can also display only certain number of parameters:
 
 
+```python
+l.HookParam[::2].plot()[50:]
+```
 
-.. image:: output_29_0.png
+
+    
+![png](output_27_0.png)
+    
 
 
 
 
-.. parsed-literal::
 
     Sliceable plot. Can...
     - p[a:b]: to focus on a specific range of the plot
@@ -399,19 +346,37 @@ HookModule
 
 
 
-Pretty much same thing as before. This callback hooks into selected
-modules, and captures the forward and backward passes. Both
-``HookParam`` and ``HookModule`` will only hook into selected modules
-(by default all is selected):
-
-.. code:: ipython3
-
-    l.selector
+### HookModule
 
 
+```python
+l.HookModule.plot()
+```
 
 
-.. parsed-literal::
+    
+![png](output_29_0.png)
+    
+
+
+
+
+
+    Sliceable plot. Can...
+    - p[a:b]: to focus on a specific range of the plot
+    - p.yscale("log"): to perform operation as if you're using plt
+
+
+
+Pretty much same thing as before. This callback hooks into selected modules, and captures the forward and backward passes. Both `HookParam` and `HookModule` will only hook into selected modules (by default all is selected):
+
+
+```python
+l.selector
+```
+
+
+
 
     ModuleSelector:
     root: Network                       
@@ -461,27 +426,24 @@ modules, and captures the forward and backward passes. Both
 
 
 
-CSS module selector
--------------------
+## CSS module selector
 
-You can select specific modules by setting ``l.css = ...``, kinda like
-this:
+You can select specific modules by setting `l.css = ...`, kinda like this:
 
-.. code:: ipython3
 
-    l = newL()
-    l.css = """
-    #bulk > Linear: a
-    #bulk > #1: b
-    SkipBlock Sequential: c
-    SkipBlock LeakyReLU
-    """
-    l.selector
-
+```python
+l = newL()
+l.css = """
+#bulk > Linear: a
+#bulk > #1: b
+SkipBlock Sequential: c
+SkipBlock LeakyReLU
+"""
+l.selector
+```
 
 
 
-.. parsed-literal::
 
     ModuleSelector:
     root: Network                       
@@ -531,40 +493,36 @@ this:
 
 
 
-Essentially, you can: - #a: to select modules with name “a” - b: to
-select modules with class name “b” - a #b: to select modules with name
-“b” under modules with class “a” - a > #b: to select modules with name
-“b” directly under modules with class “a” - “#a: infinity war”: to
-assign selected module with properties “infinity” and “war”
+Essentially, you can:
+- #a: to select modules with name "a"
+- b: to select modules with class name "b"
+- a #b: to select modules with name "b" under modules with class "a"
+- a > #b: to select modules with name "b" directly under modules with class "a"
+- "#a: infinity war": to assign selected module with properties "infinity" and "war"
 
-Different callbacks will recognize certain props. ``HookModule`` will
-hook all modules with props “all” or “HookModule”. Likewise,
-``HookParam`` will hook all parameters with props “all” or “HookParam”.
+Different callbacks will recognize certain props. `HookModule` will hook all modules with props "all" or "HookModule". Likewise, `HookParam` will hook all parameters with props "all" or "HookParam".
 
-Data loader
------------
+## Data loader
 
-.. code:: ipython3
 
-    l.data
-
+```python
+l.data
+```
 
 
 
-.. parsed-literal::
 
     `Data` object, just a shell containing 2 `DataLoader`s: `.train` and `.valid`
 
 
 
-.. code:: ipython3
 
-    l.data.train
+```python
+l.data.train
+```
 
 
 
-
-.. parsed-literal::
 
     DataLoader object. 126 batches total, can...
     - len(dl): to get number of batches the sampler has
@@ -575,22 +533,19 @@ Data loader
 
 
 
-It’s simple, really! ``l.data`` contains a ``train`` and ``valid`` data
-loader and each has multiple ways to unpack values.
+It's simple, really! `l.data` contains a `train` and `valid` data loader and each has multiple ways to unpack values.
 
-Callbacks
----------
+## Callbacks
 
-Let’s look at ``l`` again:
+Let's look at `l` again:
 
-.. code:: ipython3
 
-    l
-
+```python
+l
+```
 
 
 
-.. parsed-literal::
 
     l.model:
         Network(
@@ -639,92 +594,70 @@ Let’s look at ``l`` again:
 
 
 
-``l.model`` and ``l.opt`` is simple enough. It’s just PyTorch’s
-primitives. The part where most of the magic lies is in ``l.cbs``, an
-object of type ``k1lib.Callbacks``, a container object of
-``k1lib.Callback``. Notice the final “s” in the name.
+`l.model` and `l.opt` is simple enough. It's just PyTorch's primitives. The part where most of the magic lies is in `l.cbs`, an object of type `k1lib.Callbacks`, a container object of `k1lib.Callback`. Notice the final "s" in the name.
 
-A callback is pretty simple. While training, you may want to sort of
-insert functionality here and there. Let’s say you want the program to
-print out a progress bar after each epoch. You can edit the learning
-loop directly, with some internal variables to keep track of the current
-epoch and batch, like this:
+A callback is pretty simple. While training, you may want to sort of insert functionality here and there. Let's say you want the program to print out a progress bar after each epoch. You can edit the learning loop directly, with some internal variables to keep track of the current epoch and batch, like this:
 
-.. code:: python
+```python
+startTime = time.time()
+for epoch in epochs:
+    for batch in batches:
+        # do training
+        data = getData()
+        train(data)
+        
+        # calculate progress
+        elapsedTime = time.time() - startTime
+        progress = round((batch / batches + epoch) / epochs * 100)
+        print(f"\rProgress: {progress}%, elapsed: {round(elapsedTime, 2)}s         ", end="")
+```
 
-   startTime = time.time()
-   for epoch in epochs:
-       for batch in batches:
-           # do training
-           data = getData()
-           train(data)
-           
-           # calculate progress
-           elapsedTime = time.time() - startTime
-           progress = round((batch / batches + epoch) / epochs * 100)
-           print(f"\rProgress: {progress}%, elapsed: {round(elapsedTime, 2)}s         ", end="")
+But this means when you don't want that functionality anymore, you have to know what internal variable belongs to the progress bar, and you have to delete it. With callbacks, things work a little bit differently:
 
-But this means when you don’t want that functionality anymore, you have
-to know what internal variable belongs to the progress bar, and you have
-to delete it. With callbacks, things work a little bit differently:
+```python
+class ProgressBar(k1lib.Callback):
+    def startRun(self):
+        pass
+    def startBatch(self):
+        self.progress = round((self.batch / self.batches + self.epoch) / self.epochs * 100)
+        a = f"Progress: {self.progress}%"
+        b = f"epoch: {self.epoch}/{self.epochs}"
+        c = f"batch: {self.batch}/{self.batches}"
+        print(f"{a}, {b}, {c}")
 
-.. code:: python
+class Learner:
+    def run(self):
+        self.epochs = 1; self.batches = 10
 
-   class ProgressBar(k1lib.Callback):
-       def startRun(self):
-           pass
-       def startBatch(self):
-           self.progress = round((self.batch / self.batches + self.epoch) / self.epochs * 100)
-           a = f"Progress: {self.progress}%"
-           b = f"epoch: {self.epoch}/{self.epochs}"
-           c = f"batch: {self.batch}/{self.batches}"
-           print(f"{a}, {b}, {c}")
+        self.cbs = k1lib.Callbacks()
+        self.cbs.append(ProgressBar())
 
-   class Learner:
-       def run(self):
-           self.epochs = 1; self.batches = 10
+        self.cbs("startRun")
+        for self.epoch in self.epochs:
+            self.cbs("startEpoch")
+            for self.batch in self.batches:
+                self.xb, self.yb = getData()
+                self.cbs("startBatch")
 
-           self.cbs = k1lib.Callbacks()
-           self.cbs.append(ProgressBar())
+                # do training
+                self.y = self.model(data); self.cbs("endPass")
+                self.loss = self.lossF(self.y); self.cbs("endLoss")
+                if self.cbs("startBackward"): self.loss.backward()
 
-           self.cbs("startRun")
-           for self.epoch in self.epochs:
-               self.cbs("startEpoch")
-               for self.batch in self.batches:
-                   self.xb, self.yb = getData()
-                   self.cbs("startBatch")
+                self.cbs("endBatch")
+            self.cbs("endEpoch")
+        self.cbs("endRun")
+```
 
-                   # do training
-                   self.y = self.model(data); self.cbs("endPass")
-                   self.loss = self.lossF(self.y); self.cbs("endLoss")
-                   if self.cbs("startBackward"): self.loss.backward()
+This is a stripped down version of `k1lib.Learner`, to get the idea across. Point is, whenever you do `self.cbs("startRun")`, it will run through all `k1lib.Callback` that it has (`ProgressBar` in this example), check if it implements `startRun`, and if yes, executes it.
 
-                   self.cbs("endBatch")
-               self.cbs("endEpoch")
-           self.cbs("endRun")
+Inside `ProgressBar`'s `startBatch`, you can access learner's current epoch by doing `self.learner.epoch`. But you can also do `self.epoch` alone. If the attribute is not defined, then it will automatically be searched inside `self.learner`.
 
-This is a stripped down version of ``k1lib.Learner``, to get the idea
-across. Point is, whenever you do ``self.cbs("startRun")``, it will run
-through all ``k1lib.Callback`` that it has (``ProgressBar`` in this
-example), check if it implements ``startRun``, and if yes, executes it.
+As you can see, if you want to get rid of the progress bar without using `k1lib.Callbacks`, you have to delete the `startTime` line and the actual calculate progress lines. This requires you to remember which lines belongs to which functionality. If you use the `k1lib.Callbacks` mechanism instead, then you can just uncomment `self.cbs.append(ProgressBar())`, and that's it. This makes swapping out components extremely easy, repeatable, and beautiful.
 
-Inside ``ProgressBar``\ ’s ``startBatch``, you can access learner’s
-current epoch by doing ``self.learner.epoch``. But you can also do
-``self.epoch`` alone. If the attribute is not defined, then it will
-automatically be searched inside ``self.learner``.
+Other use cases include intercepting at `startBatch`, and push all the training data to the GPU. You can also reshape the data however you want. You can insert different loss mechanisms (`endLoss`) in addition to `lossF`, or quickly inspect the model output. You can also change learning rates while training (`startEpoch`) according to some schedules. The possibility are literally endless.
 
-As you can see, if you want to get rid of the progress bar without using
-``k1lib.Callbacks``, you have to delete the ``startTime`` line and the
-actual calculate progress lines. This requires you to remember which
-lines belongs to which functionality. If you use the ``k1lib.Callbacks``
-mechanism instead, then you can just uncomment
-``self.cbs.append(ProgressBar())``, and that’s it. This makes swapping
-out components extremely easy, repeatable, and beautiful.
 
-Other use cases include intercepting at ``startBatch``, and push all the
-training data to the GPU. You can also reshape the data however you
-want. You can insert different loss mechanisms (``endLoss``) in addition
-to ``lossF``, or quickly inspect the model output. You can also change
-learning rates while training (``startEpoch``) according to some
-schedules. The possibility are literally endless.
+```python
 
+```
