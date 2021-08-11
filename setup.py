@@ -9,7 +9,8 @@ with open("readme.md") as f:
 
 setup(
     name="k1lib",
-    packages=["k1lib", "k1lib._hidden", "k1lib._callbacks"],
+    packages=["k1lib", "k1lib._hidden", "k1lib.bioinfo", "k1lib.bioinfo.cli",
+              "k1lib.callbacks", "k1lib.callbacks.profilers"],
     version="0.1.3",
     install_requires=["torch", "numpy", "matplotlib", "dill"],
     description="Some nice ML overhaul",

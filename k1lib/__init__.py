@@ -1,9 +1,18 @@
 from ._hidden.hiddenFile import hiddenF
 from ._basics import *
+from . import format
+from . import website
+from . import nn
 from .data import *
+from . import selector
 from .callbacks import Callback, Callbacks
-from ._selectors import select as _select
+from . import callbacks
 from ._learner import Learner
-from .schedule import ParamScheduler
+from .schedule import Schedule, ParamScheduler
 from . import viz
 from . import imports
+
+from . import graphEqn
+from . import eqn
+
+from .bioinfo import *

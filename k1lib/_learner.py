@@ -4,7 +4,7 @@ class Learner:
     def __init__(self):
         self.model = None; self.data = None; self.opt = None
         self.lossF = None; self._cbs = None; self.fileName = None
-        self.css = "*:all"
+        self.css = "*"
         self.cbs = k1lib.Callbacks().withBasics().withQOL().withAdvanced()
     @property
     def cbs(self): return self._cbs
@@ -13,20 +13,17 @@ class Learner:
     @property
     def css(self): return self._css
     @css.setter
-    def css(self, css):
+    def css(self, css:str):
         self._css = css
-        if self.model != None: self.selector = k1lib._select(self.model, self.css)
+        if self.model != None: self.selector = k1lib.selector.select(self.model, self.css)
     def __getattr__(self, attr):
         if attr == "cbs": raise AttributeError()
         return getattr(self.cbs, attr)
     def __getstate__(self):
-        answer = dict(self.__dict__)
-        del answer["selector"]
-        return answer
+        answer = dict(self.__dict__); del answer["selector"]; return answer
     def __setstate__(self, state):
         self.__dict__.update(state)
-        self.css = self.css
-        self.cbs.learner = self
+        self.css = self.css; self.cbs.learner = self
     def evaluate(self): pass # supposed to be overriden, to provide functionality here
     @property
     def warnings(self):
@@ -45,13 +42,13 @@ Use...
 - l.data = ...: to specify data object
 - l.opt = ...: to specify an optimizer
 - l.lossF = ...: to specify a loss function
-- l.css = ...: to select modules using CSS
+- l.css = ...: to select modules using CSS. "#root" for root model
 - l.cbs = ...: to use a custom `Callbacks` object
 - l.selector: to get the modules selected by `l.css`
 - l.run(epochs): to run the network
 - l.Loss: to get a specific callback, this case "Loss"\n\n"""
 @k1lib.patch(Learner)
-def save(self, fileName=None):
+def save(self, fileName:str=None):
     self.fileName = fileName or self.fileName
     if self.fileName == None:
         files = [file for file in os.listdir() if file.startswith("learner") and file.endswith(".pth")]
@@ -62,7 +59,7 @@ def save(self, fileName=None):
     torch.save(self, self.fileName, pickle_module=dill)
     print(f"Saved to {self.fileName}")
 @k1lib.patch(Learner)
-def load(fileName=None):
+def load(fileName:str=None):
     if fileName==None: fileName = input("Enter learner file name to load:")
     print(f"Loaded from {fileName}"); return torch.load(fileName, pickle_module=dill)
 @k1lib.patch(Learner)
@@ -76,8 +73,7 @@ def _run1Batch(self):
         if not self.cbs("startStep"):  self.opt.step()
         if not self.cbs("startZeroGrad"): self.opt.zero_grad(set_to_none=True)
     except k1lib.CancelBatchException as ex:
-        self.cbs("cancelBatch")
-        print(f"Batch cancelled: {ex}.")
+        self.cbs("cancelBatch"); print(f"Batch cancelled: {ex}.")
     self.cbs("endBatch")
 @k1lib.patch(Learner)
 def _run1Epoch(self):
@@ -89,49 +85,22 @@ def _run1Epoch(self):
             self._run1Batch()
         self.model.eval(); self.cbs("startValidBatches")
         for self.batch, (self.xb, self.yb) in enumerate(self.data.valid):
-            self.batch += trainLen
-            self._run1Batch()
+            self.batch += trainLen; self._run1Batch()
     except k1lib.CancelEpochException as ex:
         self.cbs("cancelEpoch")
         print(f"Epoch cancelled: {ex}.")
     self.cbs("endEpoch")
 @k1lib.patch(Learner)
-def run(self, epochs):
-    self.epochs = epochs
+def run(self, epochs:int, batches:int=None):
     if self.warnings != "": raise Exception(self.warnings)
-    self.css = self.css # update module selector
-    self.cbs("startRun")
-    try:
-        for self.epoch in range(epochs):
-            self._run1Epoch()
-    except k1lib.CancelRunException as ex:
-        self.cbs("cancelRun")
-        print(f"Run cancelled: {ex}.")
-    self.cbs("endRun"); return self
-class Recorder(k1lib.Callback):
-    def __init__(self):
-        super().__init__()
-        self.order = 20
-        self.xbs = []; self.ybs = []; self.ys = []
-    def startBatch(self):
-        self.xbs += [self.xb]
-        self.ybs += [self.yb]
-    def endPass(self):
-        self.ys += [self.y]
-    @property
-    def values(self): return self.xbs, self.ybs, self.ys
+    self.epochs = epochs; self.css = self.css # update module selector
+    with self.cbs.context():
+        if batches != None: self.cbs.withBatchLimit(batches)
+        self.cbs("startRun")
+        try:
+            for self.epoch in range(epochs): self._run1Epoch()
+        except k1lib.CancelRunException as ex:
+            self.cbs("cancelRun"); print(f"Run cancelled: {ex}.")
+        self.cbs("endRun"); return self
 @k1lib.patch(Learner)
-def record(self, epochs=1, batchesPerEpoch=4):
-    """Like run(), but:
-- There's no training
-- Have optional batch limiter
-- Returns recorded xBatch, yBatch and answer y"""
-    self.cbs.suspend(["Loss", "HookParam", "HookModule", "ParamScheduler", "Autosave", "CancelOnExplosion"])
-    self.cbs.withBatchLimit(batchesPerEpoch, "_record_BatchLimit")
-    self.cbs.withDontTrain("_record_DontTrain")
-    self.cbs.append(Recorder(), "_record_Recorder")
-    self.run(epochs)
-    answer = self.cbs._record_Recorder.values
-    self.cbs.removePrefix("_record_").restore(); return answer
-@k1lib.patch(Learner)
-def evaluate(self): raise NotImplementedError()
+def evaluate(self): raise NotImplementedError("You have to define evaluate() by yourself")
