@@ -1,0 +1,321 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <title>Cli streams &mdash; k1lib 0.1 documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+
+  
+  
+
+  
+  
+
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+    
+    <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="k1lib.callbacks package" href="../callbacks/index.html" />
+    <link rel="prev" title="k1lib.bioinfo.cli package" href="cli.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../index.html" class="icon icon-home"> k1lib
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">k1lib.bioinfo package</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="index.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="cli.html">k1lib.bioinfo.cli package</a><ul class="current">
+<li class="toctree-l4 current"><a class="current reference internal" href="#">Cli streams</a><ul>
+<li class="toctree-l5"><a class="reference internal" href="#symmetric">Symmetric</a></li>
+<li class="toctree-l5"><a class="reference internal" href="#asymmetric">Asymmetric</a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="cli.html#submodules">Submodules</a></li>
+<li class="toctree-l4"><a class="reference internal" href="cli.html#module-k1lib.bioinfo.cli.bio">k1lib.bioinfo.cli.bio module</a></li>
+<li class="toctree-l4"><a class="reference internal" href="cli.html#module-k1lib.bioinfo.cli.entrez">k1lib.bioinfo.cli.entrez module</a></li>
+<li class="toctree-l4"><a class="reference internal" href="cli.html#module-k1lib.bioinfo.cli.mgi">k1lib.bioinfo.cli.mgi module</a></li>
+<li class="toctree-l4"><a class="reference internal" href="cli.html#module-k1lib.bioinfo.cli.filt">k1lib.bioinfo.cli.filt module</a></li>
+<li class="toctree-l4"><a class="reference internal" href="cli.html#module-k1lib.bioinfo.cli.grep">k1lib.bioinfo.cli.grep module</a></li>
+<li class="toctree-l4"><a class="reference internal" href="cli.html#k1lib-bioinfo-cli-init-module">k1lib.bioinfo.cli.init module</a></li>
+<li class="toctree-l4"><a class="reference internal" href="cli.html#module-k1lib.bioinfo.cli.input">k1lib.bioinfo.cli.input module</a></li>
+<li class="toctree-l4"><a class="reference internal" href="cli.html#module-k1lib.bioinfo.cli.kcsv">k1lib.bioinfo.cli.kcsv module</a></li>
+<li class="toctree-l4"><a class="reference internal" href="cli.html#module-k1lib.bioinfo.cli.kxml">k1lib.bioinfo.cli.kxml module</a></li>
+<li class="toctree-l4"><a class="reference internal" href="cli.html#module-k1lib.bioinfo.cli.modifier">k1lib.bioinfo.cli.modifier module</a></li>
+<li class="toctree-l4"><a class="reference internal" href="cli.html#module-k1lib.bioinfo.cli.output">k1lib.bioinfo.cli.output module</a></li>
+<li class="toctree-l4"><a class="reference internal" href="cli.html#module-k1lib.bioinfo.cli.sam">k1lib.bioinfo.cli.sam module</a></li>
+<li class="toctree-l4"><a class="reference internal" href="cli.html#module-k1lib.bioinfo.cli.structural">k1lib.bioinfo.cli.structural module</a></li>
+<li class="toctree-l4"><a class="reference internal" href="cli.html#module-k1lib.bioinfo.cli.utils">k1lib.bioinfo.cli.utils module</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../callbacks/index.html">k1lib.callbacks package</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../data.html">k1lib.data module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../eqn.html">k1lib.eqn module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../format.html">k1lib.format module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../graphEqn.html">k1lib.graphEqn module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../imports.html">k1lib.imports module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../nn.html">k1lib.nn module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../schedule.html">k1lib.schedule module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../selector.html">k1lib.selector module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../viz.html">k1lib.viz module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../website.html">k1lib.website module</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">k1lib</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+          <li><a href="index.html">k1lib.bioinfo package</a> &raquo;</li>
+        
+          <li><a href="cli.html">k1lib.bioinfo.cli package</a> &raquo;</li>
+        
+      <li>Cli streams</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+          
+            <a href="../_sources/bioinfo/streams.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="cli-streams">
+<h1>Cli streams<a class="headerlink" href="#cli-streams" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="symmetric">
+<h2>Symmetric<a class="headerlink" href="#symmetric" title="Permalink to this headline">¶</a></h2>
+<p>So let’s say you have a list of files:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">fileNames</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;a.txt&quot;</span><span class="p">,</span> <span class="s2">&quot;b.txt&quot;</span><span class="p">,</span> <span class="s2">&quot;c.txt&quot;</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>You now want to read every line from every file quickly, using cli tools, and get
+the number of rows in each file, instead of something like this:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sizes</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="k">for</span> <span class="n">fileName</span> <span class="ow">in</span> <span class="n">fileNames</span><span class="p">:</span>
+    <span class="n">sizes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cat</span><span class="p">(</span><span class="n">fileName</span><span class="p">)</span> <span class="o">|</span> <span class="n">shape</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
+</pre></div>
+</div>
+<p>…which really defeats the purpose of the elegant cli tool workflow. Instead, you
+can do:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sizes</span> <span class="o">=</span> <span class="n">fileNames</span> <span class="o">|</span> <span class="n">cats</span><span class="p">()</span> <span class="o">|</span> <span class="n">shape</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span> <span class="o">|</span> <span class="n">toList</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>Let’s analyze this in detail. <code class="docutils literal notranslate"><span class="pre">fileNames</span></code> is <code class="docutils literal notranslate"><span class="pre">Iterator[str]</span></code>. It gets passed to
+<code class="docutils literal notranslate"><span class="pre">cats()</span></code>, which if you recall, <a class="reference internal" href="cli.html#k1lib.bioinfo.cli.input.cats" title="k1lib.bioinfo.cli.input.cats"><code class="xref py py-class docutils literal notranslate"><span class="pre">cats</span></code></a> is actually
+just <code class="docutils literal notranslate"><span class="pre">apply(lambda</span> <span class="pre">s:</span> <span class="pre">cat(s))</span></code>, so now, the output is
+<code class="docutils literal notranslate"><span class="pre">Iterator[Iterator[str]]</span></code>. Now we want to get the #rows of every file, but we
+can’t pipe the input directly to <code class="docutils literal notranslate"><span class="pre">shape(0)</span></code>, as it will count how many files are
+there instead. So, the operator <a class="reference internal" href="cli.html#k1lib.bioinfo.cli.init.BaseCli.all" title="k1lib.bioinfo.cli.init.BaseCli.all"><code class="xref py py-meth docutils literal notranslate"><span class="pre">all()</span></code></a> will
+return a new cli object that will apply <code class="docutils literal notranslate"><span class="pre">shape(0)</span></code> to every stream. The output of
+that will be <code class="docutils literal notranslate"><span class="pre">Iterator[int]</span></code>, which we can convert to a list easily with
+<code class="docutils literal notranslate"><span class="pre">toList()</span></code>.</p>
+<p>This is pretty powerful, as you can be as meta as you’d like. Something crazy like
+this works:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># assume a, b, c has 10, 20, 30 lines</span>
+<span class="n">fileNames</span> <span class="o">=</span> <span class="p">[[</span><span class="s2">&quot;a.txt&quot;</span><span class="p">],</span> <span class="p">[</span><span class="s2">&quot;b.txt&quot;</span><span class="p">,</span> <span class="s2">&quot;c.txt&quot;</span><span class="p">]]</span>
+<span class="c1"># returns [[10], [20, 30]]</span>
+<span class="n">sizes</span> <span class="o">=</span> <span class="n">fileNames</span> <span class="o">|</span> <span class="p">(</span><span class="n">cats</span><span class="p">()</span> <span class="o">|</span> <span class="n">shape</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span> <span class="o">|</span> <span class="n">toList</span><span class="p">())</span><span class="o">.</span><span class="n">all</span><span class="p">()</span> <span class="o">|</span> <span class="n">toList</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>Here, the inner block <code class="docutils literal notranslate"><span class="pre">cats()</span> <span class="pre">|</span> <span class="pre">shape(0).all()</span> <span class="pre">|</span> <span class="pre">toList()</span></code> is just like last time.
+This time, it’s applied on all <code class="docutils literal notranslate"><span class="pre">List[str]</span></code> elements in <code class="docutils literal notranslate"><span class="pre">fileNames</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">toList()</span></code> just dereferences the iterator. The maximum meta level is actually
+<code class="docutils literal notranslate"><span class="pre">Iterator[Iterator[Iterator[str]]]</span></code> here.</p>
+<p>You can also join different streams into just 1, by doing something like this:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">fileNames</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;a.txt&quot;</span><span class="p">,</span> <span class="s2">&quot;b.txt&quot;</span><span class="p">,</span> <span class="s2">&quot;c.txt&quot;</span><span class="p">]</span>
+<span class="c1"># returns number of lines of all files</span>
+<span class="n">fileNames</span> <span class="o">|</span> <span class="n">cats</span><span class="p">()</span> <span class="o">|</span> <span class="n">joinStreams</span><span class="p">()</span> <span class="o">|</span> <span class="n">shape</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="asymmetric">
+<h2>Asymmetric<a class="headerlink" href="#asymmetric" title="Permalink to this headline">¶</a></h2>
+<p>The streams need not be symmetrical (derived from <code class="docutils literal notranslate"><span class="pre">.all()</span></code> operation) like the
+examples above:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># returns [0, 1, 2, &#39;a&#39;, &#39;b&#39;, &#39;c&#39;]</span>
+<span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">,</span> <span class="s2">&quot;b&quot;</span><span class="p">,</span> <span class="s2">&quot;c&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="p">(</span><span class="n">toRange</span><span class="p">()</span> <span class="o">&amp;</span> <span class="n">identity</span><span class="p">())</span> <span class="o">|</span> <span class="n">joinStreams</span><span class="p">()</span> <span class="o">|</span> <span class="n">toList</span><span class="p">()</span>
+<span class="c1"># displays a table with first column [0, 1, 2] and second column [&#39;a&#39;, &#39;b&#39;, &#39;c&#39;]</span>
+<span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">,</span> <span class="s2">&quot;b&quot;</span><span class="p">,</span> <span class="s2">&quot;c&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="p">(</span><span class="n">toRange</span><span class="p">()</span> <span class="o">&amp;</span> <span class="n">identity</span><span class="p">())</span> <span class="o">|</span> <span class="n">joinColumns</span><span class="p">()</span> <span class="o">|</span> <span class="n">display</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>Here, a list of strings is piped into <code class="docutils literal notranslate"><span class="pre">(toRange()</span> <span class="pre">&amp;</span> <span class="pre">identity())</span></code> operator. This will
+effectively split the input into 2 streams. 1 gets passed through <code class="docutils literal notranslate"><span class="pre">toRange()</span></code>,
+and 1 through <code class="docutils literal notranslate"><span class="pre">identity()</span></code>. So, the output is effectively
+<code class="docutils literal notranslate"><span class="pre">[Iterator[int],</span> <span class="pre">Iterator[str]]</span></code>, which we can join together just like before.</p>
+<p>When combining streams asymmetrically (using the <code class="docutils literal notranslate"><span class="pre">&amp;</span></code> operator), the input to the
+streams need not be a list. Internally, k1lib uses the <code class="xref py py-meth docutils literal notranslate"><span class="pre">itertools.tee()</span></code> method
+to get multiple iterators from a single iterator, so as to avoid creating an entire
+list which would waste resources. Of course, whether this wastes resources or not
+depends a lot on how you structure things. If there is an operation that blows
+through the entire iterator before others use any elements, then that would slow
+things down.</p>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+        <a href="../callbacks/index.html" class="btn btn-neutral float-right" title="k1lib.callbacks package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="cli.html" class="btn btn-neutral float-left" title="k1lib.bioinfo.cli package" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &#169; Copyright 2021, Quang Ho.
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

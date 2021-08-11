@@ -1,4 +1,4 @@
-_build
 _static
 _templates
 .vscode
+_build/doctrees

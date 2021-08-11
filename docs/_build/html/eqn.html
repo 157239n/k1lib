@@ -1,0 +1,542 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <title>k1lib.eqn module &mdash; k1lib 0.1 documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+
+  
+  
+
+  
+  
+
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="k1lib.format module" href="format.html" />
+    <link rel="prev" title="k1lib.data module" href="data.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home"> k1lib
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="bioinfo/index.html">k1lib.bioinfo package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="callbacks/index.html">k1lib.callbacks package</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="data.html">k1lib.data module</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">k1lib.eqn module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="format.html">k1lib.format module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="graphEqn.html">k1lib.graphEqn module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="imports.html">k1lib.imports module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="nn.html">k1lib.nn module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="schedule.html">k1lib.schedule module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="selector.html">k1lib.selector module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="viz.html">k1lib.viz module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="website.html">k1lib.website module</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">k1lib</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
+        
+      <li>k1lib.eqn module</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+          
+            <a href="_sources/eqn.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <span class="target" id="module-k1lib.eqn"></span><div class="section" id="k1lib-eqn-module">
+<h1>k1lib.eqn module<a class="headerlink" href="#k1lib-eqn-module" title="Permalink to this headline">¶</a></h1>
+<p>The idea of this module looks something like this:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">k1lib.imports</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="n">eqn</span><span class="o">.</span><span class="n">settings</span><span class="p">[</span><span class="s2">&quot;eqnPrintExtras&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+
+<span class="n">s</span> <span class="o">=</span> <span class="n">eqn</span><span class="o">.</span><span class="n">System</span><span class="p">(</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2"># comments like this are okay. This section&#39;s for buying things</span>
+<span class="s2">10 cent -&gt; 1 kWh</span>
+<span class="s2">1.5 dollar -&gt; 1000 H2O</span>
+<span class="s2">12 dollar -&gt; O2</span>
+<span class="s2">1.4 dollar -&gt; CH4</span>
+
+<span class="s2"># conversions</span>
+<span class="s2">100 cent -&gt; 1 dollar</span>
+<span class="s2">1 MJ -&gt; 0.27 kWh</span>
+<span class="s2">&quot;&quot;&quot;</span><span class="p">);</span>
+
+<span class="c1"># parsing extra equations down the line</span>
+<span class="n">s</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="s2">&quot;1 H2O + 16 MJ -&gt; 0.11 H2 + 0.88 O2&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Essentially, you can create a system of equations. Here, all the chemicals are in
+kilograms, so you can buy 1 kg oxygen for 12 dollars. Then, you can get equations
+relating to a specific term:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">s</span><span class="o">.</span><span class="n">O2</span>
+</pre></div>
+</div>
+<p>Output:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Consumers:
+
+
+Producers:
+0. H2O + 16 MJ -&gt; 0.11 H2 + 0.88 O2
+1. 12 dollar -&gt; O2
+</pre></div>
+</div>
+<p>Then, you can pick out a single equation that has another unique term “dollar”:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">O2</span><span class="o">.</span><span class="n">dollar</span><span class="p">)</span> <span class="c1"># outputs &quot;O2 -&gt; 12 dollar&quot;</span>
+</pre></div>
+</div>
+<p>This will return the flipped equation, going from “O2” to “dollar”, because the
+expression looks like <code class="docutils literal notranslate"><span class="pre">s.O2.dollar</span></code>. You can go in the reverse order if you want
+to:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">dollar</span><span class="o">.</span><span class="n">O2</span><span class="p">)</span> <span class="c1"># outputs &quot;12 dollar -&gt; O2&quot;</span>
+</pre></div>
+</div>
+<p>For complex case where <code class="docutils literal notranslate"><span class="pre">s.dollar.O2</span></code> can have multiple answers, use
+<a class="reference internal" href="#k1lib.eqn.Eqns.pick" title="k1lib.eqn.Eqns.pick"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Eqns.pick()</span></code></a> instead. You can also do random math on these equations:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">dollar</span><span class="o">.</span><span class="n">O2</span> <span class="o">*</span> <span class="mi">5</span> <span class="o">+</span> <span class="n">s</span><span class="o">.</span><span class="n">dollar</span><span class="o">.</span><span class="n">CH4</span><span class="p">)</span> <span class="c1"># outputs &quot;61.4 dollar -&gt; 5 O2 + CH4&quot;</span>
+</pre></div>
+</div>
+<p>You can also “combine” multiple equations together like this:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">cent</span><span class="o">.</span><span class="n">dollar</span> <span class="o">@</span> <span class="n">s</span><span class="o">.</span><span class="n">dollar</span><span class="o">.</span><span class="n">O2</span><span class="p">)</span> <span class="c1"># outputs &quot;100 cent -&gt; 0.083 O2&quot;</span>
+</pre></div>
+</div>
+<p>This looks for common terms between the 2 equations, in this case “dollar”. It
+then tries to add these 2 equations together so that “dollar” cancels out. “0.083”
+is a hideous number. To bring it to 1kg, you can multiply the equation by
+<code class="docutils literal notranslate"><span class="pre">1/0.083</span></code>. This is sort of tedious, depends a lot on the original equation’s
+values, so you can just do it like this instead:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># outputs &quot;1200 cent -&gt; O2&quot;, rounds the last term to 1</span>
+<span class="nb">print</span><span class="p">(</span><span class="nb">round</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">cent</span><span class="o">.</span><span class="n">dollar</span> <span class="o">@</span> <span class="n">s</span><span class="o">.</span><span class="n">dollar</span><span class="o">.</span><span class="n">O2</span><span class="p">))</span>
+<span class="c1"># outputs &quot;1200 cent -&gt; O2&quot;, rounds specific term to 1</span>
+<span class="nb">print</span><span class="p">(</span><span class="nb">round</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">cent</span><span class="o">.</span><span class="n">dollar</span> <span class="o">@</span> <span class="n">s</span><span class="o">.</span><span class="n">dollar</span><span class="o">.</span><span class="n">O2</span><span class="p">,</span> <span class="s2">&quot;O2&quot;</span><span class="p">))</span>
+<span class="c1"># outputs &quot;12000 cent -&gt; 10 O2&quot;, rounds specific term to specific value</span>
+<span class="nb">print</span><span class="p">((</span><span class="n">s</span><span class="o">.</span><span class="n">cent</span><span class="o">.</span><span class="n">dollar</span> <span class="o">@</span> <span class="n">s</span><span class="o">.</span><span class="n">dollar</span><span class="o">.</span><span class="n">O2</span><span class="p">)</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="s2">&quot;O2&quot;</span><span class="p">,</span> <span class="mi">10</span><span class="p">))</span>
+</pre></div>
+</div>
+<p>So, using this module, you can do quick back-of-the-envelope calculations for
+anything you want, like comparing between making your own oxygen, or buying oxygen
+tanks from outside:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># outputs &quot;12 dollar -&gt; O2&quot;</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">dollar</span><span class="o">.</span><span class="n">O2</span><span class="p">)</span>
+<span class="c1"># outputs &quot;0.493 dollar -&gt; 0.125 H2 + O2&quot;</span>
+<span class="nb">print</span><span class="p">(</span><span class="nb">round</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">dollar</span><span class="o">.</span><span class="n">cent</span> <span class="o">@</span> <span class="n">s</span><span class="o">.</span><span class="n">cent</span><span class="o">.</span><span class="n">kWh</span> <span class="o">@</span> <span class="n">s</span><span class="o">.</span><span class="n">kWh</span><span class="o">.</span><span class="n">MJ</span> <span class="o">@</span> <span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">dollar</span><span class="o">.</span><span class="n">H2O</span> <span class="o">@</span> <span class="n">s</span><span class="o">.</span><span class="n">H2O</span><span class="o">.</span><span class="n">O2</span><span class="p">)))</span>
+</pre></div>
+</div>
+<p>So yeah, apparently, it’s much, much cheaper to make your own oxygen from
+electrolysis than buying it from outside. Makes me wonder why hospitals still buy
+oxygen tanks.</p>
+<p>This module can definitely be improved. Right now, chemicals are implicitly in
+kilograms, but what if you want to convert between mol and kg? This module doesn’t
+really provide the facilities for that. Main reason is I’m lazy to implement, and
+it sounds more trouble than its worth. I still use this module for all kinds of
+chemical flow analysis, and it works out fine for me, so there’re really no
+incentives to do this.</p>
+<dl class="py class">
+<dt id="k1lib.eqn.Eqn">
+<em class="property"><span class="pre">class</span> </em><code class="sig-prename descclassname"><span class="pre">k1lib.eqn.</span></code><code class="sig-name descname"><span class="pre">Eqn</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">system</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><a class="reference internal" href="#k1lib.eqn.System" title="k1lib.eqn.System"><span class="pre">k1lib.eqn.System</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#k1lib.eqn.Eqn" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py method">
+<dt id="k1lib.eqn.Eqn.__init__">
+<code class="sig-name descname"><span class="pre">__init__</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">system</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><a class="reference internal" href="#k1lib.eqn.System" title="k1lib.eqn.System"><span class="pre">k1lib.eqn.System</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#k1lib.eqn.Eqn.__init__" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates a blank equation. Not expected to be instantiated by
+the end user.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="k1lib.eqn.Eqn.save">
+<code class="sig-name descname"><span class="pre">save</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#k1lib.eqn.Eqn.save" title="Permalink to this definition">¶</a></dt>
+<dd><p>Saves this (potentially new) equation to the system, so that it
+can be used directly later on</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="k1lib.eqn.Eqn.__contains__">
+<code class="sig-name descname"><span class="pre">__contains__</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#k1lib.eqn.Eqn.__contains__" title="Permalink to this definition">¶</a></dt>
+<dd><p>Whether a term is in this equation</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="k1lib.eqn.Eqn.__getattr__">
+<code class="sig-name descname"><span class="pre">__getattr__</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">term</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#k1lib.eqn.Eqn.__getattr__" title="Permalink to this definition">¶</a></dt>
+<dd><p>Gets the value of the term in this equation. Negative if on
+consumer side, positive if on producer side</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="k1lib.eqn.Eqn.__getitem__">
+<code class="sig-name descname"><span class="pre">__getitem__</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">idx</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#k1lib.eqn.Eqn.__getitem__" title="Permalink to this definition">¶</a></dt>
+<dd><p>Same as <a class="reference internal" href="#k1lib.eqn.Eqn.__getattr__" title="k1lib.eqn.Eqn.__getattr__"><code class="xref py py-meth docutils literal notranslate"><span class="pre">__getattr__()</span></code></a></p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="k1lib.eqn.Eqn.__iter__">
+<code class="sig-name descname"><span class="pre">__iter__</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#k1lib.eqn.Eqn.__iter__" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt id="k1lib.eqn.Eqn.__len__">
+<code class="sig-name descname"><span class="pre">__len__</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#k1lib.eqn.Eqn.__len__" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns number of terms in this equation</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="k1lib.eqn.Eqn.__hash__">
+<code class="sig-name descname"><span class="pre">__hash__</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#k1lib.eqn.Eqn.__hash__" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return hash(self).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="k1lib.eqn.Eqn.copy">
+<code class="sig-name descname"><span class="pre">copy</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#k1lib.eqn.Eqn.copy" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt id="k1lib.eqn.Eqn.sharedTerms">
+<code class="sig-name descname"><span class="pre">sharedTerms</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">eqn</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><a class="reference internal" href="#k1lib.eqn.Eqn" title="k1lib.eqn.Eqn"><span class="pre">k1lib.eqn.Eqn</span></a></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><a class="headerlink" href="#k1lib.eqn.Eqn.sharedTerms" title="Permalink to this definition">¶</a></dt>
+<dd><p>Gets a list of shared terms between this equation and the
+specified one.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="k1lib.eqn.Eqn.join">
+<code class="sig-name descname"><span class="pre">join</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">eqn</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><a class="reference internal" href="#k1lib.eqn.Eqn" title="k1lib.eqn.Eqn"><span class="pre">k1lib.eqn.Eqn</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">term</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> &#x2192; <a class="reference internal" href="#k1lib.eqn.Eqn" title="k1lib.eqn.Eqn"><span class="pre">k1lib.eqn.Eqn</span></a><a class="headerlink" href="#k1lib.eqn.Eqn.join" title="Permalink to this definition">¶</a></dt>
+<dd><p>Tries to cancel out this equation with another equation at the
+specified term. Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">s</span> <span class="o">=</span> <span class="n">eqn</span><span class="o">.</span><span class="n">System</span><span class="p">(</span><span class="s2">&quot;&quot;&quot;a + b -&gt; c + d</span>
+<span class="s2">c + 2e -&gt; f&quot;&quot;&quot;</span><span class="p">)</span>
+<span class="n">s</span><span class="o">.</span><span class="n">a</span><span class="o">.</span><span class="n">c</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">c</span><span class="o">.</span><span class="n">f</span><span class="p">,</span> <span class="s2">&quot;c&quot;</span><span class="p">)</span> <span class="c1"># returns the equation &quot;a + b + 2e -&gt; d + f&quot;</span>
+</pre></div>
+</div>
+<p>For simpler cases, where the shared term to be joined is obvious, use
+<a class="reference internal" href="#k1lib.eqn.Eqn.__matmul__" title="k1lib.eqn.Eqn.__matmul__"><code class="xref py py-meth docutils literal notranslate"><span class="pre">__matmul__()</span></code></a> instead</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="k1lib.eqn.Eqn.__matmul__">
+<code class="sig-name descname"><span class="pre">__matmul__</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">eqn</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><a class="reference internal" href="#k1lib.eqn.Eqn" title="k1lib.eqn.Eqn"><span class="pre">k1lib.eqn.Eqn</span></a></span></em><span class="sig-paren">)</span> &#x2192; <a class="reference internal" href="#k1lib.eqn.Eqn" title="k1lib.eqn.Eqn"><span class="pre">k1lib.eqn.Eqn</span></a><a class="headerlink" href="#k1lib.eqn.Eqn.__matmul__" title="Permalink to this definition">¶</a></dt>
+<dd><p>Convenience method that does the same thing as <a class="reference internal" href="#k1lib.eqn.Eqn.join" title="k1lib.eqn.Eqn.join"><code class="xref py py-meth docutils literal notranslate"><span class="pre">join()</span></code></a>.
+Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">s</span> <span class="o">=</span> <span class="n">eqn</span><span class="o">.</span><span class="n">System</span><span class="p">(</span><span class="s2">&quot;&quot;&quot;a + b -&gt; c + d</span>
+<span class="s2">c + 2e -&gt; f&quot;&quot;&quot;</span><span class="p">)</span>
+<span class="n">s</span><span class="o">.</span><span class="n">a</span><span class="o">.</span><span class="n">c</span> <span class="o">@</span> <span class="n">s</span><span class="o">.</span><span class="n">c</span><span class="o">.</span><span class="n">f</span> <span class="c1"># returns the equation &quot;a + b + 2e -&gt; d + f&quot;</span>
+</pre></div>
+</div>
+<p>Preference order of which term to join:</p>
+<ol class="arabic simple">
+<li><p>If term is on producer side of <code class="docutils literal notranslate"><span class="pre">self</span></code>, and consumer side of <code class="docutils literal notranslate"><span class="pre">eqn</span></code></p></li>
+<li><p>If term is on consumer side of <code class="docutils literal notranslate"><span class="pre">self</span></code>, and producer side of <code class="docutils literal notranslate"><span class="pre">eqn</span></code></p></li>
+<li><p>Other cases</p></li>
+</ol>
+</dd></dl>
+
+<dl class="py method">
+<dt id="k1lib.eqn.Eqn.round">
+<code class="sig-name descname"><span class="pre">round</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">term</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">amount</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">float</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">10</span></span></em><span class="sig-paren">)</span> &#x2192; <a class="reference internal" href="#k1lib.eqn.Eqn" title="k1lib.eqn.Eqn"><span class="pre">k1lib.eqn.Eqn</span></a><a class="headerlink" href="#k1lib.eqn.Eqn.round" title="Permalink to this definition">¶</a></dt>
+<dd><p>Rounds the equation off, so that the term’s value
+is the specified amount. For aesthetic purposes mainly. Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">s</span> <span class="o">=</span> <span class="n">eqn</span><span class="o">.</span><span class="n">System</span><span class="p">(</span><span class="s2">&quot;a + b -&gt; 2c&quot;</span><span class="p">)</span>
+<span class="n">s</span><span class="o">.</span><span class="n">a</span><span class="o">.</span><span class="n">c</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="s2">&quot;c&quot;</span><span class="p">,</span> <span class="mi">5</span><span class="p">)</span> <span class="c1"># returns the equation &quot;2.5a + 2.5b -&gt; 5c&quot;&#39;</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt id="k1lib.eqn.Eqn.__round__">
+<code class="sig-name descname"><span class="pre">__round__</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">term</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> &#x2192; <a class="reference internal" href="#k1lib.eqn.Eqn" title="k1lib.eqn.Eqn"><span class="pre">k1lib.eqn.Eqn</span></a><a class="headerlink" href="#k1lib.eqn.Eqn.__round__" title="Permalink to this definition">¶</a></dt>
+<dd><p>Like <a class="reference internal" href="#k1lib.eqn.Eqn.round" title="k1lib.eqn.Eqn.round"><code class="xref py py-meth docutils literal notranslate"><span class="pre">round()</span></code></a>, but more Pythonic?</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt id="k1lib.eqn.Eqns">
+<em class="property"><span class="pre">class</span> </em><code class="sig-prename descclassname"><span class="pre">k1lib.eqn.</span></code><code class="sig-name descname"><span class="pre">Eqns</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">system</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><a class="reference internal" href="#k1lib.eqn.System" title="k1lib.eqn.System"><span class="pre">k1lib.eqn.System</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">eqns</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#k1lib.eqn.Eqn" title="k1lib.eqn.Eqn"><span class="pre">k1lib.eqn.Eqn</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">focusTerm</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#k1lib.eqn.Eqns" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py method">
+<dt id="k1lib.eqn.Eqns.__init__">
+<code class="sig-name descname"><span class="pre">__init__</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">system</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><a class="reference internal" href="#k1lib.eqn.System" title="k1lib.eqn.System"><span class="pre">k1lib.eqn.System</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">eqns</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#k1lib.eqn.Eqn" title="k1lib.eqn.Eqn"><span class="pre">k1lib.eqn.Eqn</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">focusTerm</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#k1lib.eqn.Eqns.__init__" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates a new list of equations. Not expected to be instantiated
+by the end user.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>system</strong> – injected <a class="reference internal" href="#k1lib.eqn.System" title="k1lib.eqn.System"><code class="xref py py-class docutils literal notranslate"><span class="pre">System</span></code></a></p></li>
+<li><p><strong>eqns</strong> – list of equations</p></li>
+<li><p><strong>focusTerm</strong> – if the list of equations are from the result of focusing
+in a single term, then use this parameter to prioritize certain search
+parameters.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="k1lib.eqn.Eqns.__getitem__">
+<code class="sig-name descname"><span class="pre">__getitem__</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">idx</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#k1lib.eqn.Eqn" title="k1lib.eqn.Eqn"><span class="pre">k1lib.eqn.Eqn</span></a><span class="p"><span class="pre">]</span></span><a class="headerlink" href="#k1lib.eqn.Eqns.__getitem__" title="Permalink to this definition">¶</a></dt>
+<dd><p>If int, return the equation with that index. Not really helpful
+for exploring the system of equations, but good for automated scripts</p>
+<p>If string, then effectively the same as <a class="reference internal" href="#k1lib.eqn.Eqns.__getattr__" title="k1lib.eqn.Eqns.__getattr__"><code class="xref py py-meth docutils literal notranslate"><span class="pre">__getattr__()</span></code></a></p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="k1lib.eqn.Eqns.__getattr__">
+<code class="sig-name descname"><span class="pre">__getattr__</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">term</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#k1lib.eqn.Eqn" title="k1lib.eqn.Eqn"><span class="pre">k1lib.eqn.Eqn</span></a><span class="p"><span class="pre">]</span></span><a class="headerlink" href="#k1lib.eqn.Eqns.__getattr__" title="Permalink to this definition">¶</a></dt>
+<dd><p>Picks out a specific <a class="reference internal" href="#k1lib.eqn.Eqn" title="k1lib.eqn.Eqn"><code class="xref py py-class docutils literal notranslate"><span class="pre">Eqn</span></code></a> that has the specified term.
+Prefer shorter equations, and the returned <a class="reference internal" href="#k1lib.eqn.Eqn" title="k1lib.eqn.Eqn"><code class="xref py py-class docutils literal notranslate"><span class="pre">Eqn</span></code></a> always have the
+term on the products side. Meaning:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">eqns</span> <span class="o">=</span> <span class="n">eqn</span><span class="o">.</span><span class="n">System</span><span class="p">(</span><span class="s2">&quot;a + 2b -&gt; c&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">b</span> <span class="c1"># gets an Eqns object with that single equation</span>
+<span class="n">eqns</span><span class="o">.</span><span class="n">a</span> <span class="c1"># gets the equation &quot;c -&gt; a + 2b&quot; instead</span>
+</pre></div>
+</div>
+<p>This is a convenience way to search for equations. If you need more
+granularity, use <a class="reference internal" href="#k1lib.eqn.Eqns.pick" title="k1lib.eqn.Eqns.pick"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pick()</span></code></a> instead</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="k1lib.eqn.Eqns.pick">
+<code class="sig-name descname"><span class="pre">pick</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">terms</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> &#x2192; <span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#k1lib.eqn.Eqn" title="k1lib.eqn.Eqn"><span class="pre">k1lib.eqn.Eqn</span></a><span class="p"><span class="pre">]</span></span><a class="headerlink" href="#k1lib.eqn.Eqns.pick" title="Permalink to this definition">¶</a></dt>
+<dd><p>Like the quick method (<a class="reference internal" href="#k1lib.eqn.Eqns.__getattr__" title="k1lib.eqn.Eqns.__getattr__"><code class="xref py py-meth docutils literal notranslate"><span class="pre">__getattr__()</span></code></a>), but here, picks
+equations more carefully, with selection for multiple terms. Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">s</span> <span class="o">=</span> <span class="n">eqn</span><span class="o">.</span><span class="n">System</span><span class="p">(</span><span class="s2">&quot;&quot;&quot;a + 2b -&gt; c</span>
+<span class="s2">b + c -&gt; d</span>
+<span class="s2">a -&gt; 3d</span>
+<span class="s2">a + b + c -&gt; 2d&quot;&quot;&quot;</span><span class="p">)</span>
+<span class="n">s</span><span class="o">.</span><span class="n">a</span><span class="o">.</span><span class="n">pick</span><span class="p">(</span><span class="s2">&quot;b&quot;</span><span class="p">,</span> <span class="s2">&quot;d&quot;</span><span class="p">)</span> <span class="c1"># returns last equation</span>
+</pre></div>
+</div>
+<p>As you can see, it’s impossible to pick out the last equation using
+<a class="reference internal" href="#k1lib.eqn.Eqns.__getattr__" title="k1lib.eqn.Eqns.__getattr__"><code class="xref py py-meth docutils literal notranslate"><span class="pre">__getattr__()</span></code></a> alone, as they will all prefer the shorter equations,
+so this is where <a class="reference internal" href="#k1lib.eqn.Eqns.pick" title="k1lib.eqn.Eqns.pick"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pick()</span></code></a> can be useful.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="k1lib.eqn.Eqns.__dir__">
+<code class="sig-name descname"><span class="pre">__dir__</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#k1lib.eqn.Eqns.__dir__" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns the list of terms in every equation here. Useful for
+tab completion.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt id="k1lib.eqn.System">
+<em class="property"><span class="pre">class</span> </em><code class="sig-prename descclassname"><span class="pre">k1lib.eqn.</span></code><code class="sig-name descname"><span class="pre">System</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">strToParse</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#k1lib.eqn.System" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py method">
+<dt id="k1lib.eqn.System.__init__">
+<code class="sig-name descname"><span class="pre">__init__</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">strToParse</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#k1lib.eqn.System.__init__" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates a new system of equations.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>strToParse</strong> – if specified, then it gets feed into <code class="xref py py-meth docutils literal notranslate"><span class="pre">parse()</span></code></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="k1lib.eqn.System.spellCheck">
+<code class="sig-name descname"><span class="pre">spellCheck</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#k1lib.eqn.System.spellCheck" title="Permalink to this definition">¶</a></dt>
+<dd><p>Runs a spell check to find out terms that are pretty similar to
+each other</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="k1lib.eqn.System.__len__">
+<code class="sig-name descname"><span class="pre">__len__</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#k1lib.eqn.System.__len__" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt id="k1lib.eqn.System.__getitem__">
+<code class="sig-name descname"><span class="pre">__getitem__</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">idx</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> &#x2192; <a class="reference internal" href="#k1lib.eqn.Eqn" title="k1lib.eqn.Eqn"><span class="pre">k1lib.eqn.Eqn</span></a><a class="headerlink" href="#k1lib.eqn.System.__getitem__" title="Permalink to this definition">¶</a></dt>
+<dd><p>Picks out the i’th equation from the list of equations. Useful
+for automated scripts</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="k1lib.eqn.System.__getattr__">
+<code class="sig-name descname"><span class="pre">__getattr__</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">term</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> &#x2192; <a class="reference internal" href="#k1lib.eqn.Eqns" title="k1lib.eqn.Eqns"><span class="pre">k1lib.eqn.Eqns</span></a><a class="headerlink" href="#k1lib.eqn.System.__getattr__" title="Permalink to this definition">¶</a></dt>
+<dd><p>Picks out equations that has the term</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="k1lib.eqn.System.__dir__">
+<code class="sig-name descname"><span class="pre">__dir__</span></code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#k1lib.eqn.System.__dir__" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns the list of terms in every equation here. Useful for
+tab completion.</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+        <a href="format.html" class="btn btn-neutral float-right" title="k1lib.format module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="data.html" class="btn btn-neutral float-left" title="k1lib.data module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &#169; Copyright 2021, Quang Ho.
+
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>
