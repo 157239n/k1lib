@@ -3,12 +3,13 @@ from k1lib.callbacks import Callback, Callbacks
 import k1lib, numpy as np
 import matplotlib.pyplot as plt
 from functools import partial
+__all__ = ["ParamFinder"]
 @k1lib.patch(Callback.cls)
 class ParamFinder(Callback):
     """Automatically finds out the right value for
     a specific parameter"""
     def __init__(self):
-        super().__init__(); self.order = 20
+        super().__init__(); self.order = 23
         self.activated = False; self.losses = []
     @property
     def samples(self): return self._samples
@@ -27,6 +28,8 @@ class ParamFinder(Callback):
             self.idx += 1
             for paramGroup in self.opt.param_groups:
                 paramGroup[self.param] = self.value
+    @property
+    def suggestedValue(self): return self.best/2
     def endLoss(self):
         if self.activated:
             self.losses.append(self.loss)
@@ -42,24 +45,23 @@ class ParamFinder(Callback):
 - pf.samples = ...: to set how many param values to iterate through
 {self._reprCan}"""
 @k1lib.patch(ParamFinder)
-def run(self, param:str="lr", samples=300):
+def run(self, param:str="lr", samples:int=300):
     self.param = param; self.samples = samples
     self.idx = 0; self.losses = []; self.best = None; self.bestLoss = float("inf")
     self.activated = True; ogParams = self.model.exportParams()
-    self.learner.cbs.suspend(["HookModule", "HookParam", "ParamScheduler", "Loss", "Autosave"])
-    self.learner.run(int(1e3))
-    self.activated = False; self.model.importParams(ogParams)
-    self.learner.cbs.restore(); return self.plot()
+    with self.learner.cbs.suspend(cbsClasses=["HookModule", "HookParam", "ParamScheduler", "Loss", "Autosave"]):
+        self.learner.run(int(1e3))
+        self.activated = False; self.model.importParams(ogParams)
+    return self.plot()
 def plotF(self, _slice):
     r = k1lib.Range(len(self.losses)).fromUnit(_slice)
-    plt.plot(self.potentialValues[r.slice], self.losses[r.slice])
+    plt.plot(self.potentialValues[r.slice_], self.losses[r.slice_])
     plt.xscale("log"); plt.xlabel(self.param); plt.ylabel("Loss")
 @k1lib.patch(ParamFinder)
 def plot(self, *args, **kwargs):
     if len(self.losses) == 0: return self.run(*args, **kwargs)
     else:
-        print(f"Suggested param: {self.best / 2}"); plt.figure(dpi=120)
+        print(f"Suggested param: {self.suggestedValue}"); plt.figure(dpi=120)
         return k1lib.viz.SliceablePlot(partial(plotF, self), docs="\n\nReminder: slice range here is actually [0, 1], because it's kinda hard to slice the normal way")
 @k1lib.patch(Callbacks, docs=ParamFinder)
-def withParamFinder(self):
-    return self.append(ParamFinder())
+def withParamFinder(self): return self.append(ParamFinder())
