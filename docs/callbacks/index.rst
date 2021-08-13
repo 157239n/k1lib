@@ -3,106 +3,102 @@
 k1lib.callbacks package
 =======================
 
-Subpackages
------------
-
 .. toctree::
    :maxdepth: 1
 
    profilers
 
-k1lib.callbacks.callbacks module
+Submodules
+^^^^^^^^^^
+
+callbacks module
 --------------------------------
 
 .. automodule:: k1lib.callbacks.callbacks
-   :members:
-   :undoc-members:
-   :show-inheritance:
 
-k1lib.callbacks.frozen module
+   .. autoclass:: Callback
+      :members:
+      :undoc-members:
+      :show-inheritance:
+
+   .. autoclass:: Callbacks
+      :members:
+      :undoc-members:
+      :show-inheritance:
+
+frozen module
 -----------------------------
 
 .. automodule:: k1lib.callbacks.frozen
    :members:
-   :undoc-members:
    :show-inheritance:
 
-k1lib.callbacks.hookModule module
+hookModule module
 ---------------------------------
 
 .. automodule:: k1lib.callbacks.hookModule
    :members:
-   :undoc-members:
    :show-inheritance:
 
-k1lib.callbacks.hookParam module
+hookParam module
 --------------------------------
 
 .. automodule:: k1lib.callbacks.hookParam
    :members:
-   :undoc-members:
    :show-inheritance:
 
-k1lib.callbacks.limits module
+limits module
 -----------------------------
 
 .. automodule:: k1lib.callbacks.limits
    :members:
-   :undoc-members:
    :show-inheritance:
 
-k1lib.callbacks.lossLandscape module
+lossLandscape module
 ------------------------------------
 
 .. automodule:: k1lib.callbacks.lossLandscape
    :members:
-   :undoc-members:
    :show-inheritance:
 
-k1lib.callbacks.loss\_accuracy module
+loss\_accuracy module
 -------------------------------------
 
 .. automodule:: k1lib.callbacks.loss_accuracy
    :members:
-   :undoc-members:
    :show-inheritance:
 
-k1lib.callbacks.paramFinder module
+paramFinder module
 ----------------------------------
 
 .. automodule:: k1lib.callbacks.paramFinder
    :members:
-   :undoc-members:
    :show-inheritance:
 
-k1lib.callbacks.profiler module
+profiler module
 -------------------------------
 
 .. automodule:: k1lib.callbacks.profiler
    :members:
-   :undoc-members:
    :show-inheritance:
 
-k1lib.callbacks.progress module
+progress module
 -------------------------------
 
 .. automodule:: k1lib.callbacks.progress
    :members:
-   :undoc-members:
    :show-inheritance:
 
-k1lib.callbacks.recorder module
+recorder module
 -------------------------------
 
 .. automodule:: k1lib.callbacks.recorder
    :members:
-   :undoc-members:
    :show-inheritance:
 
-k1lib.callbacks.shorts module
+shorts module
 -----------------------------
 
 .. automodule:: k1lib.callbacks.shorts
    :members:
-   :undoc-members:
    :show-inheritance:

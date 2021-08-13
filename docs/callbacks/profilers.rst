@@ -1,39 +1,39 @@
 .. module:: k1lib.callbacks.profilers
 
-k1lib.callbacks.profilers package
+profilers package
 =================================
 
 This package is not supposed to be used by the end user though. These are
 just helpful modules used by :mod:`k1lib.callbacks.profiler`
 
-k1lib.callbacks.profilers.computation module
+Documenting everything here is kinda awkward, as just using it, you'll get a better
+idea of what's happening. If you want to dive deeper, then by all means, check out
+the source codes
+
+computation module
 --------------------------------------------
 
 .. automodule:: k1lib.callbacks.profilers.computation
    :members:
-   :undoc-members:
    :show-inheritance:
 
-k1lib.callbacks.profilers.io module
+io module
 -----------------------------------
 
 .. automodule:: k1lib.callbacks.profilers.io
    :members:
-   :undoc-members:
    :show-inheritance:
 
-k1lib.callbacks.profilers.memory module
+memory module
 ---------------------------------------
 
 .. automodule:: k1lib.callbacks.profilers.memory
    :members:
-   :undoc-members:
    :show-inheritance:
 
-k1lib.callbacks.profilers.time module
+time module
 -------------------------------------
 
 .. automodule:: k1lib.callbacks.profilers.time
    :members:
-   :undoc-members:
    :show-inheritance:

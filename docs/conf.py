@@ -12,6 +12,7 @@
 #
 import os
 import sys
+import k1lib
 sys.path.insert(0, os.path.abspath('../k1lib'))
 
 
@@ -33,13 +34,18 @@ release = '0.1'
 extensions = [
     "sphinx.ext.autodoc",
     "sphinx_autorun",
-    "sphinx_toolbox.collapse"
+    "sphinx_toolbox.collapse",
+    'sphinx.ext.intersphinx',
+    'sphinx.ext.viewcode',
 ]
 
 autodoc_member_order = 'bysource'
 
 def skip(app, what, name, obj, would_skip, options):
-    if name in {"__init__", "__ror__", "__invert__"}: return False
+    if name == "__init__":
+        if (doc := obj.__doc__) is None: return True
+        return doc.strip() == ""
+    if name in {"__ror__", "__invert__"}: return False
     return would_skip
 
 def setup(app):
@@ -70,4 +76,10 @@ html_theme_options = {
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 #html_static_path = ['_static']
+
+intersphinx_mapping = {
+    'python': ('https://docs.python.org/3', None),
+    'numpy': ('https://numpy.org/doc/stable', None),
+    'torch': ('https://pytorch.org/docs/master/', None),
+}
 

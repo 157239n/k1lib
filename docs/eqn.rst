@@ -69,8 +69,10 @@ values, so you can just do it like this instead::
    print(round(s.cent.dollar @ s.dollar.O2))
    # outputs "1200 cent -> O2", rounds specific term to 1
    print(round(s.cent.dollar @ s.dollar.O2, "O2"))
+   # outputs "3600 cent -> 3 O2", rounds the last term to value
+   print(round(s.cent.dollar @ s.dollar.O2, 3))
    # outputs "12000 cent -> 10 O2", rounds specific term to specific value
-   print((s.cent.dollar @ s.dollar.O2).round("O2", 10))
+   print(round(s.cent.dollar @ s.dollar.O2, ["O2", 10]))
 
 So, using this module, you can do quick back-of-the-envelope calculations for
 anything you want, like comparing between making your own oxygen, or buying oxygen

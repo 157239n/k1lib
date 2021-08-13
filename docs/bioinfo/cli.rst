@@ -1,6 +1,6 @@
 .. module:: k1lib.bioinfo.cli
 
-k1lib.bioinfo.cli package
+cli package
 =========================
 
 The main idea of this package is to emulate the terminal, but doing all of that inside Python itself. So this bash statement:
@@ -58,21 +58,21 @@ check over this:
    streams
 
 Submodules
-----------
+^^^^^^^^^^
 
-+-------------------------------------+---------------------------------+-------------------------------+
-|    :mod:`k1lib.bioinfo.cli.bio`     | :mod:`k1lib.bioinfo.cli.entrez` | :mod:`k1lib.bioinfo.cli.mgi`  |
-+=====================================+=================================+===============================+
-| :mod:`k1lib.bioinfo.cli.filt`       | :mod:`k1lib.bioinfo.cli.grep`   | :mod:`k1lib.bioinfo.cli.init` |
-+-------------------------------------+---------------------------------+-------------------------------+
-| :mod:`k1lib.bioinfo.cli.input`      | :mod:`k1lib.bioinfo.cli.kcsv`   | :mod:`k1lib.bioinfo.cli.kxml` |
-+-------------------------------------+---------------------------------+-------------------------------+
-| :mod:`k1lib.bioinfo.cli.modifier`   | :mod:`k1lib.bioinfo.cli.output` | :mod:`k1lib.bioinfo.cli.sam`  |
-+-------------------------------------+---------------------------------+-------------------------------+
-| :mod:`k1lib.bioinfo.cli.structural` | :mod:`k1lib.bioinfo.cli.utils`  |                               |
-+-------------------------------------+---------------------------------+-------------------------------+
++--------------------------------------+----------------------------------+--------------------------------+
+| :mod:`~k1lib.bioinfo.cli.bio`        | :mod:`~k1lib.bioinfo.cli.entrez` | :mod:`~k1lib.bioinfo.cli.mgi`  |
++--------------------------------------+----------------------------------+--------------------------------+
+| :mod:`~k1lib.bioinfo.cli.filt`       | :mod:`~k1lib.bioinfo.cli.grep`   | :mod:`~k1lib.bioinfo.cli.init` |
++--------------------------------------+----------------------------------+--------------------------------+
+| :mod:`~k1lib.bioinfo.cli.input`      | :mod:`~k1lib.bioinfo.cli.kcsv`   | :mod:`~k1lib.bioinfo.cli.kxml` |
++--------------------------------------+----------------------------------+--------------------------------+
+| :mod:`~k1lib.bioinfo.cli.modifier`   | :mod:`~k1lib.bioinfo.cli.output` | :mod:`~k1lib.bioinfo.cli.sam`  |
++--------------------------------------+----------------------------------+--------------------------------+
+| :mod:`~k1lib.bioinfo.cli.structural` | :mod:`~k1lib.bioinfo.cli.utils`  |                                |
++--------------------------------------+----------------------------------+--------------------------------+
 
-k1lib.bioinfo.cli.bio module
+bio module
 ----------------------------
 
 .. automodule:: k1lib.bioinfo.cli.bio
@@ -80,7 +80,7 @@ k1lib.bioinfo.cli.bio module
    :undoc-members:
    :show-inheritance:
 
-k1lib.bioinfo.cli.entrez module
+entrez module
 -------------------------------
 
 .. automodule:: k1lib.bioinfo.cli.entrez
@@ -88,7 +88,7 @@ k1lib.bioinfo.cli.entrez module
    :undoc-members:
    :show-inheritance:
 
-k1lib.bioinfo.cli.mgi module
+mgi module
 -------------------------------
 
 .. automodule:: k1lib.bioinfo.cli.mgi
@@ -96,7 +96,7 @@ k1lib.bioinfo.cli.mgi module
    :undoc-members:
    :show-inheritance:
 
-k1lib.bioinfo.cli.filt module
+filt module
 -----------------------------
 
 .. automodule:: k1lib.bioinfo.cli.filt
@@ -104,7 +104,7 @@ k1lib.bioinfo.cli.filt module
    :undoc-members:
    :show-inheritance:
 
-k1lib.bioinfo.cli.grep module
+grep module
 -----------------------------
 
 .. automodule:: k1lib.bioinfo.cli.grep
@@ -112,7 +112,7 @@ k1lib.bioinfo.cli.grep module
    :undoc-members:
    :show-inheritance:
 
-k1lib.bioinfo.cli.init module
+init module
 -----------------------------
 
 .. autoattribute:: k1lib.bioinfo.cli.bioinfoSettings
@@ -139,7 +139,7 @@ k1lib.bioinfo.cli.init module
    :undoc-members:
    :show-inheritance:
 
-k1lib.bioinfo.cli.input module
+input module
 ------------------------------
 
 .. automodule:: k1lib.bioinfo.cli.input
@@ -147,7 +147,7 @@ k1lib.bioinfo.cli.input module
    :undoc-members:
    :show-inheritance:
 
-k1lib.bioinfo.cli.kcsv module
+kcsv module
 -----------------------------
 
 .. automodule:: k1lib.bioinfo.cli.kcsv
@@ -155,7 +155,7 @@ k1lib.bioinfo.cli.kcsv module
    :undoc-members:
    :show-inheritance:
 
-k1lib.bioinfo.cli.kxml module
+kxml module
 -----------------------------
 
 .. automodule:: k1lib.bioinfo.cli.kxml
@@ -163,7 +163,7 @@ k1lib.bioinfo.cli.kxml module
    :undoc-members:
    :show-inheritance:
 
-k1lib.bioinfo.cli.modifier module
+modifier module
 ---------------------------------
 
 .. automodule:: k1lib.bioinfo.cli.modifier
@@ -171,7 +171,7 @@ k1lib.bioinfo.cli.modifier module
    :undoc-members:
    :show-inheritance:
 
-k1lib.bioinfo.cli.output module
+output module
 -------------------------------
 
 .. automodule:: k1lib.bioinfo.cli.output
@@ -179,7 +179,7 @@ k1lib.bioinfo.cli.output module
    :undoc-members:
    :show-inheritance:
 
-k1lib.bioinfo.cli.sam module
+sam module
 ----------------------------
 
 .. automodule:: k1lib.bioinfo.cli.sam
@@ -187,7 +187,7 @@ k1lib.bioinfo.cli.sam module
    :undoc-members:
    :show-inheritance:
 
-k1lib.bioinfo.cli.structural module
+structural module
 -----------------------------------
 
 .. automodule:: k1lib.bioinfo.cli.structural
@@ -195,7 +195,7 @@ k1lib.bioinfo.cli.structural module
    :undoc-members:
    :show-inheritance:
 
-k1lib.bioinfo.cli.utils module
+utils module
 ------------------------------
 
 .. automodule:: k1lib.bioinfo.cli.utils
