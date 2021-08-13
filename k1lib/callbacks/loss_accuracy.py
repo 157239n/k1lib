@@ -18,7 +18,7 @@ def nonEmptyList(_list):
     return [0] if _list == [] else _list
 @k1lib.patch(Callback.cls)
 class Loss(Callback):
-    "Records losses after each batch"
+    "Records losses after each batch."
     def __init__(self):
         super().__init__(); self.order = 20
         self.train = []; self.valid = [] # all stats all times
@@ -32,8 +32,8 @@ class Loss(Callback):
         self.epoch.plot = partial(commonPlot, self.epoch)
         self._trainLosses = []; self._validLosses = []
     def endLoss(self):
-        if self.model.training: self._trainLosses.append(self.loss)
-        else: self._validLosses.append(self.loss)
+        if self.l.model.training: self._trainLosses.append(self.l.loss)
+        else: self._validLosses.append(self.l.loss)
     def endEpoch(self):
         self.train.extend(self._trainLosses); self.epoch.train.append(np.mean(nonEmptyList(self._trainLosses)))
         self.valid.extend(self._validLosses); self.epoch.valid.append(np.mean(nonEmptyList(self._validLosses)))
@@ -49,8 +49,11 @@ class Loss(Callback):
 def withLoss(self): return self.append(Loss())
 @k1lib.patch(Callback.cls)
 class Accuracy(Callback):
-    "Records accuracies after each batch. Have to define an .accuracyF() function to use first"
-    def __init__(self, accuracyF):
+    """ """
+    def __init__(self, accuracyF:Callable[["k1lib.Learner"], float]):
+        """Records accuracies after each batch.
+
+:param accuracyF: accuracy function"""
         super().__init__(); self.order = 20; self.accuracyF = accuracyF
         self.train = [0]; self.valid = [0]
     def startRun(self):
@@ -58,7 +61,7 @@ class Accuracy(Callback):
     def endRun(self):
         self.train = np.array(self.train); self.valid = np.array(self.valid)
     def endLoss(self):
-        (self.train if self.model.training else self.valid).append(self.accuracyF(self.learner))
+        (self.train if self.l.model.training else self.valid).append(self.accuracyF(self.l))
     def plot(self):
         def plotF(_slice):
             plt.figure(figsize=(10, 3), dpi=100); step = _slice.step or 1
@@ -74,6 +77,6 @@ class Accuracy(Callback):
 - a.valid: for train accuracies over all batches
 - a.plot(): to plot the 2 above
 {super()._reprCan}"""
-@k1lib.patch(Callbacks, docs=Accuracy)
+@k1lib.patch(Callbacks, docs=Accuracy.__init__)
 def withAccuracy(self, accuracyF:Callable[["Learner"], float]):
     return self.append(Accuracy(accuracyF))

@@ -7,6 +7,9 @@ import time as _time
 class batch(_BaseCli):
     """Queries MGI database, convert list of genes to MGI ids"""
     def __init__(self, headless=True):
+        """
+:param headless: whether to run this operation headless, or actually
+    display the browser"""
         self.headless = headless
     def __ror__(self, it:_List[str]):
         import selenium; from selenium import webdriver

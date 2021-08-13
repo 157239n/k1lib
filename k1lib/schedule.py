@@ -96,9 +96,9 @@ class ParamScheduler(_k1lib.Callback):
         return answer
     def startBatch(self):
         ":meta private:"
-        if self.model.training:
-            paramGroup = self.opt.param_groups[self.groupId]
-            progress = self.ProgressBar.progress
+        if self.l.model.training:
+            paramGroup = self.l.opt.param_groups[self.groupId]
+            progress = self.l.ProgressBar.progress
             for schedule in self.schedules.values(): schedule.startBatch(paramGroup, progress)
     def __repr__(self):
         print(f"{self._reprHead}, css: \"{self.css}\", selector prop: \"{self.prop}\", schedules:")
@@ -112,32 +112,32 @@ def _startRun(self):
     ":meta private:"
     if not self.initialized:
         # get all other ParamSchedulers
-        cbs = [cb for cb in self.learner.cbs if isinstance(cb, ParamScheduler)]
+        cbs = [cb for cb in self.l.cbs if isinstance(cb, ParamScheduler)]
         # delete all old _ps_{i} selectors, and add new ones
-        css = [line for line in self.learner.css.split("\n") if "_ps_" not in line]
+        css = [line for line in self.l.css.split("\n") if "_ps_" not in line]
         for i, cb in enumerate(cbs):
             cb.prop = f"_ps_{i}"; css += _k1lib.selector.filter(cb.css, cb.prop)
             cb.initialized = True # make sure only 1 startRun is ran across all ParamSchedulers
-        self.learner.css = "\n".join(css)
+        self.l.css = "\n".join(css)
         # sort cbs based on depth, so that deeper ones gets accounted for first
-        for cb in cbs: cb._depth = next(self.learner.selector.modules(cb.prop)).depth
+        for cb in cbs: cb._depth = next(self.l.selector.modules(cb.prop)).depth
         cbs = sorted(cbs, key=lambda cb: -cb._depth)
         # clear and add param groups
-        self.opt.param_groups = []
-        allParams = set(self.learner.selector.parameters())
+        self.l.opt.param_groups = []
+        allParams = set(self.l.selector.parameters())
         for cb in cbs:
             params = set()
-            for m in self.learner.selector.modules(cb.prop):
+            for m in self.l.selector.modules(cb.prop):
                 for p in m.parameters():
                     if p in allParams:
                         params.add(p); allParams.remove(p)
             if len(params) > 0:
-                cb.groupId = len(self.opt.param_groups)
-                self.opt.add_param_group({"prop": cb.prop, "css": cb.css, "params": list(params), **self.opt.defaults})
-        self.opt.add_param_group({"prop": "rest", "css": "*", "params": list(allParams), **self.opt.defaults})
+                cb.groupId = len(self.l.opt.param_groups)
+                self.l.opt.add_param_group({"prop": cb.prop, "css": cb.css, "params": list(params), **self.l.opt.defaults})
+        self.l.opt.add_param_group({"prop": "rest", "css": "*", "params": list(allParams), **self.l.opt.defaults})
         for cb in cbs:
-            params = set(self.opt.param_groups[cb.groupId]["params"])
-            cb.selector = self.learner.selector.copy()
+            params = set(self.l.opt.param_groups[cb.groupId]["params"])
+            cb.selector = self.l.selector.copy()
             def applyF(mS):
                 mS.displayF = lambda s: "*" if any([p in params for p in s.directParams.values()]) else ""
             cb.selector.apply(applyF)

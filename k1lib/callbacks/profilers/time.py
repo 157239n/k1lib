@@ -32,20 +32,22 @@ class TimeProfiler(Callback):
     """Profiles execution time. Only measures forward times, as
 backward times can't really be measured"""
     def startRun(self):
-        if self.selector == self.learner.selector: # if no selectors found
-            self.selector = self.learner.selector.copy().clearProps()
+        if not hasattr(self, "selector"): # if no selectors found
+            self.selector = self.l.selector.copy().clearProps()
         for m in self.selector.modules(): m.data = TimeData(self, m)
         self.selector.displayF = lambda m: (k1lib.format.red if m.selected("_timeProf_") else k1lib.format.identity)(m.data)
         self.totalTime = 0; self.selectedMaxTime = None
     def startStep(self): return True
     def run(self):
+        """Runs everything"""
         with self.cbs.context(), self.cbs.suspendEvaluation():
-            self.is_cuda = next(self.model.parameters()).is_cuda
+            self.is_cuda = next(self.l.model.parameters()).is_cuda
             if self.is_cuda: self.cbs.withCuda()
             else: self.cbs.withCpu()
-            self.learner.run(1, 1)
+            self.l.run(1, 1)
         for m in self.selector.modules(): m.data.unhook()
     def css(self, css:str):
+        """Selects a small part of the network to highlight"""
         self.selector.parse(k1lib.selector.filter(css, "_timeProf_"))
         self.selectedMaxTime = 0
         for m in self.selector.modules():

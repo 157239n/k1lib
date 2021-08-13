@@ -2,12 +2,13 @@
 import torch, math, logging
 import torch.nn as nn, numpy as np
 from typing import Dict, Any, List, Union, Callable, overload, Tuple
-__all__ = ["Object", "Range",
+__all__ = ["_docsUrl", "Object", "Range",
            "CancelRunException", "CancelEpochException", "CancelBatchException",
            "textToHtml", "clearLine", "tab", "isNumeric", "close", "stats",
            "patch", "squeeze", "raiseEx", "smooth", "numDigits", "limitLines",
            "limitChars", "showLog", "cleanDiv", "beep", "executeNb", "dontWrap",
            "Func", "polyfit", "derivative", "optimize", "inverse", "integrate"]
+_docsUrl = "https://k1lib.github.io"
 class Object:
     """Convenience class that acts like ``defaultdict``. You can use
 it like a normal object::
@@ -314,6 +315,12 @@ Then, you can plot both of them side by side like this::
         r1, r2 = Range(r1), Range(r2)
         ar2 = r1.toRange(r2, (ar1 := r1[r1Slice]))
         return ar1, ar2
+    def bound(self, rs:Union[range, slice]) -> Union[range, slice]:
+        """If input range|slice's stop and start is missing, then use this
+range's start and stop instead."""
+        start = rs.start or self.start
+        stop = rs.stop or self.stop
+        return type(rs)(start, stop)
     def copy(self): return Range(self.start, self.stop)
     def __str__(self): return f"[{self.start}, {self.stop}]"
     def __eq__(self, _range):

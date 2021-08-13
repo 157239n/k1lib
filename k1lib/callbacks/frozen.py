@@ -6,6 +6,7 @@ __all__ = ["Frozen"]
 class Frozen(Callback):
     """Freezes selected parts of the network"""
     def __init__(self, css:str):
+        """:param css: css selectors for the parts you want to freeze"""
         self.css = str
     def startRun(self):
         self.selector = self.learner.selector.copy()

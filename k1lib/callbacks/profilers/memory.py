@@ -33,8 +33,8 @@ class MemoryData:
         return f"{b} {delta} {fp} {f}"
 class MemoryProfiler(Callback):
     def startRun(self):
-        if self.selector == self.learner.selector: # if no selectors found
-            self.selector = self.learner.selector.copy().clearProps()
+        if not hasattr(self, "selector"):
+            self.selector = self.l.selector.copy().clearProps()
         for m in self.selector.modules(): m.data = MemoryData(self, m)
         self.selector.displayF = lambda m: (k1lib.format.red if m.selected("_memProf_") else k1lib.format.identity)(m.data)
         self.linear:List[int] = [] # bytes of each mS's passes
@@ -45,8 +45,9 @@ class MemoryProfiler(Callback):
         self.linear = np.array(self.linear)
         self.linState = np.array(self.linState); self._updateLinear()
     def run(self):
+        """Runs everything"""
         with self.cbs.context(), self.cbs.suspendEvaluation():
-            self.cbs.withCuda(); self.learner.run(1, 1)
+            self.cbs.withCuda(); self.l.run(1, 1)
         for m in self.selector.modules(): m.data.unhook()
     def _updateLinear(self):
         def applyF(m):
@@ -55,6 +56,7 @@ class MemoryProfiler(Callback):
                     self.linState[i] = m.selected("_memProf_")
         self.selector.apply(applyF)
     def css(self, css:str):
+        """Selects a small part of the network to highlight"""
         self.selector.parse(k1lib.selector.filter(css, "_memProf_"))
         self._updateLinear(); print(self.__repr__())
         self.selector.clearProps(); self._updateLinear()
@@ -64,10 +66,10 @@ class MemoryProfiler(Callback):
         l=l/1000**(idx := math.floor(math.log10(l.max())/3))
         plt.ylabel(k1lib.format.sizes[idx])
         k1lib.viz.plotSegments(range(len(l)), l, s); plt.show()
-        params = k1lib.format.item(sum([p.numel() for p in self.model.parameters()]))
+        params = k1lib.format.item(sum([p.numel() for p in self.l.model.parameters()]))
         return f"""MemoryProfiler (params: {params}):
 {k1lib.tab(self.selector.__repr__(intro=False))}
 
 Can...
 - mp.css("..."): highlights a particular part of the network
-- mp.selector: to get internal k1lib.ModuleSelector object"""
+- mp.selector: to get internal k1lib.selector.ModuleSelector object"""

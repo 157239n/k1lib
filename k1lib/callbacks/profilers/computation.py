@@ -43,8 +43,8 @@ layers only, and thus can't really be universal"""
     def __init__(self, profiler:"Profiler"):
         super().__init__(); self.profiler = profiler
     def startRun(self):
-        if self.selector == self.learner.selector: # if no selectors found
-            self.selector = self.learner.selector.copy().clearProps()
+        if not hasattr(self, "selector"): # if no selectors found
+            self.selector = self.l.selector.copy().clearProps()
         for m in self.selector.modules(): m.data = ComputationData(self, m)
         self.selector.displayF = lambda m: (k1lib.format.red if m.selected("_compProf_") else k1lib.format.identity)(m.data)
         self.totalFlop = 0; self.selectedTotalFlop = None
@@ -57,14 +57,16 @@ layers only, and thus can't really be universal"""
         except Exception as e: return False
     def startStep(self): return True
     def run(self):
+        """Runs everything"""
         with self.cbs.context(), self.cbs.suspendEvaluation():
-            self.cbs.withCpu(); self.learner.run(1, 1)
+            self.cbs.withCpu(); self.l.run(1, 1)
         for m in self.selector.modules(): m.data.unhook()
     def detached(self): # time profiler integration, so that flops can be displayed
         if self.tpAvailable:
             for cS, tS in zip(self.selector.modules(), self.profiler.time.selector.modules()):
                 cS.data.tS = tS # injecting dependency
     def css(self, css:str):
+        """Selects a small part of the network to highlight"""
         self.selector.parse(k1lib.selector.filter(css, "_compProf_"))
         self.selectedTotalFlop = 0
         for m in self.selector.modules():

@@ -9,10 +9,10 @@ class Recorder(Callback):
         super().__init__(); self.order = 20
         self.xbs = []; self.ybs = []; self.ys = []
     def startBatch(self):
-        self.xbs += [self.xb.detach()]
-        self.ybs += [self.yb.detach()]
+        self.xbs += [self.l.xb.detach()]
+        self.ybs += [self.l.yb.detach()]
     def endPass(self):
-        self.ys += [self.y.detach()]
+        self.ys += [self.l.y.detach()]
     @property
     def values(self): return self.xbs, self.ybs, self.ys
     def record(self, epochs:int=1, batches:int=None) -> Tuple[List[torch.Tensor], List[torch.Tensor], List[torch.Tensor]]:

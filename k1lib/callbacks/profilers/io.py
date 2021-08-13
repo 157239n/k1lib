@@ -21,18 +21,19 @@ class IOData:
         a = f"{self.iS}".ljust(_li); b = f"{self.oS}".ljust(_li)
         return f"{a}{b}"
 class IOProfiler(Callback):
-    """Profiles computation. Only provide reports on well known
-layers only, and thus can't really be universal"""
+    """Gets input and output shapes of each layer"""
     def startRun(self):
-        if self.selector == self.learner.selector: # if no selectors found
-            self.selector = self.learner.selector.copy().clearProps()
+        if not hasattr(self, "selector"): # if no selectors found
+            self.selector = self.l.selector.copy().clearProps()
         for m in self.selector.modules(): m.data = IOData(self, m)
         self.selector.displayF = lambda m: (k1lib.format.red if m.selected("_ioProf_") else k1lib.format.identity)(m.data)
     def startStep(self): return True
     def run(self):
-        with self.cbs.suspendEvaluation(): self.learner.run(1, 1)
+        """Runs everything"""
+        with self.cbs.suspendEvaluation(): self.l.run(1, 1)
         for m in self.selector.modules(): m.data.unhook()
     def css(self, css:str):
+        """Selects a small part of the network to highlight"""
         self.selector.parse(k1lib.selector.filter(css, "_ioProf_"))
         print(self.__repr__()); self.selector.clearProps()
     def __repr__(self):

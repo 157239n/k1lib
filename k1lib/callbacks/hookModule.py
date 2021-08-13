@@ -120,7 +120,7 @@ Built-in `with-` functions:\n{withs}"""
 @k1lib.patch(HookModule)
 def _start(self):
     self.modules = []
-    for nnModule, sel in zip(self.model.modules(), self.selector.modules()):
+    for nnModule, sel in zip(self.l.model.modules(), self.l.selector.modules()):
         if sel.selected("HookModule"): self.modules.append(Module(nnModule))
     self._registerHooks()
 @k1lib.patch(HookModule)
@@ -195,9 +195,9 @@ def withMaxRecorder(self):
 @k1lib.patch(HookModule)
 def css(self, css:str):
     answer = HookModule()
-    selector = k1lib.selector.select(self.model, css)
+    selector = k1lib.selector.select(self.l.model, css)
     d = {m.nnModule: m for m in self.modules}
-    for nnModule, sel in zip(self.model.modules(), selector.modules()):
+    for nnModule, sel in zip(self.l.model.modules(), selector.modules()):
         if sel.selected("HookModule") and sel.nnModule in d:
             answer.modules.append(d[sel.nnModule])
     return answer

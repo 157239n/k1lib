@@ -37,6 +37,7 @@ class Param:
 class HookParam(Callback):
     """Records means and stds of all parameters"""
     def __init__(self):
+        ""
         super().__init__(); self.params:List[Param] = []
     def __getitem__(self, idx:Union[int, slice]):
         if type(idx) == int: return self.params[idx]
@@ -45,20 +46,21 @@ class HookParam(Callback):
     def _selected(self, paramName:str):
         splits = paramName.split(".")
         try:
-            mS = self.selector
+            mS = self.l.selector
             for split in splits[:-1]: mS = mS[split]
             return mS.selected("HookParam") and hasattr(mS, splits[-1])
         except KeyError: return False
     def startRun(self):
         if len(self) == 0: # set things up first time only
-            self.params = [Param(k, v) for k, v in self.model.named_parameters() if self._selected(k)]
+            self.params = [Param(k, v) for k, v in self.l.model.named_parameters() if self._selected(k)]
     def startBatch(self): [param.update() for param in self.params]
     def css(self, css:str):
-        """Creates a new HookParam object with selected modules"""
-        oldSelector = self.selector; answer = HookParam()
-        self.learner.selector = k1lib.selector.select(self.model, css)
+        """Creates a new HookParam object with selected modules. May be useful
+for displaying a subset of the recorded data"""
+        oldSelector = self.l.selector; answer = HookParam()
+        self.l.selector = k1lib.selector.select(self.l.model, css)
         answer.params = [param for param in self.params if self._selected(param.name)]
-        self.learner.selector = oldSelector; return answer
+        self.l.selector = oldSelector; return answer
     def __repr__(self):
         s = f", {len(self[0].data)} means and stds each" if len(self) > 0 else ""
         names = "\n".join([f"  {i}. {p.name}" for i, p in enumerate(self)])

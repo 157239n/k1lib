@@ -50,7 +50,7 @@ class CancelOnExplosion(Callback):
         self.limit = limit; self.triggered = False
     def startRun(self): self.triggered = False
     def startBatch(self):
-        for p in self.model.parameters():
+        for p in self.l.model.parameters():
             o = p.detach()
             if o.max().float() > self.limit or o.min().float() < -self.limit:
                 self.triggered = True
@@ -65,21 +65,23 @@ def withCancelOnExplosion(self, limit:float=1e6):
     return self.append(CancelOnExplosion(limit))
 @k1lib.patch(Callback.cls)
 class CancelOnLowLoss(Callback):
-    """Cancels the run if loss is lower than amount specified.
+    " "
+    def __init__(self, loss:float, epochMode:bool=False):
+        """Cancels the run if loss is lower than amount specified.
+Original class: :class:`~k1lib.callbacks.limits.CancelOnLowLoss`
 
 :param epochMode: False if use batch loss, True if use valid epoch loss"""
-    def __init__(self, loss:float, epochMode:bool=False):
         super().__init__(); self.order = 25; self.dependsOn = ["Loss"]
         self.loss = loss; self.epochMode = epochMode
     def endBatch(self):
-        if not hasattr(self, "Loss"): raise RuntimeException("Learner does not have `Loss` callback")
-        v = self.Loss.valid; ve = self.Loss.epoch.valid
+        if not hasattr(self.l, "Loss"): raise AttributeError("Learner does not have `Loss` callback")
+        v = self.l.Loss.valid; ve = self.l.Loss.epoch.valid
         if self.epochMode:
             if len(ve) > 0 and ve[-1] < self.loss:
                 raise k1lib.CancelRunException(f"Low loss {self.loss} ({ve} actual) achieved!")
         elif len(v) and v[-1] < self.loss:
             raise k1lib.CancelRunException(f"Low loss {self.loss} ({v} actual) achieved!")
-@k1lib.patch(Callbacks, docs=CancelOnLowLoss)
+@k1lib.patch(Callbacks, docs=CancelOnLowLoss.__init__)
 def withCancelOnLowLoss(self, loss:float, epochMode:bool=False):
     return self.append(CancelOnLowLoss(loss, epochMode))
 @k1lib.patch(Callback.cls)
@@ -89,7 +91,7 @@ class CancelOnHighAccuracy(Callback):
         super().__init__(); self.order = 25
         self.accuracy = accuracy; self.dependsOn = ["Accuracy"]
     def endBatch(self):
-        if not hasattr(self, "Accuracy"): raise RuntimeException("Learner does not have `Accuracy` callback")
+        if not hasattr(self.l, "Accuracy"): raise AttributeError("Learner does not have `Accuracy` callback")
         a = self.Accuracy.valid[-1]
         if a > self.accuracy:
             raise k1lib.CancelRunException(f"High accuracy {self.accuracy} ({a} actual) achieved!")
@@ -109,7 +111,7 @@ class GradientClipping(Callback):
     """Clips gradient to a specific max value"""
     def __init__(self, value:float): super().__init__(); self.value = value
     def startStep(self):
-        clip_grad_value_(self.model.parameters(), self.value)
+        clip_grad_value_(self.l.model.parameters(), self.value)
 @k1lib.patch(Callbacks, docs=GradientClipping)
 def withGradientClipping(self, value:float):
     return self.append(GradientClipping(value))
@@ -124,9 +126,9 @@ See also: :class:`~k1lib.callbacks.limits.GradientClipping` callback."""
         super().__init__(); self.max_norm = max_norm; self.each = each
     def startStep(self):
         if self.each:
-            for m in self.model.parameters():
+            for m in self.l.model.parameters():
                 clip_grad_norm_(m, self.max_norm)
-        else: clip_grad_norm_(self.model.parameters(), self.max_norm)
+        else: clip_grad_norm_(self.l.model.parameters(), self.max_norm)
 @k1lib.patch(Callbacks, docs=GradientClippingNorm)
 def withGradientClippingNorm(self, max_norm:float, each:bool=True):
     return self.append(GradientClippingNorm(max_norm, each))
