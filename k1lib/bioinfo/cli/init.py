@@ -16,12 +16,18 @@ def patchDefaultIndent(s:str):
 from typing import List, Iterator, Any
 import itertools
 class BaseCli:
-    def __and__(self, cliObj:"BaseCli"):
+    def __and__(self, cli:"BaseCli"):
         if isinstance(self, oneToMany):
-            self.cliObjs.append(cliObj); return self
-        if isinstance(cliObj, oneToMany):
-            cliObj.cliObjs.append(cliObj); return cliObj
-        return oneToMany(self, cliObj)
+            self.clis.append(cli); return self
+        if isinstance(cli, oneToMany):
+            cli.clis.append(self); return cli
+        return oneToMany(self, cli)
+    def __add__(self, cli):
+        if isinstance(self, manyToManySpecific):
+            self.clis.append(cli); return self
+        if isinstance(cli, manyToManySpecific):
+            cli.clis.append(self); return cli
+        return manyToManySpecific(self, cli)
     def all(self) -> "BaseCli":
         """Applies this BaseCli to all incoming streams"""
         return manyToMany(self)
@@ -37,15 +43,21 @@ class BaseCli:
         return self.__ror__(it)
 class serial(BaseCli):
     def __init__(self, *clis:List[BaseCli]):
-        """Merges clis into 1, feeding end to end"""
+        """Merges clis into 1, feeding end to end. Used in chaining clis
+together without a prime iterator. Meaning, without this, stuff like this
+fails to run::
+
+    [1, 2] | a() | b() # runs
+    c = a() | b(); [1, 2] | c # doesn't run if this class doesn't exist
+"""
         self.clis = clis
     def __ror__(self, it:Iterator[Any]) -> Iterator[Any]:
         for cli in self.clis: it = cli.__ror__(it)
         return it
 class oneToMany(BaseCli):
     def __init__(self, *clis:List[BaseCli]):
-        """Splits 1 stream into multiple streams, each for a cli
-in the list"""
+        """Duplicates 1 stream into multiple streams, each for a cli in the
+list. Used in the "a & b" joining operator"""
         self.clis = clis
     def __ror__(self, it:Iterator[Any]) -> Iterator[Iterator[Any]]:
         its = itertools.tee(it, len(self.clis))
@@ -53,7 +65,16 @@ in the list"""
             yield cli.__ror__(it)
 class manyToMany(BaseCli):
     def __init__(self, cli):
-        """Applies multiple streams to a single cli"""
+        """Applies multiple streams to a single cli. Used in the "a.all()"
+operator."""
         self.cli = cli
     def __ror__(self, it:Iterator[Iterator[Any]]) -> Iterator[Iterator[Any]]:
         for stream in it: yield self.cli.__ror__(stream)
+class manyToManySpecific(BaseCli):
+    def __init__(self, *clis:List[BaseCli]):
+        """Applies multiple streams to multiple clis independently. Used in
+the "a + b" joining operator """
+        self.clis = clis
+    def __ror__(self, its:Iterator[Any]) -> Iterator[Any]:
+        for cli, it in zip(self.clis, its):
+            yield cli.__ror__(it)

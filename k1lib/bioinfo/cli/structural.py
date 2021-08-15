@@ -9,14 +9,22 @@ from k1lib.bioinfo.cli.init import patchDefaultDelim, BaseCli, oneToMany
 import k1lib.bioinfo.cli as cli
 __all__ = ["joinColumns", "joinRows", "joinStreams",
            "splitColumns", "insertRow", "insertIdColumn",
-           "toDict", "split", "count", "permute", "accumulate"]
+           "toDict", "split", "count", "permute", "accumulate", "AA_",
+           "infinite"]
 class joinColumns(BaseCli):
-    def __init__(self, delim:str=None):
-        """Join multiple columns and loop through all rows"""
-        self.delim = patchDefaultDelim(delim)
+    def __init__(self, delim:str=None, sep:bool=False):
+        """Join multiple columns and loop through all rows
+
+:param sep: if True, don't join row elements into a list, and keep them
+    separate in a tuple
+"""
+        self.delim = patchDefaultDelim(delim); self.sep = sep
     def __ror__(self, it:Iterator[Iterator[str]]):
-        for lineElems in zip(*it):
-            yield self.delim.join(lineElems | cli.toStr())
+        if self.sep:
+            for lineElems in zip(*it): yield lineElems
+        else:
+            for lineElems in zip(*it):
+                yield self.delim.join(lineElems | cli.toStr())
 class joinRows(BaseCli):
     """Join multiple stream of rows"""
     def __ror__(self, streams:Iterator[Iterator[Any]]) -> Iterator[Any]:
@@ -119,3 +127,50 @@ Args:
             elems = [str(self.dict[key][i]) for i in range(n)]
             elems.insert(self.column, key)
             yield self.delim.join(elems)
+class AA_(BaseCli):
+    def __init__(self, *idxs:List[int], wraps=False):
+        """Returns 2 streams, one that has the selected element, and the other
+the rest. Example::
+
+    [1, 5, 6, 3, 7] | AA_(1) # will return [5, [1, 6, 3, 7]]
+
+You can also put multiple indexes through::
+
+    [1, 5, 6] | AA_(0, 2) # will return [[1, [5, 6]], [6, [1, 5]]]
+
+If you put None in, then all indexes will be sliced::
+
+    [1, 5, 6] | AA_(0, 2)
+
+    # will return:
+    # [[1, [5, 6]],
+    #  [5, [1, 6]],
+    #  [6, [1, 5]]]
+
+As for why the strange name, think of this operation as "AĀ". In statistics,
+say you have a set "A", then "not A" is commonly written as A with an overline
+"Ā". So "AA\_" represents "AĀ", and that it first returns the selection A
+first.
+
+:param wraps: if True, then the first example will return [[5, [1, 6, 3, 7]]]
+    instead, so that A has the same signature as Ā
+"""
+        self.idxs = idxs; self.wraps = wraps
+    def __ror__(self, it:List[Any]) -> List[List[List[Any]]]:
+        idxs = self.idxs; it = list(it)
+        if len(idxs) == 1 and idxs[0] is None: idxs = range(len(it))
+        def gen(idx):
+            return [it[idx], [v for i, v in enumerate(it) if i != idx]]
+        if not self.wraps and len(idxs) == 1: return gen(idxs[0])
+        return [gen(idx) for idx in idxs]
+class infinite(BaseCli):
+    """Takes in a stream and yields an infinite amount of them. Example:
+
+.. code-block::
+
+    # returns [[1, 2, 3], [1, 2, 3], [1, 2, 3]]
+    [1, 2, 3] | infinite() | head(3) | toList()
+"""
+    def __ror__(self, it:Iterator[Any]) -> Iterator[Iterator[Any]]:
+        it = list(it)
+        while True: yield it

@@ -2,13 +2,14 @@
 """
 This is for functions that cuts out specific parts of the table
 """
-from typing import Callable, Union, List, overload, Iterator, Any
+from typing import Callable, Union, List, overload, Iterator, Any, Set
 from k1lib.bioinfo.cli.init import patchDefaultDelim, BaseCli, settings
 import k1lib.bioinfo.cli as cli
-__all__ = ["filt", "nonEmpty", "nonEmptyStream", "startswith", "endswith",
+__all__ = ["filt", "isValue", "inside", "nonEmptyStream",
+           "startswith", "endswith",
            "isNumeric", "inRange",
            "head", "nhead",
-           "columns", "cut", "rows", "every"]
+           "columns", "cut", "rows", "every", "intersection"]
 class filt(BaseCli):
     def __init__(self, predicate:Callable[[str], bool], column:int=0, delim:str=None):
         """Filters out lines.
@@ -30,10 +31,14 @@ class filt(BaseCli):
     def __invert__(self):
         """Negate the condition"""
         return filt(lambda s: not self.predicate(s), self.column, self.delim)
-class nonEmpty(filt):
-    def __init__(self, column:int=0, delim:str=None):
-        """Filters out lines' column that is empty"""
-        super().__init__(lambda l: l != "", column, delim)
+class isValue(filt):
+    def __init__(self, value, column:int=0, delim:str=None):
+        """Filters out lines' column that is different from the given value"""
+        super().__init__(lambda l: l == value, column, delim)
+class inside(filt):
+    def __init__(self, values:Set[Any], column:int=0, delim:str=None):
+        """Filters out lines' column that is not in the specified set"""
+        super().__init__(lambda l: l in values, column, delim)
 class nonEmptyStream(BaseCli):
     """Filters out streams that have no rows"""
     def __ror__(self, streams:Iterator[Iterator[Any]]) -> Iterator[Iterator[Any]]:
@@ -65,6 +70,22 @@ class isNumeric(BaseCli):
             for line in it:
                 try: float(line); yield line
                 except ValueError: pass
+class inRange(BaseCli):
+    def __init__(self, min:float=None, max:float=None, column:int=None, delim:str=None):
+        """Checks whether a column is in range or not"""
+        self.min = min if min is not None else float("-inf")
+        self.max = max if max is not None else float("inf")
+        self.column = column; self.delim = patchDefaultDelim(delim)
+    def __ror__(self, it:Iterator[str]):
+        if self.column is not None:
+            for line in it:
+                value = float(line.split(self.delim)[self.column])
+                if value >= self.min and value < self.max:
+                    yield line
+        else:
+            if not settings["strict"]: it = it | cli.numeric()
+            for value in it:
+                if value >= self.min and value < self.max: yield value
 class head(BaseCli):
     def __init__(self, n:int=10):
         """Only outputs first {n} lines, preferable over row()[:n]"""
@@ -115,19 +136,14 @@ class every(BaseCli):
     def __ror__(self, it:Iterator[str]):
         for i, line in enumerate(it):
             if (i - self.offset) % self.length == 0: yield line
-class inRange(BaseCli):
-    def __init__(self, min:float=None, max:float=None, column:int=None, delim:str=None):
-        """Checks whether a column is in range or not"""
-        self.min = min if min is not None else float("-inf")
-        self.max = max if max is not None else float("inf")
-        self.column = column; self.delim = patchDefaultDelim(delim)
-    def __ror__(self, it:Iterator[str]):
-        if self.column is not None:
-            for line in it:
-                value = float(line.split(self.delim)[self.column])
-                if value >= self.min and value < self.max:
-                    yield line
-        else:
-            if not settings["strict"]: it = it | cli.numeric()
-            for value in it:
-                if value >= self.min and value < self.max: yield value
+class intersection(BaseCli):
+    """Returns the intersection of multiple streams. Example::
+
+    [[1, 2, 3, 4, 5], [7, 2, 4, 6, 5]] | intersection() # will return set([2, 4, 5])
+"""
+    def __ror__(self, its:Iterator[Iterator[Any]]) -> Set[Any]:
+        answer = None
+        for it in its:
+            if answer is None: answer = set(it); continue
+            answer = answer.intersection(it)
+        return answer

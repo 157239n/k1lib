@@ -15,7 +15,7 @@ def go(term:int):
 - Specify the file using `settings['oboFile']='/some/folder/go.obo'`
 - Download this automatically to file `go.obo`
 
-You want to download this automatically? (y/n)""")
+You want to download this automatically? (y/n) """)
         if answer.lower().startswith("y"):
             url = "http://current.geneontology.org/ontology/go.obo"
             print(f"Downloading from {url}...      ", end="")

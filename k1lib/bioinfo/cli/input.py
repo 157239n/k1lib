@@ -4,12 +4,21 @@ import urllib, subprocess, warnings
 from k1lib.bioinfo.cli.init import BaseCli
 import k1lib.bioinfo.cli as cli
 __all__ = ["cat", "cats", "curl", "wget", "cmd", "requireCli"]
-def cat(fileName:str) -> Iterator[str]:
-    """Reads a file line by line"""
+def _catSimple(fileName:str=None) -> Iterator[str]:
     with open(fileName) as f:
         for line in f.readlines():
             if line[-1] == "\n": yield line[:-1]
             else: yield line
+class _cat(BaseCli):
+    def __ror__(self, fileName:str) -> Iterator[str]:
+        return _catSimple(fileName)
+def cat(fileName:str=None):
+    """Reads a file line by line.
+
+:param fileName: if None, then return a :class:`~k1lib.bioinfo.cli.init.BaseCli`
+    that accepts a file name and outputs Iterator[str]"""
+    if fileName is None: return _cat()
+    else: return _catSimple(fileName)
 class cats(BaseCli):
     """Like :meth:`cat`, but opens multiple files at once, returning
 streams. Looks something like this::
@@ -17,7 +26,7 @@ streams. Looks something like this::
     apply(lambda s: cat(s))"""
     def __ror__(self, fileNames:Iterator[str]) -> Iterator[Iterator[str]]:
         for fileName in fileNames:
-            yield cat(fileName)
+            yield _catSimple(fileName)
 def curl(url:str) -> Iterator[str]:
     """Gets file from url"""
     for line in urllib.request.urlopen(url):

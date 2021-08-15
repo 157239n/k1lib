@@ -3,13 +3,13 @@
 This is for all short utilities that has the boilerplate feeling
 """
 from k1lib.bioinfo.cli.init import patchDefaultDelim, BaseCli, settings
-import k1lib.bioinfo.cli as cli
-from typing import overload, Iterator, Any, List
+import k1lib.bioinfo.cli as cli, numbers
+from typing import overload, Iterator, Any, List, Set
 __all__ = ["size", "shape", "item", "identity",
            "toInt", "toFloat", "toStr", "to1Str", "toNumpy",
-           "toList", "wrapList", "toIter", "toRange",
+           "toList", "wrapList", "toSet", "toIter", "toRange",
            "equals", "reverse", "ignore",
-           "avg", "headerIdx"]
+           "avg", "headerIdx", "dereference"]
 class size(BaseCli):
     def __init__(self, idx=None, delim:str=None):
         """Returns number of rows and columns in the input.
@@ -42,14 +42,14 @@ class identity(BaseCli):
     def __ror__(self, it:Iterator[Any]):
         yield from it
 class toFloat(BaseCli):
-    """Converts every row into a float. Excludes non numbers if not in strict
-mode (`bioinfoSettings`_)."""
+    """Converts every row into a float. Excludes non numbers if not in
+:ref:`strict mode <bioinfoSettings>`."""
     def __ror__(self, it:Iterator[str]) -> Iterator[float]:
         if not settings["strict"]: it = it | cli.isNumeric()
         for line in it: yield int(line)
 class toInt(BaseCli):
-    """Converts every row into an integer. Excludes non numbers if not in strict
-mode (`bioinfoSettings`_)."""
+    """Converts every row into an integer. Excludes non numbers if not in
+:ref:`strict mode <bioinfoSettings>`."""
     def __ror__(self, it:Iterator[str]) -> Iterator[int]:
         if not settings["strict"]: it = it | cli.isNumeric()
         for line in it: yield int(line)
@@ -70,7 +70,7 @@ class toNumpy(BaseCli):
         import numpy as np
         return np.array(list(it))
 class toList(BaseCli):
-    """Converts generator to list. `list()` would do the
+    """Converts generator to list. :class:`list` would do the
 same, but this is just to maintain the style"""
     def __ror__(self, it:Iterator[Any]) -> List[Any]:
         return list(it)
@@ -78,6 +78,11 @@ class wrapList(BaseCli):
     """Wraps inputs inside a list"""
     def __ror__(self, it:Any) -> List[Any]:
         return [it]
+class toSet(BaseCli):
+    """Converts generator to set. :class:`set` would do the
+same, but this is just to maintain the style"""
+    def __ror__(self, it:Iterator[Any]) -> Set[Any]:
+        return set(it)
 class toIter(BaseCli):
     """Converts object to iterator. `iter()` would do the
 same, but this is just to maintain the style"""
@@ -114,5 +119,17 @@ class avg(BaseCli):
         if not settings["strict"] and len(it) == 0: return float("nan")
         return sum(it) / len(it)
 def headerIdx(delim:str=None):
-    """Cuts out first line, put an index column next to it, and prints it out"""
+    """Cuts out first line, put an index column next to it, and prints it
+out. Useful when you want to know what your column's index is to cut it out."""
     return item() | wrapList() | cli.split(delim) | cli.insertIdColumn(delim) | cli.display(None, delim)
+class dereference(BaseCli):
+    """Recursively converts any iterator into a list. Only :class:`str`,
+:class:`numbers.Number` are not converted. Example:
+
+.. code-block::
+
+    iter(range(5)) # returns something like "<range_iterator at 0x7fa8c52ca870>"
+    iter(range(5)) | deference() # returns [0, 1, 2, 3, 4]
+"""
+    def __ror__(self, it:Iterator[Any]) -> List[Any]:
+        return [(e if isinstance(e, (numbers.Number, str)) else (e | self)) for e in it]
