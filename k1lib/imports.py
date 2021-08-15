@@ -10,7 +10,6 @@ import torch.nn.functional as F, torch.utils.data as data
 import matplotlib.pyplot as plt
 import numpy as np, dill as pickle
 import k1lib; import k1lib.schedule as schedule
-import k1lib.eqn as eqn
 import math, os, time, sys, random, logging, traceback, re, typing, glob
 from functools import partial
 k1lib.dontWrap()

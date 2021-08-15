@@ -53,6 +53,8 @@ return a range of the dataset.
 - it = iter(dl); data = next(it)"""
 class Data:
     def __init__(self, train:DataLoader, valid:DataLoader):
+        """Just a shell of both these variables really. Also, you can use
+PyTorch's :class:`torch.utils.data.DataLoader` here just fine"""
         self.train = train; self.valid = valid
     @staticmethod
     def fromDataset(dataset, batchSize:int=32, trainSplit=0.8, *args, **kwargs):

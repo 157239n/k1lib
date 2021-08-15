@@ -109,10 +109,10 @@ class ParamScheduler(_k1lib.Callback):
 {self._reprCan}"""
 @_k1lib.patch(ParamScheduler, name="startRun")
 def _startRun(self):
-    ":meta private:"
+    "meta:private"
     if not self.initialized:
         # get all other ParamSchedulers
-        cbs = [cb for cb in self.l.cbs if isinstance(cb, ParamScheduler)]
+        cbs = [cb for cb in self.l.cbs if isinstance(cb, ParamScheduler) and not cb.suspended]
         # delete all old _ps_{i} selectors, and add new ones
         css = [line for line in self.l.css.split("\n") if "_ps_" not in line]
         for i, cb in enumerate(cbs):

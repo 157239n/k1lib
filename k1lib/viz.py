@@ -22,8 +22,8 @@ This class is not expected to be used by end users though."""
     def run(self): getattr(_plt, self.name)(*self.args, **self.kwargs)
 class SliceablePlot:
     """This is a plot that is "sliceable", meaning you can focus into
-a particular region of the plot quickly. A minimal example at
-:meth:`decorate` looks something like this::
+a particular region of the plot quickly. A minimal example looks something
+like this::
 
     import numpy as np, matplotlib.pyplot as plt, k1lib
     x = np.linspace(-2, 2, 100)
@@ -168,7 +168,19 @@ Will even work even when you export the notebook as html. Example::
         self.imgs:_List[str] = [] # all base64 imgs
         self.defaultFormat = "jpeg"
     def save(self, f:_Callable[[_io.BytesIO], None]):
-        """Generic image save function.
+        """Generic image save function. Treat :class:`io.BytesIO` as if it's
+a file when you're doing this::
+    
+    with open("file.txt") as f:
+        pass # "f" is similar to io.BytesIO
+
+So, you can do stuff like::
+
+    import matplotlib.pyplot as plt, numpy as np
+    x = np.linspace(-2, 2)
+    plt.plot(x, x**2)
+    c = k1lib.viz.Carousel()
+    c.save(lambda io: plt.savefig(io, format="png"))
 
 :param f: lambda that provides a :class:`io.BytesIO` for you to write to
 """

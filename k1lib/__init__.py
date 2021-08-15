@@ -1,3 +1,6 @@
+from pkg_resources import get_distribution as _get_distribution
+__version__ = _get_distribution("k1lib").version
+
 from ._hidden.hiddenFile import hiddenF
 from ._basics import *
 from . import format
