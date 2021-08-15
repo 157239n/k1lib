@@ -32,15 +32,16 @@ Submodules
 Installation
 ------------
 
-Quickest way to install is to just do this::
+Just do this::
 
    pip install k1lib
 
-This package has very few dependencies, and all of them are very commonly used. If
-you're installing this for the bioinformatics tools (:mod:`k1lib.bioinfo`), and don't care about anything
-related to deep learning, you can do this::
+Then in a notebook, do this::
 
-   pip install --no-deps k1lib
+   from k1lib.imports import *
+   from k1lib.bioinfo.cli import *
+
+This package has very few dependencies, and all of them are very commonly used
 
 Module contents
 ---------------
@@ -48,6 +49,7 @@ Module contents
 .. autoclass:: k1lib.Learner
    :members:
    :undoc-members:
+   :special-members: __call__
    :show-inheritance:
 
 .. autoclass:: k1lib.Object
@@ -61,14 +63,6 @@ Module contents
    :show-inheritance:
 
    .. automethod:: __getitem__
-
-.. class:: torch.nn.modules.Module
-
-   These are extra helper methods monkey-patched to :class:`torch.nn.Module`
-
-   .. automethod:: torch.nn.modules.Module.importParams
-   .. automethod:: torch.nn.modules.Module.exportParams
-   .. automethod:: torch.nn.modules.Module.getParamsVector
 
 .. autoexception:: k1lib.CancelRunException
 .. autoexception:: k1lib.CancelEpochException
@@ -96,3 +90,9 @@ Module contents
 .. autofunction:: k1lib.optimize
 .. autofunction:: k1lib.inverse
 .. autofunction:: k1lib.integrate
+
+.. toctree::
+   :hidden:
+
+   changelogs
+   monkeyPatches

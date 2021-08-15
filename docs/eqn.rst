@@ -6,9 +6,9 @@ k1lib.eqn module
 The idea of this module looks something like this::
 
    from k1lib.imports import *
-   eqn.settings["eqnPrintExtras"] = False
+   k1lib.eqn.settings["eqnPrintExtras"] = False
 
-   s = eqn.System("""
+   s = k1lib.eqn.System("""
    # comments like this are okay. This section's for buying things
    10 cent -> 1 kWh
    1.5 dollar -> 1000 H2O

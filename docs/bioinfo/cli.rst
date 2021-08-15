@@ -14,7 +14,7 @@ Turns into this statement::
    cat("file.txt") | head(5) > file("headerFile.txt")
 
 Here, "cat", "head" and "file" are all classes extended
-from :class:`~k1lib.bioinfo.cli.init.BaseCli`. All of
+from :class:`~init.BaseCli`. All of
 them implements the "reverse or" operation, or __ror__.
 Essentially, these 2 statements are equivalent::
 
@@ -36,9 +36,9 @@ Is equivalent to this list::
 
    ["col1\tcol2\tcol3", "1\t2\t3", "4\t5\t6"]
 
-Essentially, each row is a single string, and each
-elements in a row are separated by a delimiter. You can
-set the default delimiter using :attr:`k1lib.bioinfo.cli.bioinfoSettings` like this::
+Essentially, each row is a single string, and elements in a row are separated by a
+delimiter. You can set the default delimiter using
+:attr:`bioinfoSettings` like this::
 
    bioinfoSettings["defaultDelim"] = ","
 
@@ -59,18 +59,6 @@ check over this:
 
 Submodules
 ^^^^^^^^^^
-
-+--------------------------------------+----------------------------------+--------------------------------+
-| :mod:`~k1lib.bioinfo.cli.bio`        | :mod:`~k1lib.bioinfo.cli.entrez` | :mod:`~k1lib.bioinfo.cli.mgi`  |
-+--------------------------------------+----------------------------------+--------------------------------+
-| :mod:`~k1lib.bioinfo.cli.filt`       | :mod:`~k1lib.bioinfo.cli.grep`   | :mod:`~k1lib.bioinfo.cli.init` |
-+--------------------------------------+----------------------------------+--------------------------------+
-| :mod:`~k1lib.bioinfo.cli.input`      | :mod:`~k1lib.bioinfo.cli.kcsv`   | :mod:`~k1lib.bioinfo.cli.kxml` |
-+--------------------------------------+----------------------------------+--------------------------------+
-| :mod:`~k1lib.bioinfo.cli.modifier`   | :mod:`~k1lib.bioinfo.cli.output` | :mod:`~k1lib.bioinfo.cli.sam`  |
-+--------------------------------------+----------------------------------+--------------------------------+
-| :mod:`~k1lib.bioinfo.cli.structural` | :mod:`~k1lib.bioinfo.cli.utils`  |                                |
-+--------------------------------------+----------------------------------+--------------------------------+
 
 bio module
 ----------------------------
@@ -121,11 +109,13 @@ init module
 
       from k1lib.bioinfo.cli import *
 
-   You can just set the settings like this::
+   ...you can just set the settings like this::
 
       bioinfoSettings["defaultIndent"] = "\t"
 
-   There are a few settings: _`bioinfoSettings`
+.. _bioinfoSettings:
+
+   There are a few settings:
 
    - defaultDelim: default delimiter used in-between columns when creating tables
    - defaultIndent: default indent used for displaying nested structures

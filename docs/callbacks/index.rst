@@ -6,6 +6,7 @@ k1lib.callbacks package
 .. toctree::
    :maxdepth: 1
 
+   lossFunctions
    profilers
 
 Submodules
@@ -24,17 +25,25 @@ callbacks module
    .. autoclass:: Callbacks
       :members:
       :undoc-members:
+      :special-members: __contains__, __call__, __getitem__, __iter__, __len__, 
       :show-inheritance:
 
+core module
+-----------
+
+.. automodule:: k1lib.callbacks.core
+   :members:
+   :show-inheritance:
+
 frozen module
------------------------------
+-------------
 
 .. automodule:: k1lib.callbacks.frozen
    :members:
    :show-inheritance:
 
 hookModule module
----------------------------------
+-----------------
 
 .. automodule:: k1lib.callbacks.hookModule
    :members:

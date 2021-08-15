@@ -66,10 +66,39 @@ effectively split the input into 2 streams. 1 gets passed through ``toRange()``,
 and 1 through ``identity()``. So, the output is effectively
 ``[Iterator[int], Iterator[str]]``, which we can join together just like before.
 
-When combining streams asymmetrically (using the ``&`` operator), the input to the
-streams need not be a list. Internally, k1lib uses the :meth:`itertools.tee` method
-to get multiple iterators from a single iterator, so as to avoid creating an entire
-list which would waste resources. Of course, whether this wastes resources or not
-depends a lot on how you structure things. If there is an operation that blows
-through the entire iterator before others use any elements, then that would slow
-things down.
+When combining streams asymmetrically (using the ``&`` operator, and all cli
+operators are the same), the input to the streams need not be a list. Internally,
+k1lib uses the :meth:`itertools.tee` method to get multiple iterators from a single
+iterator, so as to avoid creating an entire list which would waste resources. Of
+course, whether this wastes resources or not depends a lot on how you structure
+things. If there is an operation that blows through the entire iterator before
+others use any elements, then that would slow things down.
+
+Also, there's another way to join cli operators together. Let's check over an
+example::
+
+    even = filt(lambda x: x % 2 == 0, None)
+    odd = filt(lambda x: x % 2 == 1, None)
+    # returns [[10, 12, 14, 16, 18], [31, 33, 35, 37, 39]]
+    [range(10, 20), range(30, 40)] | (even + odd) | dereference()
+    # pretty much identical to:
+    [range(10, 20) | even, range(30, 40) | odd] | dereference()
+
+This time, we're using the ``+`` operator. What this does is pass different streams
+to their corresponding cli operator.
+
+It can be hard to remember what ``&`` and ``+`` do right away, so the strategy is to
+think of ``&`` as "I'm going to pass the (single) input stream to a() **and** b()
+**and** c(), so I should get 3 streams out in total". For ``+``, think of them as
+stacking floors of cli operators on top of another:
+
+.. code-block:: text
+
+    +----------------+
+    | stream1 -> a() |
+    +----------------+
+    | stream2 -> b() |
+    +----------------+
+    | stream3 -> c() |
+    +----------------+
+
