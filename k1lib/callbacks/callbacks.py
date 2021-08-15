@@ -47,7 +47,7 @@ can tack on wildly different functions, have them play nicely with each
 other, and remove entire complex functionalities by commenting out a
 single line."""
 import k1lib, time, os, logging, numpy as np, matplotlib.pyplot as plt
-from typing import Set, List, Union, Callable, ContextManager
+from typing import Set, List, Union, Callable, ContextManager, Iterator
 from collections import OrderedDict
 __all__ = ["Callback", "Callbacks"]
 class Callback:
@@ -187,15 +187,14 @@ class Timings:
 Can...
 - t.startRun: to get specific checkpoint's execution time
 - t.plot(): to plot all checkpoints"""
-_defaultCbCall = lambda *a, **k: None
 class Callbacks:
     def __init__(self):
-        self._learner = None; self.cbsDict = {}; self.timings = Timings()
+        self._l: k1lib.Learner = None; self.cbsDict = {}; self.timings = Timings()
     @property
-    def learner(self): return self._learner
-    @learner.setter
-    def learner(self, learner):
-        self._learner = learner
+    def l(self) -> "k1lib.Learner": return self._l
+    @l.setter
+    def l(self, learner):
+        self._l = learner
         for cb in self.cbs: cb.l = learner
     @property
     def cbs(self) -> List[Callback]: return [*self.cbsDict.values()] # convenience method for looping over stuff
@@ -203,7 +202,7 @@ class Callbacks:
         self.cbsDict = OrderedDict(sorted(self.cbsDict.items())); return self
     def append(self, cb:Callback, name:str=None):
         """Adds a callback to the collection."""
-        cb.l = self.learner; cb.cbs = self; name = name or cb.name
+        cb.l = self.l; cb.cbs = self; name = name or cb.name
         if name in self.cbsDict:
             i = 0
             while f"{name}{i}" in self.cbsDict: i += 1
@@ -211,24 +210,30 @@ class Callbacks:
         cb.name = name; self.cbsDict[name] = cb; self._sort()
         getattr(self, "_appendExtraProcessing", lambda cb: None)(cb)
         cb("appended"); return self
-    def __contains__(self, e:str): return e in self.cbsDict
-    def remove(self, name:str):
+    def __contains__(self, e:str) -> bool: return e in self.cbsDict
+    def remove(self, *names:List[str]):
         """Removes a callback from the collection."""
-        if name not in self.cbsDict: return print(f"Callback `{name}` not found")
-        cb = self.cbsDict[name]; del self.cbsDict[name]
-        cb("detached"); self._sort(); return self
+        for name in names:
+            if name not in self.cbsDict: return print(f"Callback `{name}` not found")
+            cb = self.cbsDict[name]; del self.cbsDict[name]; cb("detached")
+        self._sort(); return self
     def removePrefix(self, prefix:str):
         """Removes any callback with the specified prefix"""
         for cb in self.cbs:
             if cb.name.startswith(prefix): self.remove(cb.name)
         return self
-    def __call__(self, checkpoint:str):
-        beginTime = time.time()
-        answer = any([cb(checkpoint) for cb in self.cbs])
-        self.timings[checkpoint] += time.time() - beginTime
+    def __call__(self, *checkpoints:List[str]) -> bool:
+        """Calls a number of checkpoints one after another.
+Returns True if any of the checkpoints return anything at all"""
+        answer = False
+        for checkpoint in checkpoints:
+            beginTime = time.time()
+            answer |= any([cb(checkpoint) for cb in self.cbs])
+            self.timings[checkpoint] += time.time() - beginTime
         return answer
-    def __getitem__(self, idx:Union[int, str]): return self.cbs[idx] if isinstance(idx, int) else self.cbsDict[idx]
-    def __iter__(self):
+    def __getitem__(self, idx:Union[int, str]) -> Callback:
+        return self.cbs[idx] if isinstance(idx, int) else self.cbsDict[idx]
+    def __iter__(self) -> Iterator[Callback]:
         for cb in self.cbsDict.values(): yield cb
     def __len__(self): return len(self.cbsDict)
     def __getattr__(self, attr):
@@ -236,7 +241,7 @@ class Callbacks:
         if attr in self.cbsDict: return self.cbsDict[attr]
         else: raise AttributeError(attr)
     def __getstate__(self):
-        state = dict(self.__dict__); del state["_learner"]; return state
+        state = dict(self.__dict__); del state["_l"]; return state
     def __setstate__(self, state):
         self.__dict__.update(state)
         for cb in self.cbs: cb.cbs = self
@@ -248,7 +253,7 @@ Use...
 - cbs.Loss: to get a specific callback by name
 - cbs[i]: to get specific callback by index
 - cbs.timings: to get callback execution times
-- `with cbs.suspend(["Loss", "Cuda"]): pass`: to temporarily prevent triggering events in
+- `with cbs.suspend("Loss", "Cuda"): pass`: to temporarily prevent triggering events in
     specific callbacks. Can be nested
 - cbs.restore(): to restore latest temporary suspension
 - cbs.withs: to get list of with- functions. Corresponding classes are in k1lib.Callback.cls
@@ -256,6 +261,7 @@ Use...
     def withBasics(self):
         """Adds a bunch of very basic Callbacks that's needed for everything. Also
 includes Callbacks that are not necessary, but don't slow things down"""
+        self.withCoreNormal()
         self.withProgressBar().withLoss().withDontTrainValid()
         self.withLossLandscape().withProfiler().withRecorder()
         return self.withCancelOnExplosion().withParamFinder()
@@ -294,32 +300,41 @@ class SuspendContext:
             cb.suspended = oldValue; cb.restore()
     def __getattr__(self, attr): return getattr(self.cbs, attr)
 @k1lib.patch(Callbacks)
-def suspend(self, cbsNames:List[str]=[], cbsClasses:List[str]=[]) -> ContextManager:
-    """Suspension context for specified Callbacks.
-
-Works like this::
+def suspend(self, *cbNames:List[str]) -> ContextManager:
+    """Creates suspension context for specified Callbacks. Matches callbacks with
+their name. Works like this::
 
     cbs = k1lib.Callbacks().append(CbA()).append(CbB()).append(CbC())
-    with cbs.suspend(["CbA", "CbC"]):
+    with cbs.suspend("CbA", "CbC"):
         pass # inside here, only CbB will be active, and its checkpoints executed
     # CbA, CbB and CbC are all active
 
-:param cbsNames: checks Callback' names against this list
-:param cbsClasses: checks Callback' class names against this list
-
-As Callback's default name is the class name, just use **cbsNames** if
-you're hesitant.
-"""
-    return SuspendContext(self, cbsNames, cbsClasses)
+.. seealso:: :meth:`suspendClasses`"""
+    return SuspendContext(self, cbNames, [])
 @k1lib.patch(Callbacks)
-def suspendEvaluation(self, cbsNames:List[str]=[], cbsClasses:List[str]=[]) -> ContextManager:
-    """Same as :meth:`suspend`, but for typical suspend classes used for
-evaluation callbacks. Currently includes:
+def suspendClasses(self, *classNames:List[str]) -> ContextManager:
+    """Like :meth:`suspend`, but matches callbacks' class names to the given list,
+instead of matching names. Meaning::
+
+    cbs.k1lib.Callbacks().withLoss().withLoss()
+    # cbs now has 2 callbacks "Loss" and "Loss0"
+    with cbs.suspendClasses("Loss"):
+        pass # now both of them are suspended
+"""
+    return SuspendContext(self, [], classNames)
+@k1lib.patch(Callbacks)
+def suspendEval(self, more:List[str]=[], less:List[str]=[]) -> ContextManager:
+    """Same as :meth:`suspendClasses`, but suspend some default classes typical
+used for evaluation callbacks. Just convenience method really. Currently includes:
 
 - HookModule, HookParam, ProgressBar
-- ParamScheduler, Loss, Autosave"""
-    cbsClasses.extend(["HookModule", "HookParam", "ProgressBar", "ParamScheduler", "Loss", "Autosave"])
-    return self.suspend(cbsNames, cbsClasses)
+- ParamScheduler, Loss, Autosave
+
+:param more: include more classes to be suspended
+:param less: exclude classes supposed to be suspended by default"""
+    classes = {"HookModule", "HookParam", "ProgressBar", "ParamScheduler", "Loss", "Accuracy", "Autosave"}
+    classes.update(more); classes -= set(less)
+    return self.suspendClasses(*classes)
 class AppendContext:
     def __init__(self, cbs:Callbacks): self.cbs = cbs
     def __enter__(self): self.cbs.contexts.append([])

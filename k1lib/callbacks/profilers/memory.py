@@ -8,17 +8,22 @@ class MemoryData:
         self.mProfiler = mProfiler; self.mS = mS
         self.handles = k1lib.Object.fromDict({"fp":0,"f":0,"b":0})
         self.values = k1lib.Object.fromDict({"fp":0,"f":0,"b":0})
-        self.hook(); self.startMemory = allocated()
+        self.hook()
     def hook(self):
         def hk(v, m, i, o=None):
-            self.values[v] += (value := allocated() - self.startMemory)
+            """v: type of hook"""
+            mP = self.mProfiler
+            self.values[v] += (value := allocated() - mP.startMemory)
             if v == "f" or v == "b":
-                self.mProfiler.linear.append(value)
-                self.mProfiler.linState.append(0)
-                self.mProfiler.linSignature.append(self.mS.signature)
+                if v == "b" and mP.startBackwardPoint is None:
+                    mP.startBackwardPoint = len(mP.linear)
+                mP.linear.append(value); mP.linState.append(0)
+                # have to do this because callback order is pretty chaotic, so this
+                # is there just to recognize what module belongs to this reading
+                mP.linSignature.append(self.mS.signature)
         self.handles.fp = self.mS.nnModule.register_forward_pre_hook(partial(hk, "fp"))
         self.handles.f = self.mS.nnModule.register_forward_hook(partial(hk, "f"))
-        self.handles.b = self.mS.nnModule.register_backward_hook(partial(hk, "b"))
+        self.handles.b = self.mS.nnModule.register_full_backward_hook(partial(hk, "b"))
     def unhook(self):
         self.handles.fp.remove(); self.handles.f.remove(); self.handles.b.remove()
     def __getstate__(self):
@@ -32,24 +37,29 @@ class MemoryData:
         delta = f"delta({k1lib.format.size(self.values.f - self.values.fp)})".ljust(17)
         return f"{b} {delta} {fp} {f}"
 class MemoryProfiler(Callback):
+    """Expected to be run only once only. If a new report for a new network
+architecture is required, then create a new one"""
     def startRun(self):
         if not hasattr(self, "selector"):
             self.selector = self.l.selector.copy().clearProps()
         for m in self.selector.modules(): m.data = MemoryData(self, m)
         self.selector.displayF = lambda m: (k1lib.format.red if m.selected("_memProf_") else k1lib.format.identity)(m.data)
+        self.startMemory = allocated()
         self.linear:List[int] = [] # bytes of each mS's passes
         self.linState:List[bool] = [] # selected segments, used in plot
         self.linSignature:List[int] = [] # list of mS's signatures
+        self.startBackwardPoint = None
     def startStep(self): return True
     def endRun(self):
         self.linear = np.array(self.linear)
-        self.linState = np.array(self.linState); self._updateLinear()
+        self.linState = np.array(self.linState); self._updateLinState()
     def run(self):
         """Runs everything"""
-        with self.cbs.context(), self.cbs.suspendEvaluation():
+        with self.cbs.context(), self.cbs.suspendEval(), self.l.model.preserveDevice():
             self.cbs.withCuda(); self.l.run(1, 1)
         for m in self.selector.modules(): m.data.unhook()
-    def _updateLinear(self):
+    def _updateLinState(self):
+        """Change linState, which is the graph's highlight"""
         def applyF(m):
             for i in range(len(self.linear)):
                 if self.linSignature[i] == m.signature:
@@ -58,14 +68,17 @@ class MemoryProfiler(Callback):
     def css(self, css:str):
         """Selects a small part of the network to highlight"""
         self.selector.parse(k1lib.selector.filter(css, "_memProf_"))
-        self._updateLinear(); print(self.__repr__())
-        self.selector.clearProps(); self._updateLinear()
+        self._updateLinState(); print(self.__repr__())
+        self.selector.clearProps(); self._updateLinState()
     def __repr__(self):
         plt.figure(dpi=120); plt.grid(True)
         l = self.linear; s = self.linState; plt.xlabel("Time")
         l=l/1000**(idx := math.floor(math.log10(l.max())/3))
         plt.ylabel(k1lib.format.sizes[idx])
-        k1lib.viz.plotSegments(range(len(l)), l, s); plt.show()
+        k1lib.viz.plotSegments(range(len(l)), l, s)
+        plt.axvline(self.startBackwardPoint, linestyle="--")
+        ax = plt.gca(); ax.text(0.05, 0.05, "forward", transform=ax.transAxes)
+        ax.text(0.95, 0.05, "backward", ha="right", transform=ax.transAxes); plt.show()
         params = k1lib.format.item(sum([p.numel() for p in self.l.model.parameters()]))
         return f"""MemoryProfiler (params: {params}):
 {k1lib.tab(self.selector.__repr__(intro=False))}

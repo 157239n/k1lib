@@ -9,7 +9,7 @@ class Frozen(Callback):
         """:param css: css selectors for the parts you want to freeze"""
         self.css = str
     def startRun(self):
-        self.selector = self.learner.selector.copy()
+        self.selector = self.l.selector.copy()
         self.selector.clearProps()
         self.selector.parse(k1lib.selector.filter(css, "_frozen_"))
         self.params = []; self.oldParamValues = []

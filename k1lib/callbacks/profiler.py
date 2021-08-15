@@ -14,36 +14,43 @@ class Profiler(Callback):
     """Profiles memory, time, and computational complexity of the network. See over
 :mod:`k1lib.callbacks.profilers` for more details on each of these profilers"""
     def __init__(self):
-        super().__init__();self._mpCache=None;self._tpCache=None
-        self._cpCache=None;self._ioCache=None;self.dependsOn=["Recorder"]
+        super().__init__(); self.clear(); self.dependsOn=["Recorder"]
+    def clear(self):
+        """Clears every child profilers"""
+        self._mpCache=None; self._tpCache=None
+        self._cpCache=None; self._ioCache=None
     def _memory(self): # do this to quickly debug, cause if not, Callback will just raise AttributeError on .memory
         if self._mpCache != None: return self._mpCache
-        self.cbs.append(mp := MemoryProfiler(), name="_profiler_MemoryProfiler")
-        mp.run(); mp.detach(); self._mpCache = mp; return self.memory
+        with self.cbs.context():
+            self.cbs.append(mp := MemoryProfiler())
+            mp.run(); self._mpCache = mp; return mp
     @property
     def memory(self) -> MemoryProfiler:
         """Gets the memory profiler"""
         return self._memory()
     def _computation(self):
         if self._cpCache != None: return self._cpCache
-        self.cbs.append(cp := ComputationProfiler(self), name="_profiler_ComputationProfiler")
-        cp.run(); cp.detach(); self._cpCache = cp; return self.computation
+        with self.cbs.context():
+            self.cbs.append(cp := ComputationProfiler(self))
+            cp.run(); self._cpCache = cp; return cp
     @property
     def computation(self) -> ComputationProfiler:
         """Gets the computation profiler"""
         return self._computation()
     def _time(self):
         if self._tpCache != None: return self._tpCache
-        self.cbs.append(tp := TimeProfiler(), name="_profiler_TimeProfiler")
-        tp.run(); tp.detach(); self._tpCache = tp; return self.time
+        with self.cbs.context():
+            self.cbs.append(tp := TimeProfiler())
+            tp.run(); self._tpCache = tp; return tp
     @property
     def time(self) -> TimeProfiler:
         """Gets the time profiler"""
         return self._time()
     def _io(self):
         if self._ioCache != None: return self._ioCache
-        self.cbs.append(io := IOProfiler(), name="_profiler_IOProfiler")
-        io.run(); io.detach(); self._ioCache = io; return self.io
+        with self.cbs.context():
+            self.cbs.append(io := IOProfiler())
+            io.run(); self._ioCache = io; return io
     @property
     def io(self) -> IOProfiler:
         """Gets the IO profiler"""

@@ -40,7 +40,7 @@ class TimeLimit(Callback):
         if time.time() - self.startTime > self.seconds:
             raise k1lib.CancelRunException(f"Takes more than {self.seconds} seconds!")
 @k1lib.patch(Callbacks, docs=TimeLimit)
-def withTimeLimit(self, seconds=30, name=None):
+def withTimeLimit(self, seconds=30, name:str=None):
     return self.append(TimeLimit(seconds), name)
 @k1lib.patch(Callback.cls)
 class CancelOnExplosion(Callback):
@@ -61,8 +61,8 @@ class CancelOnExplosion(Callback):
 - cb.progress: to see current progress at explosion time
 {self._reprCan}"""
 @k1lib.patch(Callbacks, docs=CancelOnExplosion)
-def withCancelOnExplosion(self, limit:float=1e6):
-    return self.append(CancelOnExplosion(limit))
+def withCancelOnExplosion(self, limit:float=1e6, name:str=None):
+    return self.append(CancelOnExplosion(limit), name)
 @k1lib.patch(Callback.cls)
 class CancelOnLowLoss(Callback):
     " "
@@ -73,17 +73,19 @@ Original class: :class:`~k1lib.callbacks.limits.CancelOnLowLoss`
 :param epochMode: False if use batch loss, True if use valid epoch loss"""
         super().__init__(); self.order = 25; self.dependsOn = ["Loss"]
         self.loss = loss; self.epochMode = epochMode
+    def startRun(self):
+        if not hasattr(self.l.cbs, "Loss"):
+            raise AttributeError("Learner does not have required `Loss` callback")
+        self.v = self.cbs.Loss.valid; self.ve = self.cbs.Loss.epoch.valid # List[int]
     def endBatch(self):
-        if not hasattr(self.l, "Loss"): raise AttributeError("Learner does not have `Loss` callback")
-        v = self.l.Loss.valid; ve = self.l.Loss.epoch.valid
         if self.epochMode:
-            if len(ve) > 0 and ve[-1] < self.loss:
-                raise k1lib.CancelRunException(f"Low loss {self.loss} ({ve} actual) achieved!")
-        elif len(v) and v[-1] < self.loss:
-            raise k1lib.CancelRunException(f"Low loss {self.loss} ({v} actual) achieved!")
+            if len(self.ve) > 0 and self.ve[-1] < self.loss:
+                raise k1lib.CancelRunException(f"Low loss {self.loss} ({self.ve[-3:]} actual) achieved!")
+        elif len(self.v) and self.v[-1] < self.loss:
+            raise k1lib.CancelRunException(f"Low loss {self.loss} ({self.v[-3:]} actual) achieved!")
 @k1lib.patch(Callbacks, docs=CancelOnLowLoss.__init__)
-def withCancelOnLowLoss(self, loss:float, epochMode:bool=False):
-    return self.append(CancelOnLowLoss(loss, epochMode))
+def withCancelOnLowLoss(self, loss:float, epochMode:bool=False, name:str=None):
+    return self.append(CancelOnLowLoss(loss, epochMode), name)
 @k1lib.patch(Callback.cls)
 class CancelOnHighAccuracy(Callback):
     """Cancels the run if accuracy is higher than the amount specified"""
@@ -96,8 +98,8 @@ class CancelOnHighAccuracy(Callback):
         if a > self.accuracy:
             raise k1lib.CancelRunException(f"High accuracy {self.accuracy} ({a} actual) achieved!")
 @k1lib.patch(Callbacks, docs=CancelOnHighAccuracy)
-def withCancelOnHighAccuracy(self, accuracy:float):
-    return self.append(CancelOnHighAccuracy(accuracy))
+def withCancelOnHighAccuracy(self, accuracy:float, name:str=None):
+    return self.append(CancelOnHighAccuracy(accuracy), name)
 @k1lib.patch(Callback.cls)
 class DontTrain(Callback):
     """Don't allow the network to train at all"""
@@ -113,8 +115,8 @@ class GradientClipping(Callback):
     def startStep(self):
         clip_grad_value_(self.l.model.parameters(), self.value)
 @k1lib.patch(Callbacks, docs=GradientClipping)
-def withGradientClipping(self, value:float):
-    return self.append(GradientClipping(value))
+def withGradientClipping(self, value:float, name:str=None):
+    return self.append(GradientClipping(value), name)
 from torch.nn.utils import clip_grad_norm_
 @k1lib.patch(Callback.cls)
 class GradientClippingNorm(Callback):
@@ -130,5 +132,5 @@ See also: :class:`~k1lib.callbacks.limits.GradientClipping` callback."""
                 clip_grad_norm_(m, self.max_norm)
         else: clip_grad_norm_(self.l.model.parameters(), self.max_norm)
 @k1lib.patch(Callbacks, docs=GradientClippingNorm)
-def withGradientClippingNorm(self, max_norm:float, each:bool=True):
-    return self.append(GradientClippingNorm(max_norm, each))
+def withGradientClippingNorm(self, max_norm:float, each:bool=True, name:str=None):
+    return self.append(GradientClippingNorm(max_norm, each), name)

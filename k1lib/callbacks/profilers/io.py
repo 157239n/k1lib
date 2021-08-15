@@ -9,13 +9,13 @@ class IOData:
         self.handle = None; self.hook()
     def hook(self):
         def hk(m, i, o):
-            self.iS = list(k1lib.squeeze(i).shape)
-            self.oS = list(k1lib.squeeze(o).shape)
+            self.iS = list(k1lib.squeeze(i, True).shape)
+            self.oS = list(k1lib.squeeze(o, True).shape)
         self.handle = self.mS.nnModule.register_forward_hook(hk)
     def unhook(self): self.handle.remove()
     def __getstate__(self):
         answer = dict(self.__dict__)
-        del answer["mS"]; del answer["cProfiler"]; return answer
+        del answer["mS"]; del answer["ioProfiler"]; return answer
     def __setstate__(self, state): self.__dict__.update(dict(state))
     def __str__(self):
         a = f"{self.iS}".ljust(_li); b = f"{self.oS}".ljust(_li)
@@ -30,7 +30,7 @@ class IOProfiler(Callback):
     def startStep(self): return True
     def run(self):
         """Runs everything"""
-        with self.cbs.suspendEvaluation(): self.l.run(1, 1)
+        with self.cbs.suspendEval(): self.l.run(1, 1)
         for m in self.selector.modules(): m.data.unhook()
     def css(self, css:str):
         """Selects a small part of the network to highlight"""

@@ -40,7 +40,7 @@ backward times can't really be measured"""
     def startStep(self): return True
     def run(self):
         """Runs everything"""
-        with self.cbs.context(), self.cbs.suspendEvaluation():
+        with self.cbs.context(), self.cbs.suspendEval():
             self.is_cuda = next(self.l.model.parameters()).is_cuda
             if self.is_cuda: self.cbs.withCuda()
             else: self.cbs.withCpu()

@@ -18,9 +18,9 @@ class Recorder(Callback):
     def record(self, epochs:int=1, batches:int=None) -> Tuple[List[torch.Tensor], List[torch.Tensor], List[torch.Tensor]]:
         """Returns recorded xBatch, yBatch and answer y"""
         recorder = Recorder()
-        with self.cbs.context(), self.cbs.suspendEvaluation():
+        with self.cbs.context(), self.cbs.suspendEval():
             self.cbs.withDontTrain().withTimeLimit(5).append(recorder)
-            self.run(epochs, batches)
+            self.l.run(epochs, batches)
         return recorder.values
     def __repr__(self):
         return f"""{self._reprHead}, can...

@@ -3,41 +3,47 @@ from k1lib.callbacks import Callback, Callbacks
 import k1lib, torch, numpy as np, time
 import matplotlib.pyplot as plt
 __all__ = ["LossLandscape"]
+spacing = 0.35 # orders of magnitude
+offset = -2 # orders of magnitude shift
+res = 50 # resolution
+scales = 10**(np.array(range(8))*spacing + offset)
+scales = [round(scale, 3) for scale in scales]
+scales
 @k1lib.patch(Callback.cls)
 class LossLandscape(Callback):
     """Plots the loss landscape of the network."""
-    def __init__(self):
-        super().__init__(); self.suspended = True; self.res = 50 # resolution
-        self.scales = [.0562, .1, .177, .316, .562, 1, 1.77, 3.16]
+    def __init__(self): super().__init__(); self.suspended = True
     def startRun(self): self.originalParams = self.l.model.exportParams()
     def endRun(self): self.l.model.importParams(self.originalParams)
     def startPass(self):
         next(self.iter)
-        for param, og, v1, v2 in zip(self.l.model.parameters(), self.originalParams, self.v1, self.v2):
+        for param, og, v1, v2 in zip(self.l.model.parameters(), self.originalParams, *self.vs):
             param.data = og + self.x * v1 + self.y * v2
     def endLoss(self):
         loss = self.l.loss; self.zs[self.ix, self.iy] = loss if loss == loss else 0 # check for nan
-        if self.l.batch % 10: print(f"\rProgress: {round(100*(self.ix+self.iy/self.res)/self.res)}%, {round(time.time()-self.beginTime)}s      ", end="")
+        if self.l.batch % 10: print(f"\rProgress: {round(100*(self.ix+self.iy/res)/res)}%, {round(time.time()-self.beginTime)}s      ", end="")
     def startBackward(self): return True
     def startStep(self): return True
     def startZeroGrad(self): return True
     def __iter__(self):
-        for plotIdx, scale in enumerate(self.scales):
-            a = torch.linspace(-scale, scale, self.res)
-            xs, ys = torch.meshgrid(a, a); self.zs = np.empty((self.res, self.res))
-            for ix in range(self.res):
-                for iy in range(self.res):
+        """This one is the "core running loop", if you'd like to say so. Because
+this needs to be sort of event-triggered (by checkpoint "startPass"), so kinda have
+to put this into an iterator so that it's not the driving thread."""
+        for i, (scale, ax) in enumerate(zip(scales, self.axes)):
+            a = torch.linspace(-scale, scale, res)
+            xs, ys = torch.meshgrid(a, a); self.zs = np.empty((res, res))
+            for ix in range(res):
+                for iy in range(res):
                     self.x = xs[ix, iy]; self.y = ys[ix, iy]
                     self.ix, self.iy = ix, iy; yield True
-            self.axes[plotIdx].plot_surface(xs, ys, self.zs, cmap=plt.cm.coolwarm)
-            print(f"     {plotIdx+1}/8 Finished [{-scale}, {scale}] range              ", end="")
+            ax.plot_surface(xs, ys, self.zs, cmap=plt.cm.coolwarm)
+            print(f"     {i+1}/8 Finished [{-scale}, {scale}] range              ", end="")
         raise k1lib.CancelRunException("Loss landscape finished")
     def plot(self):
         """Creates the landscapes and show plots"""
         self.suspended = False; self.iter = iter(self); self.beginTime = time.time()
-        with self.cbs.suspendEvaluation(), torch.no_grad():
-            self.v1 = self.l.model.getParamsVector()
-            self.v2 = self.l.model.getParamsVector()
+        with self.cbs.suspendEval(), torch.no_grad():
+            self.vs = [self.l.model.getParamsVector(), self.l.model.getParamsVector()]
             fig, axes = plt.subplots(2, 4, subplot_kw={"projection": "3d"}, figsize=(16, 8), dpi=120)
             self.axes = axes.flatten(); self.l.run(1000000)
         self.suspended = True; self.iter = None

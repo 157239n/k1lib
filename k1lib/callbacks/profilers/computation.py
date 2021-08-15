@@ -58,7 +58,7 @@ layers only, and thus can't really be universal"""
     def startStep(self): return True
     def run(self):
         """Runs everything"""
-        with self.cbs.context(), self.cbs.suspendEvaluation():
+        with self.cbs.context(), self.cbs.suspendEval():
             self.cbs.withCpu(); self.l.run(1, 1)
         for m in self.selector.modules(): m.data.unhook()
     def detached(self): # time profiler integration, so that flops can be displayed

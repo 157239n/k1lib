@@ -48,7 +48,7 @@ class Module:
         self.name = module.__class__.__name__
     def registerHooks(self, forwardFns:List[Function], backwardFns:List[Function]):
         self.handles.forward = self.nnModule.register_forward_hook(partial(hook, forwardFns, self.data.forward))
-        self.handles.backward = self.nnModule.register_backward_hook(partial(hook, backwardFns, self.data.backward))
+        self.handles.backward = self.nnModule.register_full_backward_hook(partial(hook, backwardFns, self.data.backward))
         return self
     def unregisterHooks(self): self.handles.remove()
     def __repr__(self):
@@ -169,25 +169,25 @@ def clearHooks(self):
     self.forwardFns = []; self.backwardFns = []
     self.cleanFns = []; return self
 def meanCb(data, m, inp, out):
-    data.means.append(squeeze(out).data.mean().item())
+    data.means.append(squeeze(out, hard=True).data.mean().item())
 @k1lib.patch(HookModule)
 def withMeanRecorder(self):
     """Records mean"""
     return self.withHook(meanCb, "mean")
 def stdCb(data, m, inp, out):
-    data.stds.append(squeeze(out).data.std().item())
+    data.stds.append(squeeze(out, hard=True).data.std().item())
 @k1lib.patch(HookModule)
 def withStdRecorder(self):
     """Records standard deviation"""
     return self.withHook(stdCb, "std")
 def minCb(data, m, inp, out):
-    data.mins.append(squeeze(out).data.min().item())
+    data.mins.append(squeeze(out, hard=True).data.min().item())
 @k1lib.patch(HookModule)
 def withMinRecorder(self):
     """Records min"""
     return self.withHook(minCb, "min")
 def maxCb(data, m, inp, out):
-    data.maxs.append(squeeze(out).data.max().item())
+    data.maxs.append(squeeze(out, hard=True).data.max().item())
 @k1lib.patch(HookModule)
 def withMaxRecorder(self):
     """Records max"""

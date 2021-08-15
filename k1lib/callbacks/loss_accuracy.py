@@ -67,8 +67,8 @@ class Accuracy(Callback):
             plt.figure(figsize=(10, 3), dpi=100); step = _slice.step or 1
             tR, vR = k1lib.Range.proportionalSlice(len(self.train), len(self.valid), _slice)
             try:
-                plt.subplot(1, 2, 1); plt.plot(tR.range[::step], 100*self.train[tR.slice][::step]); plt.title(f"Train accuracy")
-                plt.subplot(1, 2, 2); plt.plot(vR.range[::step], 100*self.valid[vR.slice][::step]); plt.title(f"Valid accuracy")
+                plt.subplot(1, 2, 1); plt.plot(tR.range_[::step], 100*self.train[tR.slice_][::step]); plt.title(f"Train accuracy")
+                plt.subplot(1, 2, 2); plt.plot(vR.range_[::step], 100*self.valid[vR.slice_][::step]); plt.title(f"Valid accuracy")
             except: pass
         return k1lib.viz.SliceablePlot(plotF)
     def __repr__(self):

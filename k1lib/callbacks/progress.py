@@ -10,7 +10,8 @@ class ProgressBar(Callback):
     def startBatch(self):
         self.elapsedTime = time.time() - self.startTime
         self.step += 1
-        self.progress = (self.l.batch / self.l.batches + self.l.epoch) / self.l.epochs
+        if self.l.batches is None: self.progress = self.l.epoch / self.l.epochs
+        else: self.progress = (self.l.batch / self.l.batches + self.l.epoch) / self.l.epochs
         if self.step % 10 == 0:
             a = str(round(100 * self.progress)).rjust(3)
             b = f"{self.l.epoch}/{self.l.epochs}".rjust(k1lib.numDigits(self.l.epochs) * 2 + 1)

@@ -53,7 +53,7 @@ def run(self, param:str="lr", samples:int=300) -> float:
 :return: the suggested param value"""
     self.param = param; self.samples = samples
     self.idx = 0; self.losses = []; self.best = None; self.bestLoss = float("inf")
-    with self.cbs.suspend(cbsClasses=["HookModule", "HookParam", "ParamScheduler", "Loss", "Autosave"]):
+    with self.cbs.suspendEval(less=["ProgressBar"]):
         self.suspended = False; ogParams = self.l.model.exportParams()
         self.l.run(int(1e3))
         self.suspended = True; self.l.model.importParams(ogParams)
