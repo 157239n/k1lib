@@ -2,6 +2,27 @@
 Changelogs
 ==========
 
+`0.1.8 </0.1.8>`_
+-----------------
+
+- Fixed installation bug where readme.md would be absent, and setup.py won't work
+  at all.
+
+  .. currentmodule:: k1lib.bioinfo.cli
+
+Bioinfo cli:
+
+- Huge revamp of how tables are treated. Before, row elements are in a single string,
+  separated by a delimiter. Now each row is a full fledged list
+- Added :class:`~grep.grepToTable`, :class:`~structural.joinList`,
+  :class:`~filt.contains`, :class:`~structural.table`, :class:`~structural.stitch`,
+  :class:`~structural.listToTable`, :class:`~structural.insertColumn` cli tools
+- Removed :class:`~structural.joinRows` but still keep :class:`~structural.joinStreams`
+  as "joinRows" is not really obvious
+- Removed :class:`~structural.permute` as :class:`~filt.columns` is pretty much identical
+- Renamed :class:`~filt.inside` to :class:`~filt.inSet`
+- Cut out nested functionality from :class:`~grep.grep` to :class:`~grep.grepToTable`
+
 `0.1.7 </0.1.7>`_
 ------------------
 

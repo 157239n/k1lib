@@ -34,13 +34,7 @@ on a table. So this table:
 
 Is equivalent to this list::
 
-   ["col1\tcol2\tcol3", "1\t2\t3", "4\t5\t6"]
-
-Essentially, each row is a single string, and elements in a row are separated by a
-delimiter. You can set the default delimiter using
-:attr:`bioinfoSettings` like this::
-
-   bioinfoSettings["defaultDelim"] = ","
+   [["col1", "col2", "col3"], [1, 2, 3], [4, 5, 6]]
 
 Also, the expected way to use these tools is to import everything directly into the
 current environment, like this::

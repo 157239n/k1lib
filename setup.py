@@ -4,8 +4,11 @@ from setuptools import find_packages, setup
 import os
 os.chdir(os.path.dirname(os.path.realpath(__file__)))
 
-with open("readme.md") as f:
-    md = f.read()
+try:
+    with open("readme.md") as f:
+        md = f.read()
+except:
+    md = ""
 
 setup(
     name="k1lib",
@@ -13,7 +16,7 @@ setup(
               "k1lib.bioinfo", "k1lib.bioinfo.cli",
               "k1lib.callbacks", "k1lib.callbacks.profilers", 
               "k1lib.callbacks.lossFunctions"],
-    version="0.1.7",
+    version="0.1.8",
     install_requires=["torch", "numpy", "matplotlib", "dill"],
     description="Some nice ML overhaul",
     url="https://github.com/157239n/k1lib",

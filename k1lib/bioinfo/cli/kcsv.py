@@ -5,11 +5,7 @@ This module is for dealing with csv stuff
 import k1lib.bioinfo.cli as _cli
 import csv as _csv
 from typing import Iterator as _Iterator
-def cat(file:str, delim:str=None) -> _Iterator[str]:
-    """Opens a csv file, and turns them into nice row
-elements, separated by delim"""
-    delim = _cli.init.patchDefaultDelim(delim)
+def cat(file:str) -> _Iterator[str]:
+    """Opens a csv file, and turns them into nice row elements"""
     with open(file) as f:
-        reader = _csv.reader(f)
-        for line in reader:
-            yield delim.join(line)
+        yield from _csv.reader(f)

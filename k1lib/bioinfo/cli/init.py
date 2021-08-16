@@ -13,8 +13,41 @@ def patchDefaultIndent(s:str):
     - if not None, returns self
     - else returns the default indent character in settings"""
     return settings["defaultIndent"] if s is None else s
-from typing import List, Iterator, Any
+from typing import List, Iterator, Any, NewType, TypeVar
 import itertools
+class _MetaType(type):
+    def __getitem__(self, generic):
+        d = {"__args__": generic, "_n": self._n, "__doc__": self.__doc__}
+        return _MetaType("MetaObj", (), d)
+    def __repr__(self):
+        def main(self):
+            def trueName(o):
+                if isinstance(o, _MetaType): return main(o)
+                try: return o.__name__
+                except: return f"{o}"
+            if hasattr(self, "__args__"):
+                if isinstance(self.__args__, tuple):
+                    return f"{self._n}[{', '.join([trueName(e) for e in self.__args__])}]"
+                else: return f"{self._n}[{trueName(self.__args__)}]"
+            return self._n
+        return main(self)
+def newTypeHint(name, docs=""):
+    """Creates a new type hint that can be sliced and yet still looks fine
+in sphinx. Crudely written by my poorly understood idea of Python's
+metaclasses. Seriously, this shit is bonkers, read over it https://stackoverflow.com/questions/100003/what-are-metaclasses-in-python
+
+Example::
+
+    Table = newTypeHint("Table", "some docs")
+    Table[int] # prints out as "Table[int]", and sphinx fell for it too
+    Table[Table[str], float] # prints out as "Table[Table[str], float]"
+"""
+    return _MetaType(name, (), {"_n": name, "__doc__": docs})
+Table = newTypeHint("Table", """Essentially just Iterator[List[T]]. This class is just here so that I can generate the docs with nicely formatted types like "Table[str]".""")
+class Row(list):
+    """Not really used currently. Just here for potential future feature"""
+    pass
+T = TypeVar("T")
 class BaseCli:
     def __and__(self, cli:"BaseCli"):
         if isinstance(self, oneToMany):

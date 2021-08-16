@@ -2,80 +2,70 @@
 """
 This is for quick modifiers, think of them as changing formats
 """
-__all__ = ["lstrip", "rstrip", "strip", "apply",
-           "upper", "lower", "replace", "remove", "sort"]
+__all__ = ["apply", "lstrip", "rstrip", "strip",
+           "upper", "lower", "replace", "remove", "toFloat", "toInt", "sort"]
 from typing import Callable, Iterator
-from k1lib.bioinfo.cli.init import patchDefaultDelim, BaseCli
-class lstrip(BaseCli):
-    """Strips left of every line"""
-    def __init__(self, char:str=None): self.char = char
-    def __ror__(self, it:Iterator[str]):
-        if self.char != None:
-            for line in it: yield line.lstrip(char)
-        else:
-            for line in it: yield line.lstrip()
-class rstrip(BaseCli):
-    "Strips right of every line"
-    def __init__(self, char:str=None): self.char = char
-    def __ror__(self, it:Iterator[str]):
-        if self.char != None:
-            for line in it: yield line.rstrip(char)
-        else:
-            for line in it: yield line.rstrip()
-class strip(BaseCli):
-    """Strips both sides of every line"""
-    def __init__(self, char:str=None): self.char = char
-    def __ror__(self, it:Iterator[str]):
-        if self.char != None:
-            for line in it: yield line.strip(char)
-        else:
-            for line in it: yield line.strip()
+from k1lib.bioinfo.cli.init import patchDefaultDelim, BaseCli, settings
+import k1lib.bioinfo.cli as cli
 class apply(BaseCli):
-    def __init__(self, f:Callable[[str], str]):
-        """Applies a function f to every line"""
-        self.f = f
+    def __init__(self, f:Callable[[str], str], column:int=None):
+        """Applies a function f to every line
+
+:param column: if not None, then applies the function to that column only"""
+        self.f = f; self.column = column
     def __ror__(self, it:Iterator[str]):
-        for line in it: yield self.f(line)
-class upper(BaseCli):
+        f = self.f; c = self.column
+        if c is None: return (f(line) for line in it)
+        else: return (((e if i != c else f(e)) 
+                       for i, e in enumerate(row)) for row in it)
+def lstrip(column:int=None, char:str=None):
+    """Strips left of every line"""
+    return apply(lambda e: e.lstrip(char), column)
+def rstrip(column:int=None, char:str=None):
+    """Strips right of every line"""
+    return apply(lambda e: e.rstrip(char), column)
+def strip(column:int=None, char:str=None):
+    """Strips both sides of every line"""
+    return apply(lambda e: e.strip(char), column)
+def upper(column:int=None):
     """Make all characters uppercase"""
-    def __ror__(self, it:Iterator[str]):
-        for line in it: yield line.upper()
-class lower(BaseCli):
+    return apply(lambda e: e.upper(), column)
+def lower(column:int=None):
     """Make all characters lowercase"""
-    def __ror__(self, it:Iterator[str]):
-        for line in it: yield line.lower()
-class replace(BaseCli):
-    def __init__(self, s:str, target:str=None):
-        """Replaces substring `s` with `target` for each line"""
-        self.s = s; self.target = patchDefaultDelim(target)
-    def __ror__(self, it:Iterator[str]):
-        for line in it: yield line.replace(self.s, self.target)
-class remove(replace):
-    def __init__(self, s:str):
-        """Removes a specific substring in each line"""
-        super().__init__(s, "")
-from k1lib.bioinfo.cli.filt import isNumeric
+    return apply(lambda e: e.lower(), column)
+def replace(s:str, target:str=None, column:int=None):
+    """Replaces substring `s` with `target` for each line."""
+    t = patchDefaultDelim(target)
+    return apply(lambda e: e.replace(s, t), column)
+def remove(s:str, column:int=None):
+    """Removes a specific substring in each line."""
+    return replace(s, "", column)
+def toFloat(column:int=None):
+    """Converts every row into a float. Excludes non numbers if not in
+:ref:`strict mode <bioinfoSettings>`."""
+    f = apply(lambda e: float(e), column)
+    return f if settings["strict"] else cli.isNumeric(column) | f
+def toInt(column:int=None):
+    """Converts every row into an integer. Excludes non numbers if not in
+:ref:`strict mode <bioinfoSettings>`."""
+    f = apply(lambda e: int(float(e)), column)
+    return f if settings["strict"] else cli.isNumeric(column) | f
 class sort(BaseCli):
-    def __init__(self, column:int=0, reverse=False, numeric=True, delim:str=None):
+    def __init__(self, column:int=0, numeric=True, reverse=False):
         """Sorts all lines based on a specific `column`.
 
-:param reverse: False for smaller to bigger, True for bigger to smaller
 :param numeric: whether to treat column as float
-:param delim: delimiter that separates columns"""
+:param reverse: False for smaller to bigger, True for bigger to smaller. Use
+    :meth:`__invert__` to quickly reverse the order instead of using this param"""
         self.column = column; self.reverse = reverse; self.numeric = numeric
         self.filterF = (lambda x: float(x)) if numeric else (lambda x: x)
-        self.delim = patchDefaultDelim(delim)
     def __ror__(self, it:Iterator[str]):
-        if self.numeric: it = it | isNumeric(self.column, self.delim)
-        elems = list(it)
-        def sortF(line):
-            elems = line.split(self.delim)
-            if len(elems) > self.column:
-                return self.filterF(elems[self.column])
+        c = self.column; f = self.filterF
+        rows = list(it | cli.isNumeric(c) if self.numeric else it)
+        def sortF(row):
+            if len(row) > c: return f(row[c])
             return float("inf")
-        elems = sorted(elems, key=sortF)
-        if self.reverse: elems.reverse()
-        return iter(elems)
+        return iter(sorted(rows, key=sortF, reverse=self.reverse))
     def __invert__(self):
         """Creates a clone that has the opposite sort order"""
-        return sort(self.column, not self.reverse, self.numeric, self.delim)
+        return sort(self.column, self.numeric, not self.reverse)

@@ -19,8 +19,16 @@ make html
 # folders, as there are lots of absolute references
 base=../../k1lib.github.io
 vBase=$base/$1/ # versioned base
+
 rm -r $vBase
 mkdir $vBase
 cp -r _build/html/* $vBase
-echo $1 > $base/version.txt # so that index.html know what version to redirect to
+
+rm -r $base/latest/
+mkdir $base/latest/
+cp -r _build/html/* $base/latest/
+
+echo $1 > $base/version.txt # so that index.html know what version to redirect to. Update: this usage is sort of obsolete, but doesn't hurt to put here
+
+
 

@@ -3,56 +3,90 @@
 This is for functions that sort of changes the table
 structure in a dramatic way. They're the core transformations
 """
-from typing import List, Union, Iterator, Callable, Any
+from typing import List, Union, Iterator, Callable, Any, Tuple, Dict
 from collections import defaultdict, Counter
-from k1lib.bioinfo.cli.init import patchDefaultDelim, BaseCli, oneToMany
+from k1lib.bioinfo.cli.init import patchDefaultDelim, BaseCli, oneToMany, T, Table
 import k1lib.bioinfo.cli as cli
-__all__ = ["joinColumns", "joinRows", "joinStreams",
-           "splitColumns", "insertRow", "insertIdColumn",
-           "toDict", "split", "count", "permute", "accumulate", "AA_",
-           "infinite"]
+import itertools
+__all__ = ["joinColumns", "transpose", "splitColumns", "joinList", "joinStreams",
+           "insertRow", "insertColumn", "insertIdColumn",
+           "toDict", "split", "table", "stitch", "listToTable",
+           "count", "accumulate", "AA_", "infinite"]
 class joinColumns(BaseCli):
-    def __init__(self, delim:str=None, sep:bool=False):
-        """Join multiple columns and loop through all rows
+    def __init__(self, fillValue=None):
+        """Join multiple columns and loop through all rows. Aka transpose.
 
-:param sep: if True, don't join row elements into a list, and keep them
-    separate in a tuple
+:param fillValue: if not None, then will try to zip longest with this fill value
+
+Example::
+
+    # returns [[1, 4], [2, 5], [3, 6]]
+    [[1, 2, 3], [4, 5, 6]] | joinColumns() | dereference()
+    # returns [[1, 4], [2, 5], [3, 6], [0, 7]]
+    [[1, 2, 3], [4, 5, 6, 7]] | joinColumns(0) | dereference()"""
+        self.fillValue = fillValue
+    def __ror__(self, it:Iterator[Iterator[T]]) -> Table[T]:
+        if self.fillValue is None: yield from zip(*it)
+        else: yield from itertools.zip_longest(*it, fillvalue=self.fillValue)
+splitColumns = transpose = joinColumns
+class joinList(BaseCli):
+    def __init__(self, element=None, begin=True):
+        """Join element into list.
+
+:param element: the element to insert. If None, then takes the input [e, [...]],
+    else takes the input [...] as usual
+
+Example::
+
+    # returns [5, 2, 6, 8]
+    [5, [2, 6, 8]] | joinList()
+    # also returns [5, 2, 6, 8]
+    [2, 6, 8] | joinList(5)
 """
-        self.delim = patchDefaultDelim(delim); self.sep = sep
-    def __ror__(self, it:Iterator[Iterator[str]]):
-        if self.sep:
-            for lineElems in zip(*it): yield lineElems
+        self.element = element; self.begin = begin
+    def __ror__(self, it:Tuple[T, Iterator[T]]) -> Iterator[T]:
+        it = iter(it)
+        if self.element is None:
+            if self.begin: yield next(it); yield from next(it)
+            else: e = next(it); yield from next(it); yield e
         else:
-            for lineElems in zip(*it):
-                yield self.delim.join(lineElems | cli.toStr())
-class joinRows(BaseCli):
-    """Join multiple stream of rows"""
-    def __ror__(self, streams:Iterator[Iterator[Any]]) -> Iterator[Any]:
+            if self.begin: yield self.element; yield from it
+            else: yield from it; yield self.element
+class joinStreams(BaseCli):
+    """Join multiple streams.
+Example::
+
+    # returns [1, 2, 3, 4, 5]
+    [[1, 2, 3], [4, 5]] | joinStreams() | dereference()
+"""
+    def __ror__(self, streams:Iterator[Iterator[T]]) -> Iterator[T]:
         for stream in streams: yield from stream
-joinStreams = joinRows
-class splitColumns(BaseCli):
-    def __init__(self, delim:str=None):
-        """Splits lines into multiple columns, and return the columns individually"""
-        self.delim = patchDefaultDelim(delim)
-        self.lists = defaultdict(lambda: [])
-    def __ror__(self, it):
-        for line in it:
-            for i, elem in enumerate(line.split(self.delim)):
-                self.lists[i].append(elem)
-        return list(self.lists.values())
-class insertRow(BaseCli):
-    def __init__(self, *columns:Union[List[str], str], delim:str=None):
-        """Inserts a row right before everything else"""
-        if isinstance(columns, tuple) and len(columns) == 1 and isinstance(columns[0], (list, tuple)):
-            columns = columns[0]
-        self.columns = columns; self.delim = patchDefaultDelim(delim)
-    def __ror__(self, it:Iterator[str]):
-        yield self.delim.join(self.columns)
-        for e in it: yield e
-def insertIdColumn(begin=True, delim:str=None):
-    """Inserts an id column at the beginning (or end)"""
-    if begin: return (cli.toRange() & cli.identity()) | cli.joinColumns(delim)
-    else: return (cli.identity() & cli.toRange()) | cli.joinColumns(delim)
+def insertRow(*row:List[T]):
+    """Inserts a row right before every other rows. See also: :meth:`joinList`."""
+    return joinList(row)
+def insertColumn(*column, begin=True):
+    """Inserts a column at beginning or end.
+Example::
+
+    # returns [['a', 1, 2], ['b', 3, 4]]
+    [[1, 2], [3, 4]] | insertColumn("a", "b") | dereference()
+"""
+    return transpose() | joinList(column, begin) | transpose()
+def insertIdColumn(table=False, begin=True):
+    """Inserts an id column at the beginning (or end).
+
+:param table: if False, then insert column to an Iterator[str], else treat
+    input as a full fledged table
+
+Example::
+
+    # returns [[0, 'a', 2], [1, 'b', 4]]
+    [["a", 2], ["b", 4]] | insertIdColumn(True) | dereference()
+    # returns [[0, 'a'], [1, 'b']]
+    "ab" | insertIdColumn()"""
+    f = (cli.toRange() & transpose()) | joinList(begin=begin) | transpose()
+    if table: return f
+    else: return cli.wrapList() | transpose() | f
 class toDict(BaseCli):
     def __init__(self, keyF:Callable[[Any], str]=None, valueF:Callable[[Any], Any]=None):
         """Transform an incoming stream into a dict using a function for
@@ -64,7 +98,7 @@ values. Example::
 """
         self.keyF = keyF or (lambda s: s)
         self.valueF = valueF or (lambda s: s)
-    def __ror__(self, keys:Iterator[str]):
+    def __ror__(self, keys:Iterator[Any]) -> Dict[Any, Any]:
         keyF = self.keyF; valueF = self.valueF
         return {keyF(key):valueF(key) for key in keys}
 class split(BaseCli):
@@ -82,51 +116,63 @@ parts as a separate line.
             for line in it:
                 elems = line.split(self.delim)
                 yield elems[self.idx] if self.idx < len(elems) else None
-class count(BaseCli):
+class table(BaseCli):
     def __init__(self, delim:str=None):
-        """Finds unique elements and returns a generator of "{value} {key}"."""
+        """Splits lines to rows (List[str]) using a delimiter.
+Example::
+
+    # returns [['a', 'bd'], ['1', '2', '3']]
+    ["a|bd", "1|2|3"] | table("|") | dereference()
+"""
         self.delim = patchDefaultDelim(delim)
+    def __ror__(self, it:Iterator[str]) -> Table[str]:
+        return (line.split(self.delim) for line in it)
+class stitch(BaseCli):
+    def __init__(self, delim:str=None):
+        """Stitches elements in a row together, so they become a simple string.
+See also: :class:`k1lib.bioinfo.cli.output.pretty`"""
+        self.delim = patchDefaultDelim(delim)
+    def __ror__(self, it:Table[str]) -> Iterator[str]:
+        d = self.delim
+        for row in it: yield d.join(row)
+def listToTable():
+    """Turns Iterator[T] into Table[T]"""
+    return cli.wrapList() | transpose()
+class count(BaseCli):
+    """Finds unique elements and returns a table with [frequency, value, percent]
+columns. Example::
+
+    # returns [[1, 'a', '33%'], [2, 'b', '67%']]
+    ['a', 'b', 'b'] | count() | dereference()
+"""
     def __ror__(self, it:Iterator[str]):
         c = Counter(it); s = sum(c.values())
-        for k, v in c.items():
-            yield f"{v}{self.delim}{k}{self.delim}{round(100*v/s)}%"
-class permute(BaseCli):
-    def __init__(self, permutations:List[int], delim:str=None):
-        """Permutes the columns. Acts like torch.permute(...)"""
-        self.permutations = permutations
-        self.delim = patchDefaultDelim(delim)
-    def __ror__(self, it:Iterator[str]):
-        for line in it:
-            elems = line.split(self.delim)
-            yield self.delim.join([elems[i] for i in self.permutations])
+        for k, v in c.items(): yield [v, k, f"{round(100*v/s)}%"]
 class accumulate(BaseCli):
-    def __init__(self, column:int=0, avg=False, delim:str=None):
-        """Groups lines that have the same line.split(delim)[column], and
-add together all other columns, assuming they're floats
+    def __init__(self, columnIdx:int=0, avg=False):
+        """Groups lines that have the same row[columnIdx], and
+add together all other columns, assuming they're numbers
 
-Args:
-    column: common column to accumulate
-    avg: calculate average values instead of sum
-    delim: specify delimiter between columns"""
-        self.column = column; self.avg = avg
-        self.delim = patchDefaultDelim(delim)
+:param columnIdx: common column index to accumulate
+:param avg: calculate average values instead of sum"""
+        self.columnIdx = columnIdx; self.avg = avg
         self.dict = defaultdict(lambda: defaultdict(lambda: 0))
     def __ror__(self, it:Iterator[str]):
-        for line in it:
-            elems = line.split(self.delim); key = elems[self.column]
-            elems.pop(self.column)
-            for i, elem in enumerate(elems):
-                try: self.dict[key][i] += float(elem)
-                except: self.dict[key][i] = elem
+        for row in it:
+            row = list(row); key = row[self.columnIdx]
+            row.pop(self.columnIdx)
+            for i, e in enumerate(row):
+                try: self.dict[key][i] += float(e)
+                except: self.dict[key][i] = e
         for key, values in self.dict.items():
             n = len(self.dict[key].keys())
             if self.avg:
                 for i in range(n):
-                    if isinstance(self.dict[key][i], float):
+                    if isinstance(self.dict[key][i], (int, float)):
                         self.dict[key][i] /= n
             elems = [str(self.dict[key][i]) for i in range(n)]
-            elems.insert(self.column, key)
-            yield self.delim.join(elems)
+            elems.insert(self.columnIdx, key)
+            yield elems
 class AA_(BaseCli):
     def __init__(self, *idxs:List[int], wraps=False):
         """Returns 2 streams, one that has the selected element, and the other
@@ -164,13 +210,14 @@ first.
         if not self.wraps and len(idxs) == 1: return gen(idxs[0])
         return [gen(idx) for idx in idxs]
 class infinite(BaseCli):
-    """Takes in a stream and yields an infinite amount of them. Example:
+    """Yields an infinite amount of the passed in object. Example:
 
 .. code-block::
 
     # returns [[1, 2, 3], [1, 2, 3], [1, 2, 3]]
     [1, 2, 3] | infinite() | head(3) | toList()
 """
-    def __ror__(self, it:Iterator[Any]) -> Iterator[Iterator[Any]]:
-        it = list(it)
-        while True: yield it
+    def __ror__(self, o:T) -> Iterator[T]:
+        try: o = list(o)
+        except: pass
+        while True: yield o

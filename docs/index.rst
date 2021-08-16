@@ -43,6 +43,8 @@ Then in a notebook, do this::
 
 This package has very few dependencies, and all of them are very commonly used
 
+Repo is at https://github.com/157239n/k1lib/ btw.
+
 Module contents
 ---------------
 

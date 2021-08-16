@@ -2,32 +2,32 @@
 """
 This is for all short utilities that has the boilerplate feeling
 """
-from k1lib.bioinfo.cli.init import patchDefaultDelim, BaseCli, settings
+from k1lib.bioinfo.cli.init import patchDefaultDelim, BaseCli, settings, Table
 import k1lib.bioinfo.cli as cli, numbers
-from typing import overload, Iterator, Any, List, Set
+from typing import overload, Iterator, Any, List, Set, Union
 __all__ = ["size", "shape", "item", "identity",
-           "toInt", "toFloat", "toStr", "to1Str", "toNumpy",
+           "toStr", "to1Str", "toNumpy",
            "toList", "wrapList", "toSet", "toIter", "toRange",
            "equals", "reverse", "ignore",
            "avg", "headerIdx", "dereference"]
 class size(BaseCli):
-    def __init__(self, idx=None, delim:str=None):
+    def __init__(self, idx=None):
         """Returns number of rows and columns in the input.
 
 :param idx: if idx is None return (rows, columns). If 0 or 1, then rows
     or columns"""
-        self.idx = idx; self.delim = patchDefaultDelim(delim)
+        self.idx = idx
     def __ror__(self, it:Iterator[str]):
         if self.idx == 0: # get rows only
             rows = 0
             for line in it: rows += 1
             return rows
         if self.idx == 1: # get #columns only
-            return len(next(it).split(self.delim))
+            return len(next(it))
         columns = -1; rows = 0
-        for line in it:
+        for row in it:
             if columns == -1:
-                try: columns = len(line.split(self.delim))
+                try: columns = len(row)
                 except AttributeError: columns = None
             rows += 1
         if columns == -1: columns = None
@@ -40,19 +40,7 @@ class item(BaseCli):
 class identity(BaseCli):
     """Yields whatever the input is. Useful for multiple streams"""
     def __ror__(self, it:Iterator[Any]):
-        yield from it
-class toFloat(BaseCli):
-    """Converts every row into a float. Excludes non numbers if not in
-:ref:`strict mode <bioinfoSettings>`."""
-    def __ror__(self, it:Iterator[str]) -> Iterator[float]:
-        if not settings["strict"]: it = it | cli.isNumeric()
-        for line in it: yield int(line)
-class toInt(BaseCli):
-    """Converts every row into an integer. Excludes non numbers if not in
-:ref:`strict mode <bioinfoSettings>`."""
-    def __ror__(self, it:Iterator[str]) -> Iterator[int]:
-        if not settings["strict"]: it = it | cli.isNumeric()
-        for line in it: yield int(line)
+        return it
 class toStr(BaseCli):
     def __init__(self):
         """Converts every line (possibly just a number) to a string."""
@@ -118,10 +106,14 @@ class avg(BaseCli):
         it = list(it)
         if not settings["strict"] and len(it) == 0: return float("nan")
         return sum(it) / len(it)
-def headerIdx(delim:str=None):
+def headerIdx():
     """Cuts out first line, put an index column next to it, and prints it
-out. Useful when you want to know what your column's index is to cut it out."""
-    return item() | wrapList() | cli.split(delim) | cli.insertIdColumn(delim) | cli.display(None, delim)
+out. Useful when you want to know what your column's index is to cut it out.
+Example::
+
+    # returns [[0, 'a'], [1, 'b'], [2, 'c']]
+    ["abc"] | headerIdx() | dereference()"""
+    return item() | wrapList() | cli.transpose() | cli.insertIdColumn()
 class dereference(BaseCli):
     """Recursively converts any iterator into a list. Only :class:`str`,
 :class:`numbers.Number` are not converted. Example:

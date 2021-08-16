@@ -3,42 +3,37 @@
 This is for functions that cuts out specific parts of the table
 """
 from typing import Callable, Union, List, overload, Iterator, Any, Set
-from k1lib.bioinfo.cli.init import patchDefaultDelim, BaseCli, settings
+from k1lib.bioinfo.cli.init import BaseCli, settings, Table, T
 import k1lib.bioinfo.cli as cli
-__all__ = ["filt", "isValue", "inside", "nonEmptyStream",
+__all__ = ["filt", "isValue", "inSet", "contains", "nonEmptyStream",
            "startswith", "endswith",
            "isNumeric", "inRange",
            "head", "nhead",
            "columns", "cut", "rows", "every", "intersection"]
 class filt(BaseCli):
-    def __init__(self, predicate:Callable[[str], bool], column:int=0, delim:str=None):
+    def __init__(self, predicate:Callable[[str], bool], column:int=None):
         """Filters out lines.
 
 :param column:
-    - if integer, then predicate(line.split(delim)[column])
+    - if integer, then predicate(row[column])
     - if None, then predicate(line)"""
         self.predicate = predicate; self.column = column
-        self.delim = patchDefaultDelim(delim)
     def __ror__(self, it:Iterator[str]):
-        if self.column is not None:
-            for line in it:
-                elems = line.split(self.delim)
-                if len(elems) <= self.column: continue
-                if self.predicate(elems[self.column]): yield line
-        else:
-            for line in it:
-                if self.predicate(line): yield line
+        p = self.predicate; c = self.column
+        if c is None: yield from (l for l in it if p(l))
+        else: yield from (es for es in it if c < len(es) and p(es[c]))
     def __invert__(self):
         """Negate the condition"""
-        return filt(lambda s: not self.predicate(s), self.column, self.delim)
-class isValue(filt):
-    def __init__(self, value, column:int=0, delim:str=None):
-        """Filters out lines' column that is different from the given value"""
-        super().__init__(lambda l: l == value, column, delim)
-class inside(filt):
-    def __init__(self, values:Set[Any], column:int=0, delim:str=None):
-        """Filters out lines' column that is not in the specified set"""
-        super().__init__(lambda l: l in values, column, delim)
+        return filt(lambda s: not self.predicate(s), self.column)
+def isValue(value, column:int=None):
+    """Filters out lines that is different from the given value"""
+    return filt(lambda l: l == value, column)
+def inSet(values:Set[Any], column:int=None):
+    """Filters out lines that is not in the specified set"""
+    return filt(lambda l: l in values, column)
+def contains(s:str, column:int=None):
+    """Filters out lines that don't contain the specified substring"""
+    return filt(lambda e: s in e, column)
 class nonEmptyStream(BaseCli):
     """Filters out streams that have no rows"""
     def __ror__(self, streams:Iterator[Iterator[Any]]) -> Iterator[Iterator[Any]]:
@@ -50,42 +45,23 @@ class nonEmptyStream(BaseCli):
                     yield firstValue; yield from it
                 yield newGen()
             except StopIteration: pass
-class startswith(filt):
-    def __init__(self, s:str, column:int=0, delim:str=None):
-        """Filters out lines' column that don't start with `s`"""
-        super().__init__(lambda l: l.startswith(s), column, delim)
-class endswith(filt):
-    def __init__(self, s:str, column:int=0, delim:str=None):
-        super().__init__(lambda l: l.endswith(s), column, delim)
-class isNumeric(BaseCli):
-    def __init__(self, column:int=None, delim:str=None):
-        """Filters out a line if that column is not a number"""
-        self.column = column; self.delim = patchDefaultDelim(delim)
-    def __ror__(self, it:Iterator[str]):
-        if self.column is not None:
-            for line in it:
-                try: float(line.split(self.delim)[self.column]); yield line
-                except ValueError: pass
-        else:
-            for line in it:
-                try: float(line); yield line
-                except ValueError: pass
-class inRange(BaseCli):
-    def __init__(self, min:float=None, max:float=None, column:int=None, delim:str=None):
-        """Checks whether a column is in range or not"""
-        self.min = min if min is not None else float("-inf")
-        self.max = max if max is not None else float("inf")
-        self.column = column; self.delim = patchDefaultDelim(delim)
-    def __ror__(self, it:Iterator[str]):
-        if self.column is not None:
-            for line in it:
-                value = float(line.split(self.delim)[self.column])
-                if value >= self.min and value < self.max:
-                    yield line
-        else:
-            if not settings["strict"]: it = it | cli.numeric()
-            for value in it:
-                if value >= self.min and value < self.max: yield value
+def startswith(s:str, column:int=None):
+    """Filters out lines that don't start with `s`"""
+    return filt(lambda l: l.startswith(s), column)
+def endswith(s:str, column:int=None):
+    """Filters out lines that don't end with `s`"""
+    return filt(lambda l: l.endswith(s), column)
+def isNumeric(column:int=None):
+    """Filters out a line if that column is not a number"""
+    def f(v):
+        try: float(v); return True
+        except ValueError: return False
+    return filt(f, column)
+def inRange(min:float=None, max:float=None, column:int=None):
+    """Checks whether a column is in range or not"""
+    if min is None: min = float("-inf")
+    if max is None: max = float("inf")
+    return filt(lambda e: e >= min and e < max, column)
 class head(BaseCli):
     def __init__(self, n:int=10):
         """Only outputs first {n} lines, preferable over row()[:n]"""
@@ -103,19 +79,20 @@ class nhead(BaseCli):
             if i < self.n: continue
             yield line
 class columns(BaseCli):
-    def __init__(self, *columns:Union[int, slice, List[int]], delim:str=None):
-        """Cuts out specific columns, separated by `delim`"""
+    def __init__(self, *columns:Union[int, slice, List[int]]):
+        """Cuts out specific columns, sliceable"""
         if len(columns) == 1 and isinstance(columns[0], (list, tuple, slice)): columns = columns[0]
-        self.columns = columns; self.delim = patchDefaultDelim(delim)
-    def __ror__(self, it:Iterator[str]):
+        self.columns = columns
+    def __ror__(self, it:Table[T]) -> Table[T]:
         columns = self.columns
         if isinstance(columns, int): columns = set([columns])
         if isinstance(columns, list): columns = set(columns)
-        for i, line in enumerate(it):
+        for i, elems in enumerate(it):
             if i == 0 and isinstance(columns, slice):
-                columns = set(range(len(line.split(self.delim)))[columns])
-            yield self.delim.join(elem for i, elem in enumerate(line.split(self.delim)) if i in columns)
-    def __getitem__(self, idx): return cut(idx, delim=self.delim)
+                columns = set(range(len(elems))[columns])
+            if len(columns) == 1: yield elems[columns[0]]
+            else: yield (e for i, e in enumerate(elems) if i in columns)
+    def __getitem__(self, idx): return columns(idx)
 cut = columns
 class rows(BaseCli):
     def __init__(self, *rows):

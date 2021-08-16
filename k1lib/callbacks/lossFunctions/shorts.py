@@ -30,7 +30,7 @@ class LossNLLCross(Callback):
     def __init__(self, nll:bool, integrations:bool):
         """
 :param nll: if True, then use :class:`torch.nn.NLLLoss`, else use :class:`torch.nn.CrossEntropyLoss`
-:param integrations: whether to integreate with
+:param integrations: whether to integrate with
     :class:`~k1lib.callbacks.loss_accuracy.Accuracy` callback"""
         super().__init__(); self.integrations = integrations; self.accuracyCb = None
         self.lossF = torch.nn.NLLLoss() if nll else torch.nn.CrossEntropyLoss()

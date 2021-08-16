@@ -3,10 +3,10 @@
 For operations that feel like the termination
 """
 from collections import defaultdict
-from typing import Iterator
-from k1lib.bioinfo.cli.init import patchDefaultDelim, BaseCli
+from typing import Iterator, Any
+from k1lib.bioinfo.cli.init import BaseCli, Table
 import k1lib.bioinfo.cli as cli
-__all__ = ["stdout", "file", "pretty", "display"]
+__all__ = ["stdout", "file", "pretty", "display", "headOut"]
 class _Stdout(BaseCli):
     """Prints out all lines"""
     def __ror__(self, it:Iterator[str]):
@@ -19,25 +19,27 @@ class file(BaseCli):
         with open(self.fileName, "w") as f:
             for line in it: f.write(f"{line}\n")
 class pretty(BaseCli):
-    def __init__(self, delim:str=None):
-        """Pretty prints a table"""
-        self.delim = patchDefaultDelim(delim)
-    def __ror__(self, it:Iterator[str]):
-        lines = []
+    """Pretty prints a table"""
+    def __ror__(self, it:Table[Any]) -> Iterator[str]:
+        table = []
         widths = defaultdict(lambda: 0)
-        for line in it:
-            lines.append(elems := line.split(self.delim))
-            for i, elem in enumerate(elems):
-                widths[i] = max(len(elem), widths[i])
-        for elems in lines:
+        for row in it:
+            _row = []
+            for i, e in enumerate(row):
+                _row.append(e := f"{e}")
+                widths[i] = max(len(e), widths[i])
+            table.append(_row)
+        for row in table:
             s = ""
-            for w, elem in zip(widths.values(), elems):
-                s += elem.rstrip(" ").ljust(w+3)
+            for w, e in zip(widths.values(), row):
+                s += e.rstrip(" ").ljust(w+3)
             yield s
-class display(BaseCli):
-    def __init__(self, lines:int=10, delim:str=None):
-        """Convenience method for getting head, make it pretty and print it out"""
-        self.lines = lines; self.delim = delim
-    def __ror__(self, it:Iterator[str], lines=10):
-        a = (it if self.lines is None else it | cli.head(self.lines))
-        a | pretty(self.delim) > stdout
+def display(lines:int=10):
+    """Convenience method for displaying a table"""
+    f = pretty() | stdout
+    if lines is None: return f
+    else: return cli.head(lines) | f
+def headOut(lines:int=10):
+    """Convenience method for head() | stdout"""
+    if lines is None: return stdout
+    else: return cli.head(lines) | stdout
