@@ -66,6 +66,11 @@ Module contents
 
    .. automethod:: __getitem__
 
+.. autoclass:: k1lib.Domain
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 .. autoexception:: k1lib.CancelRunException
 .. autoexception:: k1lib.CancelEpochException
 .. autoexception:: k1lib.CancelBatchException
@@ -98,3 +103,4 @@ Module contents
 
    changelogs
    monkeyPatches
+   tutorials

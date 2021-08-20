@@ -2,13 +2,44 @@
 Changelogs
 ==========
 
+`0.1.9 </0.1.9>`_
+-----------------
+
+.. currentmodule:: k1lib.bioinfo.cli
+
+Bioinfo cli:
+
+- Added :class:`k1lib.Domain` class
+- Added ``__invert__`` option for :class:`~filt.rows` and :class:`~filt.columns` by
+  incorporating :class:`k1lib.Domain`
+- Sped up :class:`~filt.rows` significantly
+- Removed cli tool :class:`~filt.every` as :class:`~filt.rows` is good enough
+- Added ``__invert__`` option for :class:`~filt.head`. As a result, removed
+  :class:`~filt.nhead`
+- Added :meth:`~grep.grep.till` mechanism to :class:`~grep.grep` cli tool
+- Added :mod:`~k1lib.bioinfo.cli.gb` cli module to deal with genbank file format
+- Added :meth:`~structural.tableFromList` as alias of :meth:`~structural.listToTable`
+- Renamed :class:`~utils.avg` to :class:`~utils.toAvg`
+- Added :class:`~utils.toSum`
+
+.. currentmodule:: k1lib.callbacks
+
+DL:
+
+- Added Callbacks tab completion to :class:`k1lib.Learner` and :class:`~callbacks.Callbacks`
+- Refactored :class:`lossLandscape.LossLandscape` to :class:`landscape.Landscape`
+  that can be used by any other callbacks, right now it's :class:`~loss_accuracy.Loss`
+  and :class:`~loss_accuracy.Accuracy`
+- Added :meth:`callbacks.Callback.pause` to help with :class:`~loss_accuracy.Accuracy`'s
+  :class:`~landscape.Landscape`
+
 `0.1.8 </0.1.8>`_
 -----------------
 
 - Fixed installation bug where readme.md would be absent, and setup.py won't work
   at all.
 
-  .. currentmodule:: k1lib.bioinfo.cli
+.. currentmodule:: k1lib.bioinfo.cli
 
 Bioinfo cli:
 

@@ -5,7 +5,7 @@ from .hookModule import *
 from .hookParam import *
 from .limits import *
 from .loss_accuracy import *
-from .lossLandscape import *
+from .landscape import *
 from .paramFinder import *
 from .profiler import *
 from .progress import *

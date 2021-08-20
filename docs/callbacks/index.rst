@@ -63,10 +63,10 @@ limits module
    :members:
    :show-inheritance:
 
-lossLandscape module
+landscape module
 ------------------------------------
 
-.. automodule:: k1lib.callbacks.lossLandscape
+.. automodule:: k1lib.callbacks.landscape
    :members:
    :show-inheritance:
 

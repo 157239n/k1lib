@@ -125,7 +125,7 @@ So yeah, you can easily make every checkpoint active/dormant by changing
 a single variable, how convenient. See over :meth:`Callbacks.suspend`
 for more."""
     def __init__(self):
-        self.l = None; self.cbs = None; self.suspended = False
+        self.l = None; self.cbs = None; self.suspended = False; self.paused = False
         self.name = self.__class__.__name__; self.dependsOn:Set[str] = set()
         self.order = 10 # can be modified by subclasses. A smaller order will be executed first
     def suspend(self):
@@ -158,6 +158,18 @@ for more."""
         """Detaches from the parent :class:`Callbacks`"""
         self.cbs.remove(self.name); return self
 Callback.cls = k1lib.Object()
+class PauseContext:
+    def __init__(self, cb): self.cb = cb
+    def __enter__(self): self.oldValue = self.cb.paused; self.cb.paused = True
+    def __exit__(self, *ignored): self.cb.paused = self.oldValue
+@k1lib.patch(Callback)
+def pause(self):
+    """Pauses the callback's main functionality for a while. This is a bit different
+from :meth:`Callbacks.suspend()`, in that :meth:`Callbacks.suspend()` will not call any
+cb's checkpoints at all. However, pausing it will only set an internal variable `paused`,
+but all the checkpoints will be called normally. :class:`Callback` objects can then
+choose to turn off some checkpoints if deemed appropriate."""
+    return PauseContext(self)
 class Timings:
     @property
     def state(self):
@@ -202,6 +214,7 @@ class Callbacks:
         self.cbsDict = OrderedDict(sorted(self.cbsDict.items())); return self
     def append(self, cb:Callback, name:str=None):
         """Adds a callback to the collection."""
+        if cb in self.cbs: cb.l = self.l; cb.cbs = self; return self
         cb.l = self.l; cb.cbs = self; name = name or cb.name
         if name in self.cbsDict:
             i = 0
@@ -245,6 +258,10 @@ Returns True if any of the checkpoints return anything at all"""
     def __setstate__(self, state):
         self.__dict__.update(state)
         for cb in self.cbs: cb.cbs = self
+    def __dir__(self):
+        answer = list(super().__dir__())
+        answer.extend(self.cbsDict.keys())
+        return answer
     def __repr__(self):
         return "Callbacks:\n" + '\n'.join([f"- {cbName}" for cbName in self.cbsDict]) + """\n
 Use...
@@ -261,9 +278,8 @@ Use...
     def withBasics(self):
         """Adds a bunch of very basic Callbacks that's needed for everything. Also
 includes Callbacks that are not necessary, but don't slow things down"""
-        self.withCoreNormal()
+        self.withCoreNormal().withProfiler().withRecorder()
         self.withProgressBar().withLoss().withDontTrainValid()
-        self.withLossLandscape().withProfiler().withRecorder()
         return self.withCancelOnExplosion().withParamFinder()
     def withQOL(self):
         """Adds quality of life Callbacks. Right now it's just Autosave"""

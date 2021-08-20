@@ -72,6 +72,10 @@ See also: :class:`~k1lib.selector.ModuleSelector`"""
         warnings += "Warning: no optimizer yet. Set using `l.opt = ...`\n" if self.opt == None else ""
         if warnings != "": warnings += "\n\n"
         return warnings
+    def __dir__(self):
+        answer = list(super().__dir__())
+        answer.extend(self.cbs.cbsDict.keys())
+        return answer
     def __repr__(self):
         return f"""{self._warnings}l.model:\n{k1lib.tab(k1lib.limitLines(str(self.model)))}
 l.opt:\n{k1lib.tab(k1lib.limitLines(str(self.opt)))}

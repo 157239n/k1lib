@@ -31,6 +31,7 @@ class Loss(Callback):
         self.plot = partial(commonPlot, self)
         self.epoch.plot = partial(commonPlot, self.epoch)
         self._trainLosses = []; self._validLosses = []
+        self._landscape = k1lib.callbacks.Landscape(lambda l: l.loss, "LossLandscape")
     def endLoss(self):
         if self.l.model.training: self._trainLosses.append(self.l.loss)
         else: self._validLosses.append(self.l.loss)
@@ -38,12 +39,18 @@ class Loss(Callback):
         self.train.extend(self._trainLosses); self.epoch.train.append(np.mean(nonEmptyList(self._trainLosses)))
         self.valid.extend(self._validLosses); self.epoch.valid.append(np.mean(nonEmptyList(self._validLosses)))
         self._trainLosses = []; self._validLosses = []
+    @property
+    def Landscape(self):
+        """Gets loss-landscape-plotting Callback"""
+        self.cbs.append(self._landscape); return self._landscape
+    def detach(self): self._landscape.detach(); return super().detach()
     def __repr__(self):
         return f"""{super()._reprHead}, use...
 - cb.train: for all training losses over all epochs and batches (#epochs * #batches)
 - cb.valid: for all validation losses over all epochs and batches (#epochs * #batches)
 - cb.plot(): to plot the 2 above
 - cb.epoch: for average losses of each epochs
+- cb.Landscape: for loss-landscape-plotting Callback
 {super()._reprCan}"""
 @k1lib.patch(Callbacks, docs=Loss)
 def withLoss(self): return self.append(Loss())
@@ -55,13 +62,18 @@ class Accuracy(Callback):
 
 :param accuracyF: accuracy function"""
         super().__init__(); self.order = 20; self.accuracyF = accuracyF
-        self.train = [0]; self.valid = [0]
+        self.train = [0]; self.valid = [0]; self.accuracy = 0;
+        self._landscape = k1lib.callbacks.Landscape(lambda l: l.Accuracy.accuracy, "AccuracyLandscape")
     def startRun(self):
-        self.train = list(self.train); self.valid = list(self.valid)
+        if not self.paused:
+            self.train = list(self.train); self.valid = list(self.valid)
     def endRun(self):
-        self.train = np.array(self.train); self.valid = np.array(self.valid)
+        if not self.paused:
+            self.train = np.array(self.train); self.valid = np.array(self.valid)
     def endLoss(self):
-        (self.train if self.l.model.training else self.valid).append(self.accuracyF(self.l))
+        self.accuracy = self.accuracyF(self.l)
+        if not self.paused:
+            (self.train if self.l.model.training else self.valid).append(self.accuracy)
     def plot(self):
         def plotF(_slice):
             plt.figure(figsize=(10, 3), dpi=100); step = _slice.step or 1
@@ -71,11 +83,17 @@ class Accuracy(Callback):
                 plt.subplot(1, 2, 2); plt.plot(vR.range_[::step], 100*self.valid[vR.slice_][::step]); plt.title(f"Valid accuracy")
             except: pass
         return k1lib.viz.SliceablePlot(plotF)
+    @property
+    def Landscape(self):
+        """Gets accuracy-landscape-plotting Callback"""
+        self._landscape.parent = self
+        self.cbs.append(self._landscape); return self._landscape
     def __repr__(self):
         return f"""{super()._reprHead}{f" (.accuracyF not defined yet)" if self.accuracyF == None else ""}, use...
 - a.train: for train accuracies over all batches
 - a.valid: for train accuracies over all batches
 - a.plot(): to plot the 2 above
+- a.Landscape: for loss-landscape-plotting Callback
 {super()._reprCan}"""
 @k1lib.patch(Callbacks, docs=Accuracy.__init__)
 def withAccuracy(self, accuracyF:Callable[["Learner"], float]):
