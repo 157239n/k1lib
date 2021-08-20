@@ -18,3 +18,4 @@ from . import mgi
 from . import kxml
 from . import kcsv
 from . import sam
+from . import gb

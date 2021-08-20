@@ -10,8 +10,8 @@ import k1lib.bioinfo.cli as cli
 import itertools
 __all__ = ["joinColumns", "transpose", "splitColumns", "joinList", "joinStreams",
            "insertRow", "insertColumn", "insertIdColumn",
-           "toDict", "split", "table", "stitch", "listToTable",
-           "count", "accumulate", "AA_", "infinite"]
+           "toDict", "split", "table", "stitch", "listToTable", "tableFromList",
+           "count", "accumulate", "AA_", "sample", "infinite"]
 class joinColumns(BaseCli):
     def __init__(self, fillValue=None):
         """Join multiple columns and loop through all rows. Aka transpose.
@@ -64,15 +64,15 @@ Example::
 def insertRow(*row:List[T]):
     """Inserts a row right before every other rows. See also: :meth:`joinList`."""
     return joinList(row)
-def insertColumn(*column, begin=True):
+def insertColumn(*column, begin=True, fillValue=""):
     """Inserts a column at beginning or end.
 Example::
 
     # returns [['a', 1, 2], ['b', 3, 4]]
     [[1, 2], [3, 4]] | insertColumn("a", "b") | dereference()
 """
-    return transpose() | joinList(column, begin) | transpose()
-def insertIdColumn(table=False, begin=True):
+    return transpose(fillValue) | joinList(column, begin) | transpose(fillValue)
+def insertIdColumn(table=False, begin=True, fillValue=""):
     """Inserts an id column at the beginning (or end).
 
 :param table: if False, then insert column to an Iterator[str], else treat
@@ -84,7 +84,7 @@ Example::
     [["a", 2], ["b", 4]] | insertIdColumn(True) | dereference()
     # returns [[0, 'a'], [1, 'b']]
     "ab" | insertIdColumn()"""
-    f = (cli.toRange() & transpose()) | joinList(begin=begin) | transpose()
+    f = (cli.toRange() & transpose(fillValue)) | joinList(begin=begin) | transpose(fillValue)
     if table: return f
     else: return cli.wrapList() | transpose() | f
 class toDict(BaseCli):
@@ -134,10 +134,11 @@ See also: :class:`k1lib.bioinfo.cli.output.pretty`"""
         self.delim = patchDefaultDelim(delim)
     def __ror__(self, it:Table[str]) -> Iterator[str]:
         d = self.delim
-        for row in it: yield d.join(row)
+        for row in it: yield d.join(list(row))
 def listToTable():
     """Turns Iterator[T] into Table[T]"""
     return cli.wrapList() | transpose()
+tableFromList = listToTable
 class count(BaseCli):
     """Finds unique elements and returns a table with [frequency, value, percent]
 columns. Example::
@@ -201,6 +202,7 @@ first.
 :param wraps: if True, then the first example will return [[5, [1, 6, 3, 7]]]
     instead, so that A has the same signature as Ā
 """
+        if len(idxs) == 0: raise AttributeError("Please enter some column indexes. If you wish to analyze all, put in `None`")
         self.idxs = idxs; self.wraps = wraps
     def __ror__(self, it:List[Any]) -> List[List[List[Any]]]:
         idxs = self.idxs; it = list(it)
@@ -209,6 +211,13 @@ first.
             return [it[idx], [v for i, v in enumerate(it) if i != idx]]
         if not self.wraps and len(idxs) == 1: return gen(idxs[0])
         return [gen(idx) for idx in idxs]
+class sample(BaseCli):
+    """Returns (firstRow, iterator). This sort of peaks at the first row, to
+potentially gain some insights about the internal formats."""
+    def __ror__(self, it):
+        if (row := next(it, sentinel := object())) == sentinel: return None, []
+        def gen(): yield row; yield from it
+        return row, gen()
 class infinite(BaseCli):
     """Yields an infinite amount of the passed in object. Example:
 

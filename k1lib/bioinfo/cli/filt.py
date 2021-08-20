@@ -5,11 +5,12 @@ This is for functions that cuts out specific parts of the table
 from typing import Callable, Union, List, overload, Iterator, Any, Set
 from k1lib.bioinfo.cli.init import BaseCli, settings, Table, T
 import k1lib.bioinfo.cli as cli
+import k1lib
+from collections import deque
 __all__ = ["filt", "isValue", "inSet", "contains", "nonEmptyStream",
            "startswith", "endswith",
            "isNumeric", "inRange",
-           "head", "nhead",
-           "columns", "cut", "rows", "every", "intersection"]
+           "head", "columns", "cut", "rows", "intersection"]
 class filt(BaseCli):
     def __init__(self, predicate:Callable[[str], bool], column:int=None):
         """Filters out lines.
@@ -21,7 +22,10 @@ class filt(BaseCli):
     def __ror__(self, it:Iterator[str]):
         p = self.predicate; c = self.column
         if c is None: yield from (l for l in it if p(l))
-        else: yield from (es for es in it if c < len(es) and p(es[c]))
+        else:
+            for es in it:
+                es = list(es)
+                if c < len(es) and p(es[c]): yield es
     def __invert__(self):
         """Negate the condition"""
         return filt(lambda s: not self.predicate(s), self.column)
@@ -39,10 +43,8 @@ class nonEmptyStream(BaseCli):
     def __ror__(self, streams:Iterator[Iterator[Any]]) -> Iterator[Iterator[Any]]:
         for stream in streams:
             try:
-                it = iter(stream)
-                firstValue = next(it)
-                def newGen():
-                    yield firstValue; yield from it
+                it = iter(stream); firstValue = next(it)
+                def newGen(): yield firstValue; yield from it
                 yield newGen()
             except StopIteration: pass
 def startswith(s:str, column:int=None):
@@ -64,55 +66,126 @@ def inRange(min:float=None, max:float=None, column:int=None):
     return filt(lambda e: e >= min and e < max, column)
 class head(BaseCli):
     def __init__(self, n:int=10):
-        """Only outputs first {n} lines, preferable over row()[:n]"""
-        self.n = n
+        """Only outputs first ``n`` lines. You can also negate it (like
+``~head(5)``), which then only outputs after first ``n`` lines. Examples::
+
+    "abcde" | head(2) | dereference() # returns ["a", "b"]
+    "abcde" | ~head(2) | dereference() # returns ["c", "d", "e"]
+    "0123456" | head(-3) | dereference() # returns ['0', '1', '2', '3']
+    "0123456" | ~head(-3) | dereference() # returns ['4', '5', '6']"""
+        self.n = n; self.inverted = False
+    def __ror__(self, it:Iterator[T]) -> Iterator[T]:
+        n = self.n
+        if n >= 0:
+            if not self.inverted:
+                for i, line in enumerate(it):
+                    if i >= n: return
+                    yield line
+            else:
+                for i, line in enumerate(it):
+                    if i < n: continue
+                    yield line
+        else:
+            n = abs(n); queue = deque()
+            if not self.inverted: # head to -3
+                for line in it:
+                    queue.append(line)
+                    if len(queue) > n: yield queue.popleft()
+            else: # -3 to end
+                for line in it:
+                    queue.append(line)
+                    if len(queue) > n: queue.popleft()
+                yield from queue
+    def __invert__(self): self.inverted = not self.inverted; return self
+class rowsList(BaseCli):
+    """Space-expensive implementation for :class:`rows`, without a lot of
+flexibility. Just used for slices with negative start/stop really. Don't use
+this directly, use :class:`rows` instead"""
+    def __init__(self, _slice):
+        self._slice = _slice
+        self.inverted = False
     def __ror__(self, it:Iterator[str]):
-        for i, line in enumerate(it):
-            if i >= self.n: break
-            yield line
-class nhead(BaseCli):
-    def __init__(self, n:int=1):
-        """Only outputs after first {n} lines, preferable over row()[n:]"""
-        self.n = n
-    def __ror__(self, it:Iterator[str]):
-        for i, line in enumerate(it):
-            if i < self.n: continue
-            yield line
-class columns(BaseCli):
-    def __init__(self, *columns:Union[int, slice, List[int]]):
-        """Cuts out specific columns, sliceable"""
-        if len(columns) == 1 and isinstance(columns[0], (list, tuple, slice)): columns = columns[0]
-        self.columns = columns
-    def __ror__(self, it:Table[T]) -> Table[T]:
-        columns = self.columns
-        if isinstance(columns, int): columns = set([columns])
-        if isinstance(columns, list): columns = set(columns)
-        for i, elems in enumerate(it):
-            if i == 0 and isinstance(columns, slice):
-                columns = set(range(len(elems))[columns])
-            if len(columns) == 1: yield elems[columns[0]]
-            else: yield (e for i, e in enumerate(elems) if i in columns)
-    def __getitem__(self, idx): return columns(idx)
-cut = columns
+        it = list(it); full = range(len(it))
+        rows = full[self._slice]
+        if self.inverted: rows = [e for e in full if e not in rows]
+        for row in rows: yield it[row]
+    def __invert__(self): self.inverted = True; return self
 class rows(BaseCli):
-    def __init__(self, *rows):
-        """Cuts out specific rows. Can do `rows()[5:10]` to get rows 5 to 10"""
-        if len(rows) == 1 and isinstance(rows[0], (list, tuple)): rows = rows[0]
-        self.rows = rows
+    def __init__(self, *rows:List[int]):
+        """Cuts out specific rows. Space complexity O(1) as a list is not
+constructed (unless you're using some really weird slices).
+
+:param rows: ints for the row indices
+
+Example::
+
+    "0123456789" | rows(2) | dereference() # returns ["2"]
+    "0123456789" | rows(5, 8) | dereference() # returns ["5", "8"]
+    "0123456789" | rows()[2:5] | dereference() # returns ["2", "3", "4"]
+    "0123456789" | ~rows()[2:5] | dereference() # returns ["0", "1", "5", "6", "7", "8", "9"]
+    "0123456789" | ~rows()[:7:2] | dereference() # returns ['1', '3', '5', '7', '8', '9']
+    "0123456789" | rows()[:-4] | dereference() # returns ['0', '1', '2', '3', '4', '5']
+    "0123456789" | ~rows()[:-4] | dereference() # returns ['6', '7', '8', '9']"""
+        if len(rows) == 1 and isinstance(rows[0], slice):
+            s = rows[0]
+            start = s.start if s.start is not None else float("-inf")
+            stop = s.stop if s.stop is not None else float("inf")
+            self.domain = k1lib.Domain([start, stop])
+            self.every = s.step or 1 # only used for slices really
+        else:
+            self.domain = k1lib.Domain.fromInts(*rows)
+            self.every = 1
+        self.inverted = False
+    def _every(self, every): self.every = every; return self
     def __getitem__(self, _slice):
-        answer = rows(); answer.rows = _slice; return answer
+        s1, s2 = _slice.start, _slice.stop
+        a = (_slice.start or 0) < 0; b = (_slice.stop or 0) < 0
+        c = (_slice.step or 1)
+        if a or b: # at least 1 is negative
+            if c == 1:
+                if b:
+                    if s1 is None: return head(s2) # [None, -3]
+                    else: return ~head(s1) | head(s2) # [5, -3]
+                if a and s2 is None: return ~head(s1) # [-3, None]
+                # else case is [-10, 6], which is weird, so just stick to the long one
+            return rowsList(_slice) # worst case scenario
+        answer = rows(_slice); answer.inverted = self.inverted; return answer
+    def __invert__(self): self.inverted = not self.inverted; return self
     def __ror__(self, it:Iterator[str]):
-        l = list(it)
-        if isinstance(self.rows, slice):
-            self.rows = range(len(l))[self.rows]
-        for row in self.rows: yield l[row]
-class every(BaseCli):
-    def __init__(self, length:int, offset:int=0):
-        """Get lines every `length`, starting at a specific `offset`"""
-        self.length = length; self.offset = offset
-    def __ror__(self, it:Iterator[str]):
-        for i, line in enumerate(it):
-            if (i - self.offset) % self.length == 0: yield line
+        true, false = (False, True) if self.inverted else (True, False)
+        def gates():
+            gate = self.domain.intIter(self.every); x = 0
+            for i in gate:
+                while x < i: yield false; x += 1
+                yield true; x += 1
+            while True: yield false
+        return (row for gate, row in zip(gates(), it) if gate)
+class columns(BaseCli):
+    def __init__(self, *columns:List[int]):
+        """Cuts out specific columns, sliceable. Examples::
+
+    ["0123456789"] | cut(5, 8) | dereference() # returns [['5', '8']]
+    ["0123456789"] | cut(2) | dereference() # returns ['2']
+    ["0123456789"] | cut(5, 8) | dereference() # returns [['5', '8']]
+    ["0123456789"] | ~cut()[:7:2] | dereference() # returns [['1', '3', '5', '7', '8', '9']]
+
+If you're selecting only 1 column, then Iterator[T] will be returned, not
+Table[T]."""
+        if len(columns) == 1 and isinstance(columns[0], slice): columns = columns[0]
+        self.columns = columns; self.inverted = False
+    def __ror__(self, it:Table[T]) -> Table[T]:
+        columns = self.columns; it = iter(it); row = None
+        row, it = it | cli.sample()
+        if row is None: return iter(range(0))
+        row = list(row); rs = range(len(row))
+        if isinstance(columns, slice): columns = set(rs[columns])
+        if self.inverted: columns = set(e for e in rs if e not in columns)
+        if len(columns) == 1: c = list(columns)[0]; return (row[c] for row in it)
+        else: return ((e for i, e in enumerate(row) if i in columns) for row in it)
+    def __getitem__(self, idx):
+        answer = columns(idx); answer.inverted = self.inverted; return answer
+    def __invert__(self): self.inverted = not self.inverted; return self
+cut = columns
 class intersection(BaseCli):
     """Returns the intersection of multiple streams. Example::
 

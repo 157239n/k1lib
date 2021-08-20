@@ -9,7 +9,7 @@ __all__ = ["size", "shape", "item", "identity",
            "toStr", "to1Str", "toNumpy",
            "toList", "wrapList", "toSet", "toIter", "toRange",
            "equals", "reverse", "ignore",
-           "avg", "headerIdx", "dereference"]
+           "toSum", "toAvg", "headerIdx", "dereference"]
 class size(BaseCli):
     def __init__(self, idx=None):
         """Returns number of rows and columns in the input.
@@ -27,7 +27,7 @@ class size(BaseCli):
         columns = -1; rows = 0
         for row in it:
             if columns == -1:
-                try: columns = len(row)
+                try: columns = len(list(row))
                 except AttributeError: columns = None
             rows += 1
         if columns == -1: columns = None
@@ -100,12 +100,21 @@ class ignore(BaseCli):
     """Just executes everything, ignoring the output"""
     def __ror__(self, it:Iterator[Any]):
         for _ in it: pass
-class avg(BaseCli):
+class toSum(BaseCli):
+    """Calculates the sum of list of numbers"""
+    def __ror__(self, it:Iterator[float]):
+        s = 0
+        for v in it: s += v
+        return s
+class toAvg(BaseCli):
     """Calculates average of list of numbers"""
     def __ror__(self, it:Iterator[float]):
-        it = list(it)
-        if not settings["strict"] and len(it) == 0: return float("nan")
-        return sum(it) / len(it)
+        s = 0; i = -1
+        for i, v in enumerate(it):
+            s += v
+        i += 1
+        if not settings["strict"] and i == 0: return float("nan")
+        return s / i
 def headerIdx():
     """Cuts out first line, put an index column next to it, and prints it
 out. Useful when you want to know what your column's index is to cut it out.
@@ -113,7 +122,7 @@ Example::
 
     # returns [[0, 'a'], [1, 'b'], [2, 'c']]
     ["abc"] | headerIdx() | dereference()"""
-    return item() | wrapList() | cli.transpose() | cli.insertIdColumn()
+    return item() | wrapList() | cli.transpose() | cli.insertIdColumn(True)
 class dereference(BaseCli):
     """Recursively converts any iterator into a list. Only :class:`str`,
 :class:`numbers.Number` are not converted. Example:

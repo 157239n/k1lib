@@ -12,28 +12,36 @@ class grep(BaseCli):
 
     # returns ['c', 'd', '2', 'd']
     "abcde12d34" | grep("d", 1) | dereference()
+    # returns ['d', 'e', 'd', '3', '4']
+    "abcde12d34" | grep("d", 0, 3).till("e") | dereference()
 
 :param pattern: regex pattern to search for in a line
 :param before: lines before the hit. Outputs independent lines
 :param after: lines after the hit. Outputs independent lines"""
         self.pattern = re.compile(pattern)
         self.before = before; self.after = after
+        self.tillPattern = None
+    def till(self, pattern:str):
+        """Greps until some other pattern appear. Before lines will be honored,
+but after lines will be set to inf. Inclusive."""
+        self.tillPattern = re.compile(pattern); self.after = 1e9; return self
     def __ror__(self, it:Iterator[str]) -> Iterator[str]:
         self.sectionIdx = 0
-        queue = deque(); self.counter = 0 # remaining lines after to display
+        queue = deque(); counter = 0 # remaining lines after to display
         for line in it:
-            # saves recent past lines
-            queue.append(line)
+            queue.append(line) # saves recent past lines
             if len(queue) > self.before + 1: queue.popleft()
-            a = self.pattern.search(line) is not None
-            b = self.counter > 0
+            a = self.pattern.search(line) is not None # new hit!
+            b = counter > 0 # still got sth to print out
+            c = False if self.tillPattern is None else self.tillPattern.search(line) # new hit of "till"
             if a or b: # if detected, or still printing the "after" section
                 if a:
-                    self.sectionIdx += 1
-                    self.counter = self.after + 1 # resets "after" section
-                for l in queue: yield l # prints current line and everything before
-                queue.clear()
-                self.counter -= 1
+                    self.sectionIdx += 1 # notifies to other utils that a new section has been created
+                    counter = self.after + 1 # resets "after" section
+                elif c:
+                    self.sectionIdx += 1; counter = 0
+                # prints current line and everything before
+                yield from queue; queue.clear(); counter -= 1
 class grepToTable(BaseCli):
     def __init__(self, pattern:str, before:int=0, after:int=0):
         """Searches for a pattern. If found, then put all the before and after

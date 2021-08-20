@@ -86,6 +86,14 @@ filt module
    :undoc-members:
    :show-inheritance:
 
+gb module
+-----------------------------
+
+.. automodule:: k1lib.bioinfo.cli.gb
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 grep module
 -----------------------------
 

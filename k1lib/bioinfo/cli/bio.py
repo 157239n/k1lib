@@ -5,9 +5,9 @@ This is for functions that are actually biology-related
 from k1lib.bioinfo.cli.init import settings, BaseCli
 import k1lib.bioinfo.cli as cli
 import os
-from typing import Iterator
+from typing import Iterator, Union
 __all__ = ["go",
-           "transcribe", "translate", "medAa", "longAa"]
+           "transcribe", "complement", "translate", "medAa", "longAa"]
 def go(term:int):
     """Looks up a GO term"""
     if settings["oboFile"] is None and not os.path.exists("go.obo"):
@@ -31,10 +31,17 @@ You want to download this automatically? (y/n) """)
         return Repr()
 class transcribe(BaseCli):
     """Transcribes (DNA -> RNA) incoming rows"""
-    def __ror__(self, it:Iterator[str]):
+    def __ror__(self, it:Union[Iterator[str], str]):
         if isinstance(it, str): it = [it]
         for line in it:
             yield line.lower().replace("t", "u")
+class complement(BaseCli):
+    def __ror__(self, it:Union[Iterator[str], str]):
+        if isinstance(it, str): it = [it]
+        for line in it:
+            line = line.lower().replace("a", "0").replace("t", "1")\
+                .replace("u", "1").replace("c", "2").replace("g", "3")
+            yield line.replace("0", "t").replace("1", "a").replace("2", "g").replace("3", "c")
 ntAa = {"UUU": "F", "UUC": "F", "UUA": "L", "UUG": "L",
         "UCU": "S", "UCC": "S", "UCA": "S", "UCG": "S",
         "UAU": "Y", "UAC": "Y", "UAA": "*", "UAG": "*",
