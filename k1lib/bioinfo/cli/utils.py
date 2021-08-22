@@ -9,7 +9,7 @@ __all__ = ["size", "shape", "item", "identity",
            "toStr", "to1Str", "toNumpy",
            "toList", "wrapList", "toSet", "toIter", "toRange",
            "equals", "reverse", "ignore",
-           "toSum", "toAvg", "headerIdx", "dereference"]
+           "toSum", "toAvg", "lengths", "headerIdx", "dereference"]
 class size(BaseCli):
     def __init__(self, idx=None):
         """Returns number of rows and columns in the input.
@@ -115,6 +115,10 @@ class toAvg(BaseCli):
         i += 1
         if not settings["strict"] and i == 0: return float("nan")
         return s / i
+class lengths(BaseCli):
+    """Returns the lengths of each row."""
+    def __ror__(self, it:Iterator[List[Any]]) -> Iterator[int]:
+        for e in it: yield len(e)
 def headerIdx():
     """Cuts out first line, put an index column next to it, and prints it
 out. Useful when you want to know what your column's index is to cut it out.
@@ -133,4 +137,4 @@ class dereference(BaseCli):
     iter(range(5)) | deference() # returns [0, 1, 2, 3, 4]
 """
     def __ror__(self, it:Iterator[Any]) -> List[Any]:
-        return [(e if isinstance(e, (numbers.Number, str)) else (e | self)) for e in it]
+        return [(e if e is None or isinstance(e, (numbers.Number, str)) else (e | self)) for e in it]

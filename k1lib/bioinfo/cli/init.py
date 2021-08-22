@@ -15,6 +15,7 @@ def patchDefaultIndent(s:str):
     return settings["defaultIndent"] if s is None else s
 from typing import List, Iterator, Any, NewType, TypeVar
 import itertools
+__all__ = ["serial", "oneToMany", "manyToMany", "manyToManySpecific"]
 class _MetaType(type):
     def __getitem__(self, generic):
         d = {"__args__": generic, "_n": self._n, "__doc__": self.__doc__}

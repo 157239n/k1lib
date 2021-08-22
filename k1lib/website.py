@@ -3,7 +3,7 @@ import k1lib as _k1lib, time as _time
 def beepOnAvailable(url:str, timeout=5, **kwargs):
     """Tries to connect with a url repeatedly, and if successful, plays
 a beep sound"""
-    if (requests := _k1lib.imports.OptionalImports("requests")) is None:
+    if (requests := _k1lib.imports.optionalImports("requests")) is None:
         raise ImportError("Module requests not found")
     try:
         while True:

@@ -7,11 +7,12 @@ do. I put it here so that I can do::
 and everything will be in place"""
 import torch; from torch import nn, optim
 import torch.nn.functional as F, torch.utils.data as data
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt, matplotlib
 import numpy as np, dill as pickle
 import k1lib; import k1lib.schedule as schedule
-import math, os, time, sys, random, logging, traceback, re, typing, glob
+import math, os, time, sys, random, logging, traceback, re, typing, glob, warnings
 from functools import partial
+from typing import List, Tuple, Callable, Union, Iterator
 k1lib.dontWrap()
 class _OptionalImports:
     def __init__(self):
@@ -20,20 +21,24 @@ class _OptionalImports:
 opt("numpy"): try to import module "numpy". Returns None if can't import
 "numpy" in opt: check whether a module is loaded"""
         self.modules = dict()
-    def __call__(self, module:str):
+    def __call__(self, module:str, force=False):
         """Tries to import the module. If successful, return the module,
-else return None"""
-        if module in self.modules: return self.modules[module]
-        try: self.modules[module] = __import__(module)
-        except: self.modules[module] = None
-        return self.modules[module]
+else return None
+
+:param force: If True, then errors out if can't import module"""
+        if module in self.modules: m = self.modules[module]
+        else:
+            try: m = __import__(module)
+            except: m = None
+        if force and m is None: raise ImportError(f"Can't import module `{module}`. Please install it first.")
+        self.modules[module] = m; return m
     def __contains__(self, module:str):
         """Whether someone already tried to import a module."""
         return module in self.modules
     def __repr__(self):
         mods = '\n'.join(f"- {e}" for e in self.modules.keys())
         return self.__init__.__doc__ + f"""\n\nLoaded modules:\n{mods}"""
-OptionalImports = _OptionalImports()
-datasets = OptionalImports("torchvision.datasets")
-transforms = OptionalImports("torchvision.transforms")
-IPython = OptionalImports("IPython")
+optionalImports = _OptionalImports()
+datasets = optionalImports("torchvision.datasets")
+transforms = optionalImports("torchvision.transforms")
+IPython = optionalImports("IPython")

@@ -11,7 +11,7 @@ import itertools
 __all__ = ["joinColumns", "transpose", "splitColumns", "joinList", "joinStreams",
            "insertRow", "insertColumn", "insertIdColumn",
            "toDict", "split", "table", "stitch", "listToTable", "tableFromList",
-           "count", "accumulate", "AA_", "sample", "infinite"]
+           "count", "permute", "accumulate", "AA_", "sample", "infinite"]
 class joinColumns(BaseCli):
     def __init__(self, fillValue=None):
         """Join multiple columns and loop through all rows. Aka transpose.
@@ -149,6 +149,12 @@ columns. Example::
     def __ror__(self, it:Iterator[str]):
         c = Counter(it); s = sum(c.values())
         for k, v in c.items(): yield [v, k, f"{round(100*v/s)}%"]
+class permute(BaseCli):
+    def __init__(self, *permutations:List[int]):
+        """Permutes the columns. Acts kinda like :meth:`torch.Tensor.permute`"""
+        self.permutations = permutations
+    def __ror__(self, it:Iterator[str]):
+        for row in it: yield (row[i] for i in self.permutations)
 class accumulate(BaseCli):
     def __init__(self, columnIdx:int=0, avg=False):
         """Groups lines that have the same row[columnIdx], and

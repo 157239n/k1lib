@@ -19,17 +19,11 @@ from k1lib.imports import *
 from k1lib.bioinfo.cli import *
 ```
 
-## Repo?
+## Some details
 
-It's at https://github.com/157239n/k1lib/
-
-## Docs?
-
-2 places:
-
-- Official docs: [k1lib.github.io](https://k1lib.github.io)
-- Example notebooks: https://github.com/157239n/k1lib/blob/master/docs/tutorials/
+Repo: https://github.com/157239n/k1lib/
+Docs: https://k1lib.github.io
 
 ## Contacts?
 
-If you found bugs, open a new issue on the repo itself. If you want to have a chat, then email 157239q@gmail.com
+If you found bugs, open a new issue on the repo itself. If you want to have a chat, then email me at 157239q@gmail.com

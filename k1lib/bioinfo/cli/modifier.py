@@ -2,9 +2,9 @@
 """
 This is for quick modifiers, think of them as changing formats
 """
-__all__ = ["apply", "lstrip", "rstrip", "strip",
+__all__ = ["apply", "applySingle", "lstrip", "rstrip", "strip",
            "upper", "lower", "replace", "remove", "toFloat", "toInt", "sort"]
-from typing import Callable, Iterator
+from typing import Callable, Iterator, Any
 from k1lib.bioinfo.cli.init import patchDefaultDelim, BaseCli, settings
 import k1lib.bioinfo.cli as cli
 class apply(BaseCli):
@@ -18,6 +18,12 @@ class apply(BaseCli):
         if c is None: return (f(line) for line in it)
         else: return (((e if i != c else f(e)) 
                        for i, e in enumerate(row)) for row in it)
+class applySingle(BaseCli):
+    def __init__(self, f:Callable[[Any], Any]):
+        """Like :class:`apply`, but much simpler, just operating on the entire input
+object, essentially"""
+        self.f = f
+    def __ror__(self, it:Any) -> Any: return self.f(it)
 def lstrip(column:int=None, char:str=None):
     """Strips left of every line"""
     return apply(lambda e: e.lstrip(char), column)

@@ -2,6 +2,38 @@
 Changelogs
 ==========
 
+`0.1.10 </0.1.10>`_
+-------------------
+
+Background stuff:
+
+- Added notebook regression tests
+- Added tutorials automated building tool
+- Added :class:`k1lib.ignoreWarnings`
+- Tutorials part moved to official docs (rather than .md files on github)
+- Added `covid tutorial <tutorials.html>`_
+
+.. currentmodule:: k1lib.bioinfo.cli
+
+Bioinfo cli:
+
+- Reintroduced :class:`~structural.permute`, as :class:`~filt.rows` is inadequate
+- Added :class:`~utils.lengths`, :class:`~modifier.applySingle`
+- Exposed :class:`~init.serial`, :class:`~init.oneToMany`, :class:`~init.manyToMany`,
+  and :class:`~init.manyToManySpecific`
+
+.. currentmodule:: k1lib.callbacks
+
+DL:
+
+- Added :class:`confusionMatrix.ConfusionMatrix` and :meth:`k1lib.viz.confusionMatrix`
+- Added :meth:`callbacks.Callbacks.checkpointGraph`
+- Added :meth:`torch.nn.modules.Module.paramsContext`
+- Modified :class:`k1lib.Object` to allow setting ``getdoc`` field
+- Added :meth:`k1lib.viz.Carousel.saveBytes`, :meth:`k1lib.viz.Carousel.saveFile`,
+  :meth:`k1lib.viz.Carousel.saveGraphviz`, and handle different image formats much
+  better now
+
 `0.1.9 </0.1.9>`_
 -----------------
 

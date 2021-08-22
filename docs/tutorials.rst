@@ -4,5 +4,6 @@ Tutorials
 
 Not a lot at the moment:
 
-- `basics <https://github.com/157239n/k1lib/blob/master/docs/tutorials/basics/basics.md>`_: Go over the basics of the main DL framework
-- `cli <https://github.com/157239n/k1lib/blob/master/docs/tutorials/cli/cli.md>`_: Go over the :mod:`k1lib.bioinfo.cli` module
+- `basics <tutorials/basics.html>`_: Go over the basics of the main DL framework
+- `cli <tutorials/cli.html>`_: Go over the :mod:`k1lib.bioinfo.cli` module
+- `covid <tutorials/covid.html>`_: Analyze covid's genome using the :mod:`k1lib.bioinfo.cli` module

@@ -6,11 +6,13 @@ from functools import partial
 __all__ = ["ParamFinder"]
 @k1lib.patch(Callback.cls)
 class ParamFinder(Callback):
-    """Automatically finds out the right value for
-    a specific parameter"""
-    def __init__(self):
+    " "
+    def __init__(self, tolerance:float=10):
+        """Automatically finds out the right value for a specific parameter.
+
+:param tolerance: how much higher should the loss be to be considered a failure?"""
         super().__init__(); self.order = 23
-        self.suspended = True; self.losses = []
+        self.suspended = True; self.losses = []; self.tolerance = tolerance
     @property
     def samples(self): return self._samples
     @samples.setter
@@ -38,7 +40,7 @@ this value exists"""
         if lossAvgs < self.bestLoss:
             self.best = self.value
             self.bestLoss = lossAvgs
-        if lossAvgs > self.bestLoss * 10: raise k1lib.CancelRunException("Loss increases significantly")
+        if lossAvgs > self.bestLoss * self.tolerance: raise k1lib.CancelRunException("Loss increases significantly")
     def __repr__(self):
         return f"""{self._reprHead}, use...
 - pf.run(): to start scanning for good params and automatically plots
@@ -53,10 +55,8 @@ def run(self, param:str="lr", samples:int=300) -> float:
 :return: the suggested param value"""
     self.param = param; self.samples = samples
     self.idx = 0; self.losses = []; self.best = None; self.bestLoss = float("inf")
-    with self.cbs.suspendEval(less=["ProgressBar"]):
-        self.suspended = False; ogParams = self.l.model.exportParams()
-        self.l.run(int(1e3))
-        self.suspended = True; self.l.model.importParams(ogParams)
+    with self.cbs.suspendEval(less=["ProgressBar"]), self.l.model.paramsContext():
+        self.suspended = False; self.l.run(int(1e3)); self.suspended = True
     return self.suggestedValue
 def plotF(self, _slice):
     r = k1lib.Range(len(self.losses)).fromUnit(_slice)
@@ -69,9 +69,9 @@ if hasn't, returns a :class:`k1lib.viz.SliceablePlot`.
 
 :param args: Arguments to pass through to :meth:`run` if a run is
     required. Just for convenience sake"""
-    if len(self.losses) == 0: return self.run(*args, **kwargs)
-    else:
-        print(f"Suggested param: {self.suggestedValue}"); plt.figure(dpi=120)
-        return k1lib.viz.SliceablePlot(partial(plotF, self), docs="\n\nReminder: slice range here is actually [0, 1], because it's kinda hard to slice the normal way")
+    if len(self.losses) == 0: self.run(*args, **kwargs)
+    print(f"Suggested param: {self.suggestedValue}"); plt.figure(dpi=120)
+    return k1lib.viz.SliceablePlot(partial(plotF, self), docs="\n\nReminder: slice range here is actually [0, 1], because it's kinda hard to slice the normal way")
 @k1lib.patch(Callbacks, docs=ParamFinder)
-def withParamFinder(self): return self.append(ParamFinder())
+def withParamFinder(self, tolerance:float=10, name:str=None):
+    return self.append(ParamFinder(tolerance), name)

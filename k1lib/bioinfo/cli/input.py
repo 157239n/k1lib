@@ -62,7 +62,7 @@ class cmd(BaseCli):
     def __ror__(self, it:Union[Iterator[str], None]) -> Iterator[str]:
         """Pipes in lines of input, or if there's nothing to
 pass, then pass None"""
-        out, err = executeCmd(self.cmd) if it is None else executeCmd(self.cmd, it | cli.toStr(True, "\n") | cli.item())
+        out, err = executeCmd(self.cmd) if it is None else executeCmd(self.cmd, it | cli.to1Str("\n") | cli.item())
         if err: warnings.warn(f"Error encountered:\n\n{err.decode()}")
         self._err = err; return out
     def __repr__(self):

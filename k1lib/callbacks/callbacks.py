@@ -165,17 +165,25 @@ class PauseContext:
 @k1lib.patch(Callback)
 def pause(self):
     """Pauses the callback's main functionality for a while. This is a bit different
-from :meth:`Callbacks.suspend()`, in that :meth:`Callbacks.suspend()` will not call any
+from :meth:`Callbacks.suspend`, in that :meth:`Callbacks.suspend` will not call any
 cb's checkpoints at all. However, pausing it will only set an internal variable `paused`,
 but all the checkpoints will be called normally. :class:`Callback` objects can then
-choose to turn off some checkpoints if deemed appropriate."""
+choose to turn off some checkpoints if deemed appropriate.
+
+This is kinda a niche functionality, and very few built-in :class:`Callback` s actually
+use this."""
     return PauseContext(self)
 class Timings:
+    """List of checkpoint timings. Not intended to be instantiated by the end user.
+Used within :class:`~k1lib.callbacks.callbacks.Callbacks`, accessible with ``cbs.timings``
+to record time taken to execute a single checkpoint. This is useful for profiling
+stuff."""
     @property
     def state(self):
         answer = dict(self.__dict__); answer.pop("getdoc", None); return answer
     @property
-    def checkpoints(self):
+    def checkpoints(self) -> List[str]:
+        """List of all checkpoints encountered"""
         return [cp for cp in self.state if k1lib.isNumeric(self[cp])]
     def __getattr__(self, attr):
         if attr.startswith("_"): raise AttributeError()
@@ -183,6 +191,7 @@ class Timings:
     def __getitem__(self, idx): return getattr(self, idx)
     def __setitem__(self, idx, value): setattr(self, idx, value)
     def plot(self):
+        """Plot all checkpoints' execution times"""
         plt.figure(dpi=100); checkpoints = self.checkpoints
         timings = np.array([self[cp] for cp in checkpoints])
         maxTiming = timings.max()
@@ -193,6 +202,9 @@ class Timings:
         elif maxTiming >= 1e-6 and maxTiming < 1e-3:
             plt.bar(checkpoints, timings*1e6); plt.ylabel("Time (us)")
         plt.xticks(rotation="vertical"); plt.show()
+    def clear(self):
+        """Clears all timing data"""
+        for cp in self.checkpoints: self[cp] = 0
     def __repr__(self):
         cps = '\n'.join([f'- {cp}: {self[cp]}' for cp in self.checkpoints])
         return f"""Timings object. Checkpoints:\n{cps}\n
@@ -201,7 +213,11 @@ Can...
 - t.plot(): to plot all checkpoints"""
 class Callbacks:
     def __init__(self):
-        self._l: k1lib.Learner = None; self.cbsDict = {}; self.timings = Timings()
+        self._l: k1lib.Learner = None; self.cbsDict = {}; self._timings = Timings()
+    @property
+    def timings(self) -> Timings:
+        """Returns :class:`~k1lib.callbacks.callbacks.Timings` object"""
+        return self._timings
     @property
     def l(self) -> "k1lib.Learner": return self._l
     @l.setter
@@ -221,8 +237,7 @@ class Callbacks:
             while f"{name}{i}" in self.cbsDict: i += 1
             name = f"{name}{i}"
         cb.name = name; self.cbsDict[name] = cb; self._sort()
-        getattr(self, "_appendExtraProcessing", lambda cb: None)(cb)
-        cb("appended"); return self
+        self._appendContext_append(cb); cb("appended"); return self
     def __contains__(self, e:str) -> bool: return e in self.cbsDict
     def remove(self, *names:List[str]):
         """Removes a callback from the collection."""
@@ -238,11 +253,12 @@ class Callbacks:
     def __call__(self, *checkpoints:List[str]) -> bool:
         """Calls a number of checkpoints one after another.
 Returns True if any of the checkpoints return anything at all"""
+        self._checkpointGraph_call(checkpoints)
         answer = False
         for checkpoint in checkpoints:
             beginTime = time.time()
             answer |= any([cb(checkpoint) for cb in self.cbs])
-            self.timings[checkpoint] += time.time() - beginTime
+            self._timings[checkpoint] += time.time() - beginTime
         return answer
     def __getitem__(self, idx:Union[int, str]) -> Callback:
         return self.cbs[idx] if isinstance(idx, int) else self.cbsDict[idx]
@@ -266,13 +282,13 @@ Returns True if any of the checkpoints return anything at all"""
         return "Callbacks:\n" + '\n'.join([f"- {cbName}" for cbName in self.cbsDict]) + """\n
 Use...
 - cbs.append(cb[, name]): to add a callback with a name
-- cbs("startRun"): to trigger a specific event
-- cbs.Loss: to get a specific callback by name
+- cbs("startRun"): to trigger a specific checkpoint, this case "startRun"
+- cbs.Loss: to get a specific callback by name, this case "Loss"
 - cbs[i]: to get specific callback by index
 - cbs.timings: to get callback execution times
-- `with cbs.suspend("Loss", "Cuda"): pass`: to temporarily prevent triggering events in
-    specific callbacks. Can be nested
-- cbs.restore(): to restore latest temporary suspension
+- cbs.checkpointGraph(): to graph checkpoint calling orders
+- cbs.context(): context manager that will detach all Callbacks attached inside the context
+- cbs.suspend("Loss", "Cuda"): context manager to temporarily prevent triggering checkpoints
 - cbs.withs: to get list of with- functions. Corresponding classes are in k1lib.Callback.cls
 """
     def withBasics(self):
@@ -282,8 +298,9 @@ includes Callbacks that are not necessary, but don't slow things down"""
         self.withProgressBar().withLoss().withDontTrainValid()
         return self.withCancelOnExplosion().withParamFinder()
     def withQOL(self):
-        """Adds quality of life Callbacks. Right now it's just Autosave"""
-        return self.withAutosave()
+        """Adds quality of life Callbacks."""
+        return self
+        #return self.withAutosave()
     def withAdvanced(self):
         """Adds advanced Callbacks that do fancy stuff, but may slow things
 down if not configured specifically."""
@@ -344,11 +361,12 @@ def suspendEval(self, more:List[str]=[], less:List[str]=[]) -> ContextManager:
 used for evaluation callbacks. Just convenience method really. Currently includes:
 
 - HookModule, HookParam, ProgressBar
-- ParamScheduler, Loss, Autosave
+- ParamScheduler, Loss, Accuracy, Autosave
+- ConfusionMatrix
 
 :param more: include more classes to be suspended
 :param less: exclude classes supposed to be suspended by default"""
-    classes = {"HookModule", "HookParam", "ProgressBar", "ParamScheduler", "Loss", "Accuracy", "Autosave"}
+    classes = {"HookModule", "HookParam", "ProgressBar", "ParamScheduler", "Loss", "Accuracy", "Autosave", "ConfusionMatrix"}
     classes.update(more); classes -= set(less)
     return self.suspendClasses(*classes)
 class AppendContext:
@@ -356,7 +374,7 @@ class AppendContext:
     def __enter__(self): self.cbs.contexts.append([])
     def __exit__(self, *ignored): [cb.detach() for cb in self.cbs.contexts.pop()]
 @k1lib.patch(Callbacks)
-def _appendExtraProcessing(self, cb):
+def _appendContext_append(self, cb):
     if "contexts" not in self.__dict__: self.contexts = [[]]
     self.contexts[-1].append(cb)
 @k1lib.patch(Callbacks)
@@ -375,6 +393,31 @@ Works like this::
     # only CbA is available
 """
     return AppendContext(self)
+@k1lib.patch(Callbacks)
+def _checkpointGraph_call(self, checkpoints:List[str]):
+    if not hasattr(self, "_checkpointGraphDict"):
+        self._checkpointGraphDict = k1lib.Object().withAutoDeclare(lambda: k1lib.Object().withAutoDeclare(lambda: 0))
+        self._lastCheckpoint = "<root>"
+    for cp in checkpoints:
+        self._checkpointGraphDict[self._lastCheckpoint][cp] += 1
+        self._lastCheckpoint = cp
+@k1lib.patch(Callbacks)
+def checkpointGraph(self):
+    """Graphs what checkpoints follows what checkpoints. Has to run at least once
+first. Requires graphviz package though. Example::
+
+    cbs = Callbacks()
+    cbs("a", "b", "c", "d", "b")
+    cbs.checkpointGraph() # returns graph object. Will display image if using notebooks
+
+.. image:: ../images/checkpointGraph.png
+"""
+    graphviz = k1lib.imports.optionalImports("graphviz")
+    g = graphviz.Digraph(graph_attr={"rankdir":"TB"})
+    for cp1, cp1o in self._checkpointGraphDict.state.items():
+        for cp2, v in cp1o.state.items():
+            g.edge(cp1, cp2, label=f"  {v}  ")
+    return g
 @k1lib.patch(Callbacks, "withs")
 @property
 def withs(self):
@@ -392,8 +435,7 @@ and `short docs` fields"""
                 params = [None] * (len(signature(cl.__init__).parameters) - 1)
                 orderI = cl(*params).order; order = f"{orderI}".ljust(lorder)
                 print((k1lib.format.grey if orderI == 10 else k1lib.format.identity)(order), end="")
-            except Exception as e:
-                print(" "*lorder, end="")
+            except Exception: print(" "*lorder, end="")
         else: print(" "*lorder, end="")
         print(k1lib.limitChars(docs or getattr(self, w).__doc__, ldocs))
     print(f"\nHere for order value suggestions: {k1lib._docsUrl}/callbacks")

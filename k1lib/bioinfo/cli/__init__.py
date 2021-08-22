@@ -1,4 +1,5 @@
 from .init import settings as bioinfoSettings
+from .init import *
 
 # common utils
 from .filt import *

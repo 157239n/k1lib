@@ -18,7 +18,7 @@ class CoreRNN(Callback):
     def __init__(self):
         super().__init__()
     def startBatch(self):
-        self.hiddenState = self.l.model.initHidden()
+        self.hiddenState = self.l.model.initHidden(self.l.xb.shape[-2])
     def inPass(self):
         self.hiddenState = self.hiddenState.to(self.l.xb.device)
         for item in self.l.xb:

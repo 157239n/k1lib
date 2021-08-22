@@ -2,7 +2,7 @@
 """For not very complicated loss functions"""
 from k1lib.callbacks import Callback, Callbacks
 from typing import Callable, Tuple
-import torch, k1lib
+import torch, k1lib, math, torch.nn.functional as F
 __all__ = ["LossLambda", "LossNLLCross"]
 LossFSig = Callable[[Tuple[torch.Tensor, torch.Tensor]], float]
 @k1lib.patch(Callback.cls)
@@ -19,34 +19,39 @@ correct y ``yb`` and return a single loss float (still attached to graph)."""
 @k1lib.patch(Callbacks, docs=LossLambda.__init__)
 def withLossLambda(self, lossF:LossFSig, name:str=None):
     return self.append(LossLambda(lossF), name=name)
-def accF(l):
-    a = (l.y.argmax(dim=1) == l.yb)
-    return a.sum() / a.numel()
-def accCb():
-    return k1lib.callbacks.Accuracy(accF)
 @k1lib.patch(Callback.cls)
 class LossNLLCross(Callback):
     " "
     def __init__(self, nll:bool, integrations:bool):
-        """
+        """Adds a cross-entropy/negative-likelihood loss function.
+
+This sets a shared variable ``preds`` inside :class:`k1lib.Learner`, representing
+the category predictions of the output.
+
 :param nll: if True, then use :class:`torch.nn.NLLLoss`, else use :class:`torch.nn.CrossEntropyLoss`
 :param integrations: whether to integrate with
     :class:`~k1lib.callbacks.loss_accuracy.Accuracy` callback"""
         super().__init__(); self.integrations = integrations; self.accuracyCb = None
         self.lossF = torch.nn.NLLLoss() if nll else torch.nn.CrossEntropyLoss()
-    def appended(self):
+        if nll: self.predF = lambda y: torch.argmax(math.e ** y, dim=1)
+        else: self.predF = lambda y: torch.argmax(F.softmax(y, dim=1), dim=1)
+    def appended(self): # delayed initialization, so that learner and cbs has already been attached
         if self.integrations:
-            self.accuracyCb = accCb()
+            def accF(l):
+                a = (l.y.argmax(dim=1) == l.yb).detach()
+                return a.sum() / a.numel()
+            self.accuracyCb = k1lib.callbacks.Accuracy(accF)
             self.cbs.append(self.accuracyCb)
     def inLoss(self):
         self.l.lossG = self.lossF(self.l.y, self.l.yb)
         self.l.loss = self.l.lossG.detach().item()
+        self.l.preds = self.predF(self.l.y.detach())
     def detach(self):
         if self.accuracyCb != None:
             self.accuracyCb.detach(); self.accuracyCb = None
 @k1lib.patch(Callbacks, docs=LossNLLCross.__init__)
 def withLossNLL(self, integrations:bool=True, name:str=None):
-    return self.append(LossNLLCross(True, integrations), name=name)
+    return self.append(LossNLLCross(True, integrations), name=name or "LossNLL")
 @k1lib.patch(Callbacks, docs=LossNLLCross.__init__)
 def withLossCrossEntropy(self, integrations:bool=True, name:str=None):
-    return self.append(LossNLLCross(False, integrations), name=name)
+    return self.append(LossNLLCross(False, integrations), name=name or "LossCrossEntropy")

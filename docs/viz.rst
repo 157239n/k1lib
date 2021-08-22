@@ -11,3 +11,5 @@ k1lib.viz module
       :members:
 
    .. autofunction:: plotSegments
+
+   .. autofunction:: confusionMatrix

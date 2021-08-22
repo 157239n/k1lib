@@ -19,6 +19,10 @@ callbacks module
 
    .. autoclass:: Callback
       :members:
+      :show-inheritance:
+
+   .. autoclass:: Timings
+      :members:
       :undoc-members:
       :show-inheritance:
 
@@ -27,6 +31,13 @@ callbacks module
       :undoc-members:
       :special-members: __contains__, __call__, __getitem__, __iter__, __len__, 
       :show-inheritance:
+
+confusionMatrix module
+----------------------
+
+.. automodule:: k1lib.callbacks.confusionMatrix
+   :members:
+   :show-inheritance:
 
 core module
 -----------

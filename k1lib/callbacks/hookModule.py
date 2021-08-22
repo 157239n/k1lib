@@ -26,6 +26,7 @@ class ModuleData:
     def _plot(self, axes, field:str, rangeSlice:slice):
         forwardData = self.forward[field]; step = rangeSlice.step or 1
         backwardData = self.backward[field]
+        if len(forwardData) == 0 or len(backwardData) == 0: return
         fR, bR = k1lib.Range.proportionalSlice(len(forwardData), len(backwardData), rangeSlice)
         axes[0].plot(fR.range_[::step], forwardData[fR.slice_][::step], alpha=0.5)
         axes[1].plot(bR.range_[::step], backwardData[bR.slice_][::step], alpha=0.5)

@@ -71,6 +71,11 @@ Module contents
    :undoc-members:
    :show-inheritance:
 
+.. autoclass:: k1lib.ignoreWarnings
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 .. autoexception:: k1lib.CancelRunException
 .. autoexception:: k1lib.CancelEpochException
 .. autoexception:: k1lib.CancelBatchException

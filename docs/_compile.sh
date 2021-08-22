@@ -12,8 +12,13 @@
 export SPHINX=1
 
 # building stuff
+echo Building main docs --------------------
 rm -r _build
 make html
+
+echo Building tutorials --------------------
+tutorials/build.py
+cp -r tutorials/tutorials _build/html/tutorials
 
 # copying over to k1lib.github,io/ folder. Expected this to not be inside any
 # folders, as there are lots of absolute references

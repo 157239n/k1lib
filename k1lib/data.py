@@ -127,3 +127,15 @@ FunctionDataset.log = FunctionDataset(lambda x: _np.log(x), _range=[0.01, 5], sa
 FunctionDataset.inverse = FunctionDataset(lambda x: 1/x, samples=10001)
 FunctionDataset.linear = FunctionDataset(lambda x: 2*x+8, samples=10000)
 FunctionDataset.sin = FunctionDataset(lambda x: _np.sin(x), samples=10000)
+class CyclicRandomSampler:
+    def __init__(self, n):
+        """Samples from a dataset randomly. If runs out of elements then reset."""
+        self.n = n
+    def __iter__(self):
+        while True: yield from _torch.randperm(self.n)
+class DatasetWithSampler:
+    """Yields ds's elements with a specified sampler"""
+    def __init__(self, ds, sampler): self.ds = ds; self.sampler = sampler
+    def __iter__(self):
+        for e in self.sampler: yield self.ds[e]
+    def __len__(self): return len(self.ds)

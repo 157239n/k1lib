@@ -17,9 +17,13 @@ class feats(_BaseCli):
             cache.append(line)
         if len(cache) > 0: yield iter(cache)
     @staticmethod
-    def filt(term:str) -> _BaseCli:
-        """Filters for a specific term in all the features texts"""
-        return ((_cli.grep(term) | _cli.shape(0)) & _cli.identity()).all()\
+    def filt(*terms:str) -> _BaseCli:
+        """Filters for specific terms in all the features texts. If there
+are multiple terms, then filters for first term, then second, then third,
+so the term's order might matter to you"""
+        if len(terms) == 0: return _cli.identity()
+        if len(terms) > 1: return _cli.init.serial(*(feats.filt(term) for term in terms))
+        return ((_cli.grep(*terms) | _cli.shape(0)) & _cli.identity()).all()\
         | ~_cli.isValue(0, 0) | _cli.cut(1)
     @staticmethod
     def tag(tag:str) -> _BaseCli:
