@@ -2,7 +2,7 @@
 """
 This is for quick modifiers, think of them as changing formats
 """
-__all__ = ["apply", "applySingle", "lstrip", "rstrip", "strip",
+__all__ = ["apply", "applySingle", "applyS", "lstrip", "rstrip", "strip",
            "upper", "lower", "replace", "remove", "toFloat", "toInt", "sort"]
 from typing import Callable, Iterator, Any
 from k1lib.bioinfo.cli.init import patchDefaultDelim, BaseCli, settings
@@ -12,18 +12,19 @@ class apply(BaseCli):
         """Applies a function f to every line
 
 :param column: if not None, then applies the function to that column only"""
-        self.f = f; self.column = column
+        super().__init__(); self.f = f; self.column = column
     def __ror__(self, it:Iterator[str]):
         f = self.f; c = self.column
         if c is None: return (f(line) for line in it)
-        else: return (((e if i != c else f(e)) 
-                       for i, e in enumerate(row)) for row in it)
+        else: return ([(e if i != c else f(e)) 
+                       for i, e in enumerate(row)] for row in it)
 class applySingle(BaseCli):
     def __init__(self, f:Callable[[Any], Any]):
         """Like :class:`apply`, but much simpler, just operating on the entire input
 object, essentially"""
-        self.f = f
+        super().__init__(); self.f = f
     def __ror__(self, it:Any) -> Any: return self.f(it)
+applyS = applySingle
 def lstrip(column:int=None, char:str=None):
     """Strips left of every line"""
     return apply(lambda e: e.lstrip(char), column)
@@ -63,6 +64,7 @@ class sort(BaseCli):
 :param numeric: whether to treat column as float
 :param reverse: False for smaller to bigger, True for bigger to smaller. Use
     :meth:`__invert__` to quickly reverse the order instead of using this param"""
+        super().__init__()
         self.column = column; self.reverse = reverse; self.numeric = numeric
         self.filterF = (lambda x: float(x)) if numeric else (lambda x: x)
     def __ror__(self, it:Iterator[str]):

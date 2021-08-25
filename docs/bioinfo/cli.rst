@@ -62,6 +62,14 @@ bio module
    :undoc-members:
    :show-inheritance:
 
+ctx module
+----------------------------
+
+.. automodule:: k1lib.bioinfo.cli._ctx
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 entrez module
 -------------------------------
 
@@ -131,10 +139,10 @@ init module
    :undoc-members:
    :show-inheritance:
 
-input module
+inp module
 ------------------------------
 
-.. automodule:: k1lib.bioinfo.cli.input
+.. automodule:: k1lib.bioinfo.cli.inp
    :members:
    :undoc-members:
    :show-inheritance:

@@ -14,15 +14,14 @@ def withCoreNormal(self, name:str=None):
     return self.append(CoreNormal(), name=name)
 @k1lib.patch(Callback.cls)
 class CoreRNN(Callback):
-    """RNN forward pass"""
-    def __init__(self):
-        super().__init__()
+    """RNN forward pass. Expected model to have the ``initHidden(bs) -> torch.Tensor``
+method."""
     def startBatch(self):
-        self.hiddenState = self.l.model.initHidden(self.l.xb.shape[-2])
+        self.hx = self.l.model.initHidden(self.l.xb.shape[-2])
     def inPass(self):
-        self.hiddenState = self.hiddenState.to(self.l.xb.device)
+        self.hx = self.hx.to(self.l.xb.device)
         for item in self.l.xb:
-            self.l.y, self.hiddenState = self.l.model(item, self.hiddenState)
+            self.l.y, self.hx = self.l.model(item, self.hx)
             self.cbs("rnnPass")
 @k1lib.patch(Callbacks, docs=CoreRNN)
 def withCoreRNN(self, name:str=None):

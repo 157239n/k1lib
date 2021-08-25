@@ -21,8 +21,8 @@ from k1lib.bioinfo.cli import *
 
 ## Some details
 
-Repo: https://github.com/157239n/k1lib/
-Docs: https://k1lib.github.io
+- Repo: https://github.com/157239n/k1lib/
+- Docs: https://k1lib.github.io
 
 ## Contacts?
 

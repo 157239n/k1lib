@@ -48,6 +48,15 @@ Repo is at https://github.com/157239n/k1lib/ btw.
 Module contents
 ---------------
 
+Classes:
+
+- :class:`k1lib.Learner`
+- :class:`k1lib.Object`
+- :class:`k1lib.Range`
+- :class:`k1lib.Domain`
+- :class:`k1lib.AutoIncrement`
+- :class:`k1lib.ignoreWarnings`
+
 .. autoclass:: k1lib.Learner
    :members:
    :undoc-members:
@@ -67,6 +76,11 @@ Module contents
    .. automethod:: __getitem__
 
 .. autoclass:: k1lib.Domain
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. autoclass:: k1lib.AutoIncrement
    :members:
    :undoc-members:
    :show-inheritance:

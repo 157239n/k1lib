@@ -81,7 +81,7 @@ class translate(BaseCli):
         """Translates incoming rows.
 
 :param length: 0 for short (L), 1 for med (Leu), 2 for long (Leucine)"""
-        self.delim = "" if length == 0 else " "
+        super().__init__(); self.delim = "" if length == 0 else " "
         self.dict = [_shortAa, _medAa, _longAa][length]
     def __ror__(self, it:Iterator[str]):
         if isinstance(it, str): it = [it]

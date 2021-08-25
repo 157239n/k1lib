@@ -7,11 +7,13 @@ from typing import List, Union, Iterator, Callable, Any, Tuple, Dict
 from collections import defaultdict, Counter
 from k1lib.bioinfo.cli.init import patchDefaultDelim, BaseCli, oneToMany, T, Table
 import k1lib.bioinfo.cli as cli
-import itertools
-__all__ = ["joinColumns", "transpose", "splitColumns", "joinList", "joinStreams",
+import itertools, numpy as np, torch
+__all__ = ["joinColumns", "transpose", "splitColumns", "joinList", "splitList",
+           "joinStreams", "joinStreamsRandom", "batched", "collate",
            "insertRow", "insertColumn", "insertIdColumn",
            "toDict", "split", "table", "stitch", "listToTable", "tableFromList",
-           "count", "permute", "accumulate", "AA_", "sample", "infinite"]
+           "count", "permute", "accumulate", "AA_", "peek",
+           "repeat", "infiniteFrom"]
 class joinColumns(BaseCli):
     def __init__(self, fillValue=None):
         """Join multiple columns and loop through all rows. Aka transpose.
@@ -24,7 +26,7 @@ Example::
     [[1, 2, 3], [4, 5, 6]] | joinColumns() | dereference()
     # returns [[1, 4], [2, 5], [3, 6], [0, 7]]
     [[1, 2, 3], [4, 5, 6, 7]] | joinColumns(0) | dereference()"""
-        self.fillValue = fillValue
+        super().__init__(); self.fillValue = fillValue
     def __ror__(self, it:Iterator[Iterator[T]]) -> Table[T]:
         if self.fillValue is None: yield from zip(*it)
         else: yield from itertools.zip_longest(*it, fillvalue=self.fillValue)
@@ -41,9 +43,8 @@ Example::
     # returns [5, 2, 6, 8]
     [5, [2, 6, 8]] | joinList()
     # also returns [5, 2, 6, 8]
-    [2, 6, 8] | joinList(5)
-"""
-        self.element = element; self.begin = begin
+    [2, 6, 8] | joinList(5)"""
+        super().__init__(); self.element = element; self.begin = begin
     def __ror__(self, it:Tuple[T, Iterator[T]]) -> Iterator[T]:
         it = iter(it)
         if self.element is None:
@@ -52,15 +53,62 @@ Example::
         else:
             if self.begin: yield self.element; yield from it
             else: yield from it; yield self.element
+class splitList(BaseCli):
+    def __init__(self, weights:List[float]=[0.8, 0.2]):
+        """Splits list of elements into multiple lists.
+Example::
+
+    # returns [[0, 1, 2, 3, 4, 5, 6, 7], [8, 9]]
+    range(10) | splitList([0.8, 0.2]) | dereference()"""
+        super().__init__(); self.weights = np.array(weights)
+    def __ror__(self, it):
+        it = list(it); ws = self.weights; c = 0
+        ws = (ws * len(it) / ws.sum()).astype(int)
+        for w in ws: yield it[c:c+w]; c += w
 class joinStreams(BaseCli):
     """Join multiple streams.
 Example::
 
     # returns [1, 2, 3, 4, 5]
-    [[1, 2, 3], [4, 5]] | joinStreams() | dereference()
-"""
+    [[1, 2, 3], [4, 5]] | joinStreams() | dereference()"""
     def __ror__(self, streams:Iterator[Iterator[T]]) -> Iterator[T]:
         for stream in streams: yield from stream
+import random
+def rand(n):
+    while True: yield random.randrange(n)
+class joinStreamsRandom(BaseCli):
+    """Join multiple streams randomly. If any streams runs out, then quits.
+Example::
+
+    # could return [0, 1, 10, 2, 11, 12, 13, ...], with max length 20, typical length 18
+    [range(0, 10), range(10, 20)] | joinStreamsRandom() | dereference()"""
+    def __ror__(self, streams:Iterator[Iterator[T]]) -> Iterator[T]:
+        streams = [iter(st) for st in streams]
+        try:
+            for streamIdx in rand(len(streams)):
+                yield next(streams[streamIdx])
+        except StopIteration: pass
+class batched(BaseCli):
+    def __init__(self, bs=32):
+        """Batches the input stream. Ignores the last batch.
+Example::
+
+    # returns [[0, 1, 2], [3, 4, 5], [6, 7, 8]]
+    range(11) | batched(3) | dereference()
+"""
+        super().__init__(); self.bs = bs
+    def __ror__(self, it):
+        it = iter(it)
+        try:
+            while True: yield [next(it) for _ in range(self.bs)]
+        except StopIteration: pass
+def collate():
+    """Puts individual columns into a tensor.
+Example::
+
+    # returns [tensor([ 0, 10, 20]), tensor([ 1, 11, 21]), tensor([ 2, 12, 22])]
+    [range(0, 3), range(10, 13), range(20, 23)] | collate() | toList()"""
+    return transpose() | cli.apply(lambda row: torch.tensor(row))
 def insertRow(*row:List[T]):
     """Inserts a row right before every other rows. See also: :meth:`joinList`."""
     return joinList(row)
@@ -74,16 +122,15 @@ Example::
     return transpose(fillValue) | joinList(column, begin) | transpose(fillValue)
 def insertIdColumn(table=False, begin=True, fillValue=""):
     """Inserts an id column at the beginning (or end).
-
-:param table: if False, then insert column to an Iterator[str], else treat
-    input as a full fledged table
-
 Example::
 
     # returns [[0, 'a', 2], [1, 'b', 4]]
     [["a", 2], ["b", 4]] | insertIdColumn(True) | dereference()
     # returns [[0, 'a'], [1, 'b']]
-    "ab" | insertIdColumn()"""
+    "ab" | insertIdColumn()
+
+:param table: if False, then insert column to an Iterator[str], else treat
+    input as a full fledged table"""
     f = (cli.toRange() & transpose(fillValue)) | joinList(begin=begin) | transpose(fillValue)
     if table: return f
     else: return cli.wrapList() | transpose() | f
@@ -96,7 +143,7 @@ values. Example::
     names | toDict(valueF=lambda s: len(s)) # will return {"wanda": 5, "vision": 6, ...}
     names | toDict(lambda s: s.title(), lambda s: len(s)) # will return {"Wanda": 5, "Vision": 6, ...}
 """
-        self.keyF = keyF or (lambda s: s)
+        super().__init__(); self.keyF = keyF or (lambda s: s)
         self.valueF = valueF or (lambda s: s)
     def __ror__(self, keys:Iterator[Any]) -> Dict[Any, Any]:
         keyF = self.keyF; valueF = self.valueF
@@ -107,6 +154,7 @@ class split(BaseCli):
 parts as a separate line.
 
 :param idx: if available, only outputs the element at that index"""
+        super().__init__()
         self.delim = patchDefaultDelim(delim); self.idx = idx
     def __ror__(self, it:Iterator[str]):
         if self.idx == None:
@@ -122,19 +170,21 @@ class table(BaseCli):
 Example::
 
     # returns [['a', 'bd'], ['1', '2', '3']]
-    ["a|bd", "1|2|3"] | table("|") | dereference()
-"""
-        self.delim = patchDefaultDelim(delim)
+    ["a|bd", "1|2|3"] | table("|") | dereference()"""
+        super().__init__(); self.delim = patchDefaultDelim(delim)
     def __ror__(self, it:Iterator[str]) -> Table[str]:
         return (line.split(self.delim) for line in it)
 class stitch(BaseCli):
     def __init__(self, delim:str=None):
         """Stitches elements in a row together, so they become a simple string.
-See also: :class:`k1lib.bioinfo.cli.output.pretty`"""
-        self.delim = patchDefaultDelim(delim)
+See also: :class:`~k1lib.bioinfo.cli.output.pretty`. Example::
+
+    # returns ['1|2', '3|4', '5|6']
+    [[1, 2], [3, 4], [5, 6]] | stitch("|") | dereference()"""
+        super().__init__(); self.delim = patchDefaultDelim(delim)
     def __ror__(self, it:Table[str]) -> Iterator[str]:
         d = self.delim
-        for row in it: yield d.join(list(row))
+        for row in it: yield d.join([str(e) for e in row])
 def listToTable():
     """Turns Iterator[T] into Table[T]"""
     return cli.wrapList() | transpose()
@@ -152,7 +202,7 @@ columns. Example::
 class permute(BaseCli):
     def __init__(self, *permutations:List[int]):
         """Permutes the columns. Acts kinda like :meth:`torch.Tensor.permute`"""
-        self.permutations = permutations
+        super().__init__(); self.permutations = permutations
     def __ror__(self, it:Iterator[str]):
         for row in it: yield (row[i] for i in self.permutations)
 class accumulate(BaseCli):
@@ -162,7 +212,7 @@ add together all other columns, assuming they're numbers
 
 :param columnIdx: common column index to accumulate
 :param avg: calculate average values instead of sum"""
-        self.columnIdx = columnIdx; self.avg = avg
+        super().__init__(); self.columnIdx = columnIdx; self.avg = avg
         self.dict = defaultdict(lambda: defaultdict(lambda: 0))
     def __ror__(self, it:Iterator[str]):
         for row in it:
@@ -202,14 +252,12 @@ If you put None in, then all indexes will be sliced::
 
 As for why the strange name, think of this operation as "AĀ". In statistics,
 say you have a set "A", then "not A" is commonly written as A with an overline
-"Ā". So "AA\_" represents "AĀ", and that it first returns the selection A
-first.
+"Ā". So "AA\_" represents "AĀ", and that it first returns the selection A.
 
 :param wraps: if True, then the first example will return [[5, [1, 6, 3, 7]]]
-    instead, so that A has the same signature as Ā
-"""
+    instead, so that A has the same signature as Ā"""
+        super().__init__(); self.idxs = idxs; self.wraps = wraps
         if len(idxs) == 0: raise AttributeError("Please enter some column indexes. If you wish to analyze all, put in `None`")
-        self.idxs = idxs; self.wraps = wraps
     def __ror__(self, it:List[Any]) -> List[List[List[Any]]]:
         idxs = self.idxs; it = list(it)
         if len(idxs) == 1 and idxs[0] is None: idxs = range(len(it))
@@ -217,22 +265,40 @@ first.
             return [it[idx], [v for i, v in enumerate(it) if i != idx]]
         if not self.wraps and len(idxs) == 1: return gen(idxs[0])
         return [gen(idx) for idx in idxs]
-class sample(BaseCli):
+class peek(BaseCli):
     """Returns (firstRow, iterator). This sort of peaks at the first row, to
-potentially gain some insights about the internal formats."""
-    def __ror__(self, it):
+potentially gain some insights about the internal formats. Example::
+
+    e, it = iter([[1, 2, 3], [1, 2]]) | peek()
+    print(e) # prints "[1, 2, 3]"
+    s = 0
+    for e in it: s += len(e)
+    print(s) # prints "5", or length of 2 lists"""
+    def __ror__(self, it:Iterator[T]) -> Tuple[T, Iterator[T]]:
         if (row := next(it, sentinel := object())) == sentinel: return None, []
         def gen(): yield row; yield from it
         return row, gen()
-class infinite(BaseCli):
-    """Yields an infinite amount of the passed in object. Example:
-
-.. code-block::
+class repeat(BaseCli):
+    """Yields a specified amount of the passed in object.
+Example::
 
     # returns [[1, 2, 3], [1, 2, 3], [1, 2, 3]]
-    [1, 2, 3] | infinite() | head(3) | toList()
-"""
+    [1, 2, 3] | repeat(3) | toList()
+
+:param repeat: if None, then repeats indefinitely"""
+    def __init__(self, limit:int=None):
+        super().__init__(); self.limit = limit
     def __ror__(self, o:T) -> Iterator[T]:
-        try: o = list(o)
-        except: pass
-        while True: yield o
+        if self.limit is None:
+            while True: yield o
+        else:
+            for _ in range(self.limit): yield o
+class infiniteFrom(BaseCli):
+    """Yields from a list. If runs out of elements, then do it again.
+Example::
+
+    # returns [1, 2, 3, 1, 2]
+    [1, 2, 3] | infiniteFrom() | head(5) | dereference()"""
+    def __ror__(self, it:Iterator[T]) -> Iterator[T]:
+        it = list(it)
+        while True: yield from it

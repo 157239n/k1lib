@@ -22,12 +22,12 @@ Bare example of how this module works::
     # initialization
     cbs = k1lib.Callbacks()
     cbs.append(CbA()).append(CbB())
-    model = lambda x: x + 3
-    lossF = lambda x, y: x - y
+    model = lambda xb: xb + 3
+    lossF = lambda y, yb: y - yb
     
     # training loop
-    cbs("startBatch")
-    cbs("startPass"); y = model(x); cbs("endPass")
+    cbs("startBatch"); xb = 6; yb = 2
+    cbs("startPass"); y = model(xb); cbs("endPass")
     cbs("startLoss"); loss = lossF(y, yb); cbs("endLoss")
     cbs("endBatch")
     
@@ -158,6 +158,7 @@ for more."""
         """Detaches from the parent :class:`Callbacks`"""
         self.cbs.remove(self.name); return self
 Callback.cls = k1lib.Object()
+Callback.lossCls = k1lib.Object()
 class PauseContext:
     def __init__(self, cb): self.cb = cb
     def __enter__(self): self.oldValue = self.cb.paused; self.cb.paused = True
@@ -166,7 +167,7 @@ class PauseContext:
 def pause(self):
     """Pauses the callback's main functionality for a while. This is a bit different
 from :meth:`Callbacks.suspend`, in that :meth:`Callbacks.suspend` will not call any
-cb's checkpoints at all. However, pausing it will only set an internal variable `paused`,
+cb's checkpoints at all. However, pausing it will only set an internal variable ``paused``,
 but all the checkpoints will be called normally. :class:`Callback` objects can then
 choose to turn off some checkpoints if deemed appropriate.
 
@@ -175,9 +176,9 @@ use this."""
     return PauseContext(self)
 class Timings:
     """List of checkpoint timings. Not intended to be instantiated by the end user.
-Used within :class:`~k1lib.callbacks.callbacks.Callbacks`, accessible with ``cbs.timings``
-to record time taken to execute a single checkpoint. This is useful for profiling
-stuff."""
+Used within :class:`~k1lib.callbacks.callbacks.Callbacks`, accessible via
+:attr:`Callbacks.timings` to record time taken to execute a single
+checkpoint. This is useful for profiling stuff."""
     @property
     def state(self):
         answer = dict(self.__dict__); answer.pop("getdoc", None); return answer
@@ -219,7 +220,10 @@ class Callbacks:
         """Returns :class:`~k1lib.callbacks.callbacks.Timings` object"""
         return self._timings
     @property
-    def l(self) -> "k1lib.Learner": return self._l
+    def l(self) -> "k1lib.Learner":
+        """:class:`k1lib.Learner` object. Will be set automatically when
+you set :attr:`k1lib.Learner.cbs` to this :class:`Callbacks`"""
+        return self._l
     @l.setter
     def l(self, learner):
         self._l = learner
@@ -279,7 +283,7 @@ Returns True if any of the checkpoints return anything at all"""
         answer.extend(self.cbsDict.keys())
         return answer
     def __repr__(self):
-        return "Callbacks:\n" + '\n'.join([f"- {cbName}" for cbName in self.cbsDict]) + """\n
+        return "Callbacks:\n" + '\n'.join([f"- {cbName}" for cbName in self.cbsDict if not cbName.startswith("_")]) + """\n
 Use...
 - cbs.append(cb[, name]): to add a callback with a name
 - cbs("startRun"): to trigger a specific checkpoint, this case "startRun"
@@ -402,7 +406,7 @@ def _checkpointGraph_call(self, checkpoints:List[str]):
         self._checkpointGraphDict[self._lastCheckpoint][cp] += 1
         self._lastCheckpoint = cp
 @k1lib.patch(Callbacks)
-def checkpointGraph(self):
+def checkpointGraph(self, highlightCb:Union[str, Callback]=None):
     """Graphs what checkpoints follows what checkpoints. Has to run at least once
 first. Requires graphviz package though. Example::
 
@@ -411,12 +415,31 @@ first. Requires graphviz package though. Example::
     cbs.checkpointGraph() # returns graph object. Will display image if using notebooks
 
 .. image:: ../images/checkpointGraph.png
-"""
+
+:param highlightCb: if available, will highlight the checkpoints the callback
+    uses. Can be name/class-name/class/self of callback."""
     graphviz = k1lib.imports.optionalImports("graphviz")
     g = graphviz.Digraph(graph_attr={"rankdir":"TB"})
+    s = set()
     for cp1, cp1o in self._checkpointGraphDict.state.items():
         for cp2, v in cp1o.state.items():
-            g.edge(cp1, cp2, label=f"  {v}  ")
+            g.edge(cp1, cp2, label=f"  {v}  "); s.add(cp2)
+    if highlightCb != None:
+        _cb = None
+        if isinstance(highlightCb, Callback): _cb = highlightCb
+        elif isinstance(highlightCb, type) and issubclass(highlightCb, Callback): # find cb that has the same class
+            for cbo in self.cbs:
+                if isinstance(cbo, highlightCb): _cb = cbo; break
+            if _cb is None: raise AttributeError(f"Can't find any Callback inside this Callbacks which is of type `{cb.__name__}`")
+        elif isinstance(highlightCb, str):
+            for cbName, cbo in self.cbsDict.items():
+                if cbName == highlightCb: _cb = cbo; break
+                if type(cbo).name == highlightCb: _cb = cbo; break
+            if _cb is None: raise AttributeError(f"Can't find any Callback inside this Callbacks with name or class `{cb}`")
+        else: raise AttributeError(f"Don't understand {cb}")
+        print(f"Highlighting callback `{_cb.name}`, of type `{type(_cb)}`")
+        for cp in s:
+            if hasattr(_cb, cp): g.node(cp, color="red")
     return g
 @k1lib.patch(Callbacks, "withs")
 @property

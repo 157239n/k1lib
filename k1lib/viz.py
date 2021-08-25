@@ -54,6 +54,7 @@ something like this::
         x = np.linspace(*r, n)
         _slice = r.toRange(_k1lib.Range(n), r.bound(_slice)).slice_
         plt.plot(x[_slice], (x**2)[_slice])
+    # this works without a decorator too btw: k1lib.viz.SliceablePlot(niceF)
 
     niceF()[0.3:0.7] # plots x^2 equation with x in [0.3, 0.7]
     niceF()[0.3:] # plots x^2 equation with x in [0.3, 2]
@@ -82,6 +83,10 @@ above is roughly equivalent to this::
 This works even if you have multiple axes inside your figure. It's
 wonderful, isn't it?"""
     def __init__(self, plotF:_Callable[[slice], None], slices:_Union[slice, _List[slice]]=slice(None), plotDecorators:_List[_PlotDecorator]=[], docs=""):
+        """Creates a new SliceablePlot. Only use params listed below:
+
+:param plotF: function that takes in a :class:`slice` or tuple of :class:`slice`s
+:param docs: optional docs for the function that will be displayed in :meth:`__repr__`"""
         self.plotF = plotF
         self.slices = [slices] if isinstance(slices, slice) else slices
         self.docs = docs; self.plotDecorators = list(plotDecorators)
@@ -156,7 +161,7 @@ the same length as your data, filled with ints, like this::
         if lx != None: _x = [lx] + _x; _y = [ly] + _y
         _plt.plot(_x, _y, colors[state])
 class Carousel:
-    _idx:int = _random.randint(0, 1e6)
+    _idx = _k1lib.AutoIncrement.random()
     def __init__(self):
         """Creates a new Carousel. You can then add images and whatnot.
 Will even work even when you export the notebook as html. Example::
@@ -165,7 +170,10 @@ Will even work even when you export the notebook as html. Example::
     c = k1lib.viz.Carousel()
     x = np.linspace(-2, 2); plt.plot(x, x ** 2); c.savePlt()
     x = np.linspace(-1, 3); plt.plot(x, x ** 2); c.savePlt()
-    c # displays in notebook cell"""
+    c # displays in notebook cell
+
+.. image:: images/carousel.png
+"""
         self.imgs:_List[Tuple[str, str]] = [] # Tuple[format, base64 img]
         self.defaultFormat = "jpeg"
     def saveBytes(self, _bytes:bytes, fmt:str=None):
@@ -214,9 +222,13 @@ So, you can do stuff like::
         """Saves a graphviz graph"""
         import tempfile; a = tempfile.NamedTemporaryFile()
         g.render(a.name, format="jpeg"); self.saveFile(f"{a.name}.jpeg")
+    def pop(self):
+        """Pops last image"""
+        return self.imgs.pop()
+    def __getitem__(self, idx): return self.imgs[idx]
     def _repr_html_(self):
         imgs = [f"\"<img src='data:image/{fmt};base64, {img}' />\"" for fmt, img in self.imgs]
-        idx = Carousel._idx; Carousel._idx += 1
+        idx = Carousel._idx.value
         pre = f"k1c_{idx}"
         html = f"""
 <style>
@@ -284,3 +296,5 @@ def confusionMatrix(matrix:_torch.Tensor, categories:_List[str]=None, **kwargs):
     # Force label at every tick
     ax.xaxis.set_major_locator(_mpl.ticker.MultipleLocator(1))
     ax.yaxis.set_major_locator(_mpl.ticker.MultipleLocator(1))
+    ax.xaxis.set_label_position('top')
+    _plt.xlabel("Predictions"); _plt.ylabel("Ground truth")

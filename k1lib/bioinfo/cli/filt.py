@@ -18,6 +18,7 @@ class filt(BaseCli):
 :param column:
     - if integer, then predicate(row[column])
     - if None, then predicate(line)"""
+        super().__init__()
         self.predicate = predicate; self.column = column
     def __ror__(self, it:Iterator[str]):
         p = self.predicate; c = self.column
@@ -73,7 +74,7 @@ class head(BaseCli):
     "abcde" | ~head(2) | dereference() # returns ["c", "d", "e"]
     "0123456" | head(-3) | dereference() # returns ['0', '1', '2', '3']
     "0123456" | ~head(-3) | dereference() # returns ['4', '5', '6']"""
-        self.n = n; self.inverted = False
+        super().__init__(); self.n = n; self.inverted = False
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
         n = self.n
         if n >= 0:
@@ -102,8 +103,7 @@ class rowsList(BaseCli):
 flexibility. Just used for slices with negative start/stop really. Don't use
 this directly, use :class:`rows` instead"""
     def __init__(self, _slice):
-        self._slice = _slice
-        self.inverted = False
+        super().__init__(); self._slice = _slice; self.inverted = False
     def __ror__(self, it:Iterator[str]):
         it = list(it); full = range(len(it))
         rows = full[self._slice]
@@ -126,6 +126,7 @@ Example::
     "0123456789" | ~rows()[:7:2] | dereference() # returns ['1', '3', '5', '7', '8', '9']
     "0123456789" | rows()[:-4] | dereference() # returns ['0', '1', '2', '3', '4', '5']
     "0123456789" | ~rows()[:-4] | dereference() # returns ['6', '7', '8', '9']"""
+        super().__init__()
         if len(rows) == 1 and isinstance(rows[0], slice):
             s = rows[0]
             start = s.start if s.start is not None else float("-inf")
@@ -171,11 +172,12 @@ class columns(BaseCli):
 
 If you're selecting only 1 column, then Iterator[T] will be returned, not
 Table[T]."""
+        super().__init__()
         if len(columns) == 1 and isinstance(columns[0], slice): columns = columns[0]
         self.columns = columns; self.inverted = False
     def __ror__(self, it:Table[T]) -> Table[T]:
         columns = self.columns; it = iter(it); row = None
-        row, it = it | cli.sample()
+        row, it = it | cli.peek()
         if row is None: return iter(range(0))
         row = list(row); rs = range(len(row))
         if isinstance(columns, slice): columns = set(rs[columns])

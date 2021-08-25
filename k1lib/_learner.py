@@ -67,16 +67,16 @@ See also: :class:`~k1lib.selector.ModuleSelector`"""
     @property
     def _warnings(self):
         warnings = "Warning: no model yet. Set using `l.model = ...`\n" if self.model == None else ""
-        lossFnCbs = [True for cb in self.cbs if cb.__module__.startswith("k1lib.callbacks.lossFunctions.")]
-        warnings += "Warning: no loss function callback detected! Set using `l.lossF = ...` or `l.cbs.withLossLambda(...)`\n" if len(lossFnCbs) == 0 else ""
+        lossClasses = tuple([*k1lib.Callback.lossCls])
+        lossFnCbs = [True for cb in self.cbs if isinstance(cb, lossClasses)]
+        warnings += "Warning: no loss function callback detected (or you set `lossF` and then erasing all callbacks)! Set using `l.lossF = ...` or `l.cbs.withLossLambda(...)`\n" if len(lossFnCbs) == 0 else ""
         warnings += "Warning: no data yet. Set using `l.data = ...`\n" if self.data == None else ""
         warnings += "Warning: no optimizer yet. Set using `l.opt = ...`\n" if self.opt == None else ""
         if warnings != "": warnings += "\n\n"
         return warnings
     def __dir__(self):
         answer = list(super().__dir__())
-        answer.extend(self.cbs.cbsDict.keys())
-        return answer
+        answer.extend(self.cbs.cbsDict.keys()); return answer
     def __repr__(self):
         return f"""{self._warnings}l.model:\n{k1lib.tab(k1lib.limitLines(str(self.model)))}
 l.opt:\n{k1lib.tab(k1lib.limitLines(str(self.opt)))}
@@ -206,3 +206,19 @@ just placed here as a convention, so you have to do something like this::
     l.evaluate = partial(evaluate(l))
 """
     raise NotImplementedError("You have to define evaluate() by yourself")
+from k1lib.bioinfo.cli import *
+def getXbs(): return torch.linspace(0, 10, 50) | infiniteFrom() | batched(32) | toTensor().all()
+@k1lib.patch(Learner, static=True)
+def sample() -> Learner:
+    """Creates an example learner, just for simple testing stuff anywhere. The
+network tries to learn the function y=x."""
+    class DS:
+        def __iter__(self): return [getXbs(), getXbs()] | transpose() | head(100)
+    l = Learner(); l.data = k1lib.data.Data(DS(), range(0))
+    class Model(torch.nn.Module):
+        def __init__(self): super().__init__(); self.linear = torch.nn.Linear(1, 1)
+        def forward(self, x):
+            x = x[:, None]; return self.linear(x + 2).squeeze()
+    l.model = Model(); l.cbs = k1lib.Callbacks().withCoreNormal().withLoss().withProgressBar()
+    l.lossF = lambda y, yb: ((y - yb) ** 2).sum()
+    l.opt = torch.optim.Adam(l.model.parameters(), lr=3e-3); return l

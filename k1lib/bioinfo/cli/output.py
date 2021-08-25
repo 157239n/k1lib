@@ -14,7 +14,8 @@ class _Stdout(BaseCli):
     def __call__(self): return self
 stdout = _Stdout()
 class file(BaseCli):
-    def __init__(self, fileName:str): self.fileName = fileName
+    def __init__(self, fileName:str):
+        super().__init__(); self.fileName = fileName
     def __ror__(self, it:Iterator[str]) -> None:
         with open(self.fileName, "w") as f:
             for line in it: f.write(f"{line}\n")

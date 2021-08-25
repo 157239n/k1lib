@@ -18,7 +18,13 @@ class Landscape(Callback):
         """Plots the landscape of the network.
 
 :param propertyF: a function that takes in :class:`k1lib.Learner` and outputs the
-    desired float property"""
+    desired float property
+
+.. warning::
+
+    Remember to detach anything you get from :class:`k1lib.Learner` in your
+    function, or else you're gonna cause a huge memory leak.
+"""
         super().__init__(); self.propertyF = propertyF; self.suspended = True
         self.name = name or self.name; self.order = 23; self.parent:Callback = None
     def startRun(self): self.originalParams = self.l.model.exportParams()

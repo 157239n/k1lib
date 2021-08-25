@@ -31,7 +31,7 @@ class Loss(Callback):
         self.plot = partial(commonPlot, self)
         self.epoch.plot = partial(commonPlot, self.epoch)
         self._trainLosses = []; self._validLosses = []
-        self._landscape = k1lib.callbacks.Landscape(lambda l: l.loss, "LossLandscape")
+        self._landscape = k1lib.callbacks.Landscape(lambda l: l.loss, "_LossLandscape")
     def endLoss(self):
         if self.l.model.training: self._trainLosses.append(self.l.loss)
         else: self._validLosses.append(self.l.loss)
@@ -63,7 +63,7 @@ class Accuracy(Callback):
 :param accuracyF: accuracy function"""
         super().__init__(); self.order = 20; self.accuracyF = accuracyF
         self.train = [0]; self.valid = [0]; self.accuracy = 0;
-        self._landscape = k1lib.callbacks.Landscape(lambda l: l.Accuracy.accuracy, "AccuracyLandscape")
+        self._landscape = k1lib.callbacks.Landscape(lambda l: l.Accuracy.accuracy, "_AccuracyLandscape")
     def startRun(self):
         if not self.paused:
             self.train = list(self.train); self.valid = list(self.valid)

@@ -14,12 +14,12 @@ def patchDefaultIndent(s:str):
     - else returns the default indent character in settings"""
     return settings["defaultIndent"] if s is None else s
 from typing import List, Iterator, Any, NewType, TypeVar
-import itertools
-__all__ = ["serial", "oneToMany", "manyToMany", "manyToManySpecific"]
+import itertools, copy
+__all__ = ["BaseCli", "serial", "oneToMany", "manyToMany", "manyToManySpecific"]
 class _MetaType(type):
     def __getitem__(self, generic):
         d = {"__args__": generic, "_n": self._n, "__doc__": self.__doc__}
-        return _MetaType("MetaObj", (), d)
+        return _MetaType(self._n, (), d)
     def __repr__(self):
         def main(self):
             def trueName(o):
@@ -50,6 +50,9 @@ class Row(list):
     pass
 T = TypeVar("T")
 class BaseCli:
+    def __init__(self):
+        self._ind_resolved = False
+        self._ind_initial_scan_finished = False
     def __and__(self, cli:"BaseCli"):
         if isinstance(self, oneToMany):
             self.clis.append(cli); return self
@@ -68,6 +71,7 @@ class BaseCli:
     def __or__(self, it):
         if isinstance(it, BaseCli):
             return serial(self, it)
+    def __ror__(self, it): pass
     def f(self):
         """Creates a normal function :math:`f(x)` which is equivalent to
 ``x | self``."""
@@ -82,9 +86,8 @@ together without a prime iterator. Meaning, without this, stuff like this
 fails to run::
 
     [1, 2] | a() | b() # runs
-    c = a() | b(); [1, 2] | c # doesn't run if this class doesn't exist
-"""
-        self.clis = clis
+    c = a() | b(); [1, 2] | c # doesn't run if this class doesn't exist"""
+        super().__init__(); self.clis = clis
     def __ror__(self, it:Iterator[Any]) -> Iterator[Any]:
         for cli in self.clis: it = cli.__ror__(it)
         return it
@@ -92,7 +95,7 @@ class oneToMany(BaseCli):
     def __init__(self, *clis:List[BaseCli]):
         """Duplicates 1 stream into multiple streams, each for a cli in the
 list. Used in the "a & b" joining operator"""
-        self.clis = clis
+        super().__init__(); self.clis = clis
     def __ror__(self, it:Iterator[Any]) -> Iterator[Iterator[Any]]:
         its = itertools.tee(it, len(self.clis))
         for cli, it in zip(self.clis, its):
@@ -101,14 +104,16 @@ class manyToMany(BaseCli):
     def __init__(self, cli):
         """Applies multiple streams to a single cli. Used in the "a.all()"
 operator."""
-        self.cli = cli
+        super().__init__(); self.cli = cli
     def __ror__(self, it:Iterator[Iterator[Any]]) -> Iterator[Iterator[Any]]:
-        for stream in it: yield self.cli.__ror__(stream)
+        for stream in it:
+            cli = copy.deepcopy(self.cli)
+            yield cli.__ror__(stream)
 class manyToManySpecific(BaseCli):
     def __init__(self, *clis:List[BaseCli]):
         """Applies multiple streams to multiple clis independently. Used in
 the "a + b" joining operator """
-        self.clis = clis
+        super().__init__(); self.clis = clis
     def __ror__(self, its:Iterator[Any]) -> Iterator[Any]:
         for cli, it in zip(self.clis, its):
             yield cli.__ror__(it)

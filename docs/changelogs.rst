@@ -2,6 +2,41 @@
 Changelogs
 ==========
 
+`0.1.11 </0.1.11>`_
+-------------------
+
+Background stuff:
+
+- Added testing section for unit tests (simple assert statements inside the notebooks)
+
+.. currentmodule:: k1lib.bioinfo.cli
+
+Bioinfo cli:
+
+- Added numpy/torch checks to :class:`~utils.dereference`
+- Renamed :class:`~structural.sample` to :class:`~structural.peek`
+- Added :class:`~structural.infiniteFrom`, :class:`~structural.joinStreamsRandom`,
+  :class:`~structural.batched`, :class:`~structural.collate`, :class:`~structural.splitList`
+- Added :class:`~inp.infiniteF`
+- Added :class:`~utils.toTensor`
+- Replaced :class:`~structural.infinite` in favor of :class:`~structural.repeat`
+- Updated all cli tools to use ``super().__init__()``
+- Added :mod:`~k1lib.bioinfo.cli._ctx` module, with :class:`~_ctx.Promise`,
+  :class:`~_ctx.enum`, :class:`~_ctx.identity` classes, and :meth:`~_ctx.getC`,
+  :meth:`~_ctx.setC` methods
+
+.. currentmodule:: k1lib.callbacks
+
+DL:
+
+- Added :class:`k1lib.data.CyclicRandomSampler` and :class:`k1lib.data.DatasetWithSampler`
+- Added highlight feature in :meth:`callbacks.Callbacks.checkpointGraph`
+- Added :meth:`k1lib.viz.Carousel.pop`, :meth:`k1lib.viz.Carousel.__getitem__`
+- Added :meth:`k1lib.Learner.sample`
+- Disallow :meth:`k1lib.executeNb` to execute lines that starts with "!", also
+  removed parameter ``catchErrors``, as it's quite useless
+- Added :meth:`k1lib.Object`
+
 `0.1.10 </0.1.10>`_
 -------------------
 
@@ -133,7 +168,7 @@ Bioinfo cli:
 - Added :class:`~filt.isValue`, :class:`~filt.intersection`,
   :class:`~structural.AA_`, :class:`~structural.infinite`,
   :class:`~utils.dereference` cli tools
-- Modified :class:`~input.cat` to be able to take in file name by pipe
+- Modified :class:`~inp.cat` to be able to take in file name by pipe
 - Added new joining operator "+" between :class:`init.BaseCli`
 
 .. currentmodule:: k1lib.callbacks.callbacks

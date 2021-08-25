@@ -15,7 +15,7 @@ class header(_BaseCli):
         """Adds a header to the table.
 
 :param long: whether to use a long descriptive header, or a short one"""
-        self.long = long
+        super().__init__(); self.long = long
     def __ror__(self, it):
         header = _longHeader if self.long else _shortHeader
         return it | _cli.insertRow(header)
@@ -27,7 +27,7 @@ class quality(_BaseCli):
         """Get numeric quality of sequence.
 
 :param log: whether to use log scale (0 -> 40), or linear scale (1 -> 0.0001)"""
-        self.log = log
+        super().__init__(); self.log = log
     def __ror__(self, line):
         scale = _phredLog if self.log else _phredLinear
         for char in line: yield scale[char]

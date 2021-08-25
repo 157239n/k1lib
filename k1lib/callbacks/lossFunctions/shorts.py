@@ -6,6 +6,7 @@ import torch, k1lib, math, torch.nn.functional as F
 __all__ = ["LossLambda", "LossNLLCross"]
 LossFSig = Callable[[Tuple[torch.Tensor, torch.Tensor]], float]
 @k1lib.patch(Callback.cls)
+@k1lib.patch(Callback.lossCls)
 class LossLambda(Callback):
     " "
     def __init__(self, lossF:LossFSig):
@@ -20,6 +21,7 @@ correct y ``yb`` and return a single loss float (still attached to graph)."""
 def withLossLambda(self, lossF:LossFSig, name:str=None):
     return self.append(LossLambda(lossF), name=name)
 @k1lib.patch(Callback.cls)
+@k1lib.patch(Callback.lossCls)
 class LossNLLCross(Callback):
     " "
     def __init__(self, nll:bool, integrations:bool):

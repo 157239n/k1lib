@@ -3,7 +3,7 @@ from typing import Iterator, Union
 import urllib, subprocess, warnings
 from k1lib.bioinfo.cli.init import BaseCli
 import k1lib.bioinfo.cli as cli
-__all__ = ["cat", "cats", "curl", "wget", "cmd", "requireCli"]
+__all__ = ["cat", "cats", "curl", "wget", "cmd", "requireCli", "infiniteF"]
 def _catSimple(fileName:str=None) -> Iterator[str]:
     with open(fileName) as f:
         for line in f.readlines():
@@ -52,7 +52,7 @@ def executeCmd(cmd:str, inp:str=None):
 class cmd(BaseCli):
     def __init__(self, cmd:str):
         """Runs a command, and returns the output line by line."""
-        self.cmd = cmd; self.err = b''
+        super().__init__(); self.cmd = cmd; self.err = b''
     @property
     def err(self) -> bytes:
         """Error from the last command"""
@@ -75,3 +75,6 @@ if not found, else do nothing"""
     if len(a.err) > 0:
         raise ImportError(f"""Can't find cli tool {cliTool}. Please install
 it first.""")
+def infiniteF(f):
+    """Essentially just ``while True: yield f()``."""
+    while True: yield f()

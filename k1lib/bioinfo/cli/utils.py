@@ -3,10 +3,10 @@
 This is for all short utilities that has the boilerplate feeling
 """
 from k1lib.bioinfo.cli.init import patchDefaultDelim, BaseCli, settings, Table
-import k1lib.bioinfo.cli as cli, numbers
+import k1lib.bioinfo.cli as cli, numbers, torch, numpy as np
 from typing import overload, Iterator, Any, List, Set, Union
 __all__ = ["size", "shape", "item", "identity",
-           "toStr", "to1Str", "toNumpy",
+           "toStr", "to1Str", "toNumpy", "toTensor",
            "toList", "wrapList", "toSet", "toIter", "toRange",
            "equals", "reverse", "ignore",
            "toSum", "toAvg", "lengths", "headerIdx", "dereference"]
@@ -16,7 +16,7 @@ class size(BaseCli):
 
 :param idx: if idx is None return (rows, columns). If 0 or 1, then rows
     or columns"""
-        self.idx = idx
+        super().__init__(); self.idx = idx
     def __ror__(self, it:Iterator[str]):
         if self.idx == 0: # get rows only
             rows = 0
@@ -42,21 +42,23 @@ class identity(BaseCli):
     def __ror__(self, it:Iterator[Any]):
         return it
 class toStr(BaseCli):
-    def __init__(self):
-        """Converts every line (possibly just a number) to a string."""
+    """Converts every line (possibly just a number) to a string."""
     def __ror__(self, it:Iterator[str]):
         for line in it: yield str(line)
 class to1Str(BaseCli):
     def __init__(self, delim:str=None):
         """Merges all strings into 1, with `delim` in the middle"""
-        self.delim = patchDefaultDelim(delim)
+        super().__init__(); self.delim = patchDefaultDelim(delim)
     def __ror__(self, it:Iterator[str]):
         yield self.delim.join(it | toStr())
 class toNumpy(BaseCli):
     """Converts generator to numpy array"""
     def __ror__(self, it:Iterator[float]):
-        import numpy as np
         return np.array(list(it))
+class toTensor(BaseCli):
+    """Converts generator to :class:`torch.Tensor`"""
+    def __ror__(self, it):
+        return torch.tensor(list(it))
 class toList(BaseCli):
     """Converts generator to list. :class:`list` would do the
 same, but this is just to maintain the style"""
@@ -129,12 +131,21 @@ Example::
     return item() | wrapList() | cli.transpose() | cli.insertIdColumn(True)
 class dereference(BaseCli):
     """Recursively converts any iterator into a list. Only :class:`str`,
-:class:`numbers.Number` are not converted. Example:
-
-.. code-block::
+:class:`numbers.Number` are not converted. Example::
 
     iter(range(5)) # returns something like "<range_iterator at 0x7fa8c52ca870>"
     iter(range(5)) | deference() # returns [0, 1, 2, 3, 4]
-"""
+
+.. warning::
+
+    Can work well with PyTorch Tensors, but not Numpy's array as they screw things up
+    with the __ror__ operator, so do torch.from_numpy(...) first."""
     def __ror__(self, it:Iterator[Any]) -> List[Any]:
-        return [(e if e is None or isinstance(e, (numbers.Number, str)) else (e | self)) for e in it]
+        answer = []
+        for e in it:
+            if e is None or isinstance(e, (numbers.Number, str)):
+                answer.append(e)
+            elif isinstance(e, torch.Tensor) and len(e.shape) == 0:
+                answer.append(e.item())
+            else: answer.append(e | self)
+        return answer

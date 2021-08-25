@@ -1,6 +1,8 @@
 
-Cli streams
-===========
+Cli streams tutorial
+====================
+
+.. currentmodule:: k1lib.bioinfo.cli
 
 Symmetric
 ---------
@@ -22,14 +24,13 @@ can do::
     sizes = fileNames | cats() | shape(0).all() | toList()
 
 Let's analyze this in detail. ``fileNames`` is ``Iterator[str]``. It gets passed to
-``cats()``, which if you recall, :class:`~k1lib.bioinfo.cli.input.cats` is actually
-just ``apply(lambda s: cat(s))``, so now, the output is
-``Iterator[Iterator[str]]``. Now we want to get the #rows of every file, but we
-can't pipe the input directly to ``shape(0)``, as it will count how many files are
-there instead. So, the operator :meth:`~k1lib.bioinfo.cli.init.BaseCli.all` will
-return a new cli object that will apply ``shape(0)`` to every stream. The output of
-that will be ``Iterator[int]``, which we can convert to a list easily with
-``toList()``.
+:class:`~input.cats`, which if you recall, is actually just
+``apply(lambda s: cat(s))``, so now, the output is ``Iterator[Iterator[str]]``.
+Now we want to get the #rows of every file, but we can't pipe the input directly
+to :class:`~utils.shape`, as it will count how many files are there instead. So, the
+operator :meth:`~init.BaseCli.all` will return a new cli object that will apply
+:class:`~utils.shape` to every stream. The output of that will be ``Iterator[int]``, which
+we can convert to a list easily with :class:`~utils.toList`.
 
 This is pretty powerful, as you can be as meta as you'd like. Something crazy like
 this works::
@@ -41,8 +42,8 @@ this works::
 
 Here, the inner block ``cats() | shape(0).all() | toList()`` is just like last time.
 This time, it's applied on all ``List[str]`` elements in ``fileNames``, and
-``toList()`` just dereferences the iterator. The maximum meta level is actually
-``Iterator[Iterator[Iterator[str]]]`` here.
+:class:`~utils.toList` just dereferences the iterator. The maximum meta level is
+actually ``Iterator[Iterator[Iterator[str]]]`` here.
 
 You can also join different streams into just 1, by doing something like this::
 
@@ -53,8 +54,8 @@ You can also join different streams into just 1, by doing something like this::
 Asymmetric
 ----------
 
-The streams need not be symmetrical (derived from ``.all()`` operation) like the
-examples above::
+The streams need not be symmetrical (derived from :meth:`~init.BaseCli.all` operation)
+like the examples above::
 
     # returns [0, 1, 2, 'a', 'b', 'c']
     ["a", "b", "c"] | (toRange() & identity()) | joinStreams() | toList()
@@ -62,8 +63,8 @@ examples above::
     ["a", "b", "c"] | (toRange() & identity()) | joinColumns() | display()
 
 Here, a list of strings is piped into ``(toRange() & identity())`` operator. This will
-effectively split the input into 2 streams. 1 gets passed through ``toRange()``,
-and 1 through ``identity()``. So, the output is effectively
+effectively split the input into 2 streams. 1 gets passed through :class:`~utils.toRange`,
+and 1 through :class:`~utils.identity`. So, the output is effectively
 ``[Iterator[int], Iterator[str]]``, which we can join together just like before.
 
 When combining streams asymmetrically (using the ``&`` operator, and all cli
@@ -102,3 +103,10 @@ stacking floors of cli operators on top of another:
     | stream3 -> c() |
     +----------------+
 
+More procedural?
+----------------
+
+Underlying operations :class:`init.serial`, :class:`init.oneToMany`,
+:class:`init.manyToMany`, :class:`init.manyToManySpecific` that stands for operations
+(``|``, ``&``, ``.all()``, ``+``) are exposed, in case your streams have varying
+lengths.

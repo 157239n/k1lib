@@ -18,6 +18,7 @@ class grep(BaseCli):
 :param pattern: regex pattern to search for in a line
 :param before: lines before the hit. Outputs independent lines
 :param after: lines after the hit. Outputs independent lines"""
+        super().__init__()
         self.pattern = re.compile(pattern)
         self.before = before; self.after = after
         self.tillPattern = None
@@ -48,8 +49,8 @@ class grepToTable(BaseCli):
 lines in different columns. Example::
 
     # returns [['2', 'b'], ['5', 'b']]
-    "1a\\n 2b\\n 3c\\n 4d\\n 5b\\n 6c\\n f" | grepToTable("b", 1) | dereference()
-"""
+    "1a\\n 2b\\n 3c\\n 4d\\n 5b\\n 6c\\n f" | grepToTable("b", 1) | dereference()"""
+        super().__init__()
         self.pattern = pattern; self.before = before; self.after = after
     def __ror__(self, it:Iterator[str]) -> Table[str]:
         gr = grep(self.pattern, self.before, self.after)
@@ -65,6 +66,7 @@ class grepTemplate(BaseCli):
     def __init__(self, pattern:str, template:str):
         """Searches over all lines, pick out the match, and expands
 it to the templateand yields"""
+        super().__init__()
         self.pattern = re.compile(pattern); self.template = template
     def __ror__(self, it:Iterator[str]):
         for line in it:
