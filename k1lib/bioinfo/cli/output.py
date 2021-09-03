@@ -7,23 +7,24 @@ from typing import Iterator, Any
 from k1lib.bioinfo.cli.init import BaseCli, Table
 import k1lib.bioinfo.cli as cli
 __all__ = ["stdout", "file", "pretty", "display", "headOut"]
-class _Stdout(BaseCli):
-    """Prints out all lines"""
+class stdout(BaseCli):
+    """Prints out all lines. If not iterable, then print out the input raw"""
     def __ror__(self, it:Iterator[str]):
-        for line in it: print(line)
-    def __call__(self): return self
-stdout = _Stdout()
+        try:
+            it = iter(it)
+            for line in it: print(line)
+        except TypeError: print(it)
 class file(BaseCli):
     def __init__(self, fileName:str):
         super().__init__(); self.fileName = fileName
     def __ror__(self, it:Iterator[str]) -> None:
+        super().__ror__(it)
         with open(self.fileName, "w") as f:
             for line in it: f.write(f"{line}\n")
 class pretty(BaseCli):
     """Pretty prints a table"""
     def __ror__(self, it:Table[Any]) -> Iterator[str]:
-        table = []
-        widths = defaultdict(lambda: 0)
+        table = []; widths = defaultdict(lambda: 0)
         for row in it:
             _row = []
             for i, e in enumerate(row):
@@ -37,10 +38,10 @@ class pretty(BaseCli):
             yield s
 def display(lines:int=10):
     """Convenience method for displaying a table"""
-    f = pretty() | stdout
+    f = pretty() | stdout()
     if lines is None: return f
     else: return cli.head(lines) | f
 def headOut(lines:int=10):
-    """Convenience method for head() | stdout"""
-    if lines is None: return stdout
-    else: return cli.head(lines) | stdout
+    """Convenience method for head() | stdout()"""
+    if lines is None: return stdout()
+    else: return cli.head(lines) | stdout()

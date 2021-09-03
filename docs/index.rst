@@ -55,6 +55,7 @@ Classes:
 - :class:`k1lib.Range`
 - :class:`k1lib.Domain`
 - :class:`k1lib.AutoIncrement`
+- :class:`k1lib.Wrapper`
 - :class:`k1lib.ignoreWarnings`
 
 .. autoclass:: k1lib.Learner
@@ -85,6 +86,11 @@ Classes:
    :undoc-members:
    :show-inheritance:
 
+.. autoclass:: k1lib.Wrapper
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 .. autoclass:: k1lib.ignoreWarnings
    :members:
    :undoc-members:
@@ -111,6 +117,12 @@ Classes:
 .. autofunction:: k1lib.beep
 .. autofunction:: k1lib.executeNb
 .. autofunction:: k1lib.dontWrap
+.. autofunction:: k1lib.positionalEncode
+.. autofunction:: k1lib.debounce
+
+Higher order functions
+----------------------
+
 .. autofunction:: k1lib.polyfit
 .. autofunction:: k1lib.derivative
 .. autofunction:: k1lib.optimize

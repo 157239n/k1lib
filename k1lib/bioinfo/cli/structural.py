@@ -11,8 +11,9 @@ import itertools, numpy as np, torch
 __all__ = ["joinColumns", "transpose", "splitColumns", "joinList", "splitList",
            "joinStreams", "joinStreamsRandom", "batched", "collate",
            "insertRow", "insertColumn", "insertIdColumn",
-           "toDict", "split", "table", "stitch", "listToTable", "tableFromList",
-           "count", "permute", "accumulate", "AA_", "peek",
+           "toDict", "split", "expandE", "table", "stitch",
+           "listToTable", "tableFromList",
+           "count", "permute", "accumulate", "AA_", "peek", "peekF",
            "repeat", "infiniteFrom"]
 class joinColumns(BaseCli):
     def __init__(self, fillValue=None):
@@ -28,6 +29,7 @@ Example::
     [[1, 2, 3], [4, 5, 6, 7]] | joinColumns(0) | dereference()"""
         super().__init__(); self.fillValue = fillValue
     def __ror__(self, it:Iterator[Iterator[T]]) -> Table[T]:
+        super().__ror__(it)
         if self.fillValue is None: yield from zip(*it)
         else: yield from itertools.zip_longest(*it, fillvalue=self.fillValue)
 splitColumns = transpose = joinColumns
@@ -46,7 +48,7 @@ Example::
     [2, 6, 8] | joinList(5)"""
         super().__init__(); self.element = element; self.begin = begin
     def __ror__(self, it:Tuple[T, Iterator[T]]) -> Iterator[T]:
-        it = iter(it)
+        super().__ror__(it); it = iter(it)
         if self.element is None:
             if self.begin: yield next(it); yield from next(it)
             else: e = next(it); yield from next(it); yield e
@@ -62,7 +64,7 @@ Example::
     range(10) | splitList([0.8, 0.2]) | dereference()"""
         super().__init__(); self.weights = np.array(weights)
     def __ror__(self, it):
-        it = list(it); ws = self.weights; c = 0
+        super().__ror__(it); it = list(it); ws = self.weights; c = 0
         ws = (ws * len(it) / ws.sum()).astype(int)
         for w in ws: yield it[c:c+w]; c += w
 class joinStreams(BaseCli):
@@ -72,6 +74,7 @@ Example::
     # returns [1, 2, 3, 4, 5]
     [[1, 2, 3], [4, 5]] | joinStreams() | dereference()"""
     def __ror__(self, streams:Iterator[Iterator[T]]) -> Iterator[T]:
+        super().__ror__(streams)
         for stream in streams: yield from stream
 import random
 def rand(n):
@@ -83,25 +86,39 @@ Example::
     # could return [0, 1, 10, 2, 11, 12, 13, ...], with max length 20, typical length 18
     [range(0, 10), range(10, 20)] | joinStreamsRandom() | dereference()"""
     def __ror__(self, streams:Iterator[Iterator[T]]) -> Iterator[T]:
+        super().__ror__(streams)
         streams = [iter(st) for st in streams]
         try:
             for streamIdx in rand(len(streams)):
                 yield next(streams[streamIdx])
         except StopIteration: pass
 class batched(BaseCli):
-    def __init__(self, bs=32):
-        """Batches the input stream. Ignores the last batch.
+    def __init__(self, bs=32, includeLast=False):
+        """Batches the input stream.
 Example::
 
     # returns [[0, 1, 2], [3, 4, 5], [6, 7, 8]]
     range(11) | batched(3) | dereference()
-"""
-        super().__init__(); self.bs = bs
+    # returns [[0, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10]]
+    range(11) | batched(3, True) | dereference()
+    # returns [[0, 1, 2, 3, 4]]
+    range(5) | batched(float("inf"), True) | dereference()
+    # returns []
+    range(5) | batched(float("inf"), False) | dereference()"""
+        super().__init__(); self.bs = bs; self.includeLast = includeLast
     def __ror__(self, it):
-        it = iter(it)
+        super().__ror__(it); it = iter(it)
+        l = []
+        if self.bs == float("inf"):
+            if self.includeLast: yield list(it)
+            else: pass
+            return
         try:
-            while True: yield [next(it) for _ in range(self.bs)]
-        except StopIteration: pass
+            while True:
+                for i in range(self.bs): l.append(next(it))
+                yield l; l = []
+        except StopIteration:
+            if self.includeLast: yield l
 def collate():
     """Puts individual columns into a tensor.
 Example::
@@ -146,17 +163,23 @@ values. Example::
         super().__init__(); self.keyF = keyF or (lambda s: s)
         self.valueF = valueF or (lambda s: s)
     def __ror__(self, keys:Iterator[Any]) -> Dict[Any, Any]:
-        keyF = self.keyF; valueF = self.valueF
+        super().__ror__(keys); keyF = self.keyF; valueF = self.valueF
         return {keyF(key):valueF(key) for key in keys}
 class split(BaseCli):
     def __init__(self, delim:str=None, idx:int=None):
         """Splits each line using a delimiter, and outputs the
-parts as a separate line.
+parts as a separate line. Example::
+
+    # returns ["a", "b", "d", "e"]
+    ["a,b", "d,e"] | split(",") | dereference()
+    # returns ['b', 'e']
+    ["a,b", "d,e"] | split(",", 1) | dereference()
 
 :param idx: if available, only outputs the element at that index"""
         super().__init__()
         self.delim = patchDefaultDelim(delim); self.idx = idx
     def __ror__(self, it:Iterator[str]):
+        super().__ror__(it)
         if self.idx == None:
             for line in it:
                 for elem in line.split(self.delim): yield elem
@@ -164,6 +187,24 @@ parts as a separate line.
             for line in it:
                 elems = line.split(self.delim)
                 yield elems[self.idx] if self.idx < len(elems) else None
+class expandE(BaseCli):
+    def __init__(self, f:Callable[[T], List[T]], column:int):
+        """Expands table element to multiple columns.
+Example::
+
+    # returns [['abc', 3, -2], ['de', 2, -5]]
+    [["abc", -2], ["de", -5]] | expandE(lambda e: (e, len(e)), 0) | dereference()
+
+:param f: Function that transforms 1 row element to multiple
+"""
+        self.f = f; self.column = column
+    def __ror__(self, it):
+        f = self.f; c = self.column
+        def gen(row):
+            for i, e in enumerate(row):
+                if i == c: yield from f(e)
+                else: yield e
+        return (gen(row) for row in it)
 class table(BaseCli):
     def __init__(self, delim:str=None):
         """Splits lines to rows (List[str]) using a delimiter.
@@ -173,6 +214,7 @@ Example::
     ["a|bd", "1|2|3"] | table("|") | dereference()"""
         super().__init__(); self.delim = patchDefaultDelim(delim)
     def __ror__(self, it:Iterator[str]) -> Table[str]:
+        super().__ror__(it)
         return (line.split(self.delim) for line in it)
 class stitch(BaseCli):
     def __init__(self, delim:str=None):
@@ -183,7 +225,7 @@ See also: :class:`~k1lib.bioinfo.cli.output.pretty`. Example::
     [[1, 2], [3, 4], [5, 6]] | stitch("|") | dereference()"""
         super().__init__(); self.delim = patchDefaultDelim(delim)
     def __ror__(self, it:Table[str]) -> Iterator[str]:
-        d = self.delim
+        super().__ror__(it); d = self.delim
         for row in it: yield d.join([str(e) for e in row])
 def listToTable():
     """Turns Iterator[T] into Table[T]"""
@@ -197,14 +239,22 @@ columns. Example::
     ['a', 'b', 'b'] | count() | dereference()
 """
     def __ror__(self, it:Iterator[str]):
+        it = it | cli.apply(lambda row: (tuple(row) if isinstance(row, list) else row))
         c = Counter(it); s = sum(c.values())
         for k, v in c.items(): yield [v, k, f"{round(100*v/s)}%"]
 class permute(BaseCli):
     def __init__(self, *permutations:List[int]):
-        """Permutes the columns. Acts kinda like :meth:`torch.Tensor.permute`"""
+        """Permutes the columns. Acts kinda like :meth:`torch.Tensor.permute`.
+Example::
+
+    # returns [['b', 'a'], ['d', 'c']]
+    ["ab", "cd"] | permute(1, 0) | dereference()
+"""
         super().__init__(); self.permutations = permutations
     def __ror__(self, it:Iterator[str]):
-        for row in it: yield (row[i] for i in self.permutations)
+        super().__ror__(it); p = self.permutations
+        def gen(row): row = list(row); return (row[i] for i in p)
+        for row in it: yield gen(row)
 class accumulate(BaseCli):
     def __init__(self, columnIdx:int=0, avg=False):
         """Groups lines that have the same row[columnIdx], and
@@ -215,6 +265,7 @@ add together all other columns, assuming they're numbers
         super().__init__(); self.columnIdx = columnIdx; self.avg = avg
         self.dict = defaultdict(lambda: defaultdict(lambda: 0))
     def __ror__(self, it:Iterator[str]):
+        super().__ror__(it)
         for row in it:
             row = list(row); key = row[self.columnIdx]
             row.pop(self.columnIdx)
@@ -259,7 +310,7 @@ say you have a set "A", then "not A" is commonly written as A with an overline
         super().__init__(); self.idxs = idxs; self.wraps = wraps
         if len(idxs) == 0: raise AttributeError("Please enter some column indexes. If you wish to analyze all, put in `None`")
     def __ror__(self, it:List[Any]) -> List[List[List[Any]]]:
-        idxs = self.idxs; it = list(it)
+        super().__ror__(it); idxs = self.idxs; it = list(it)
         if len(idxs) == 1 and idxs[0] is None: idxs = range(len(it))
         def gen(idx):
             return [it[idx], [v for i, v in enumerate(it) if i != idx]]
@@ -275,9 +326,26 @@ potentially gain some insights about the internal formats. Example::
     for e in it: s += len(e)
     print(s) # prints "5", or length of 2 lists"""
     def __ror__(self, it:Iterator[T]) -> Tuple[T, Iterator[T]]:
+        super().__ror__(it)
         if (row := next(it, sentinel := object())) == sentinel: return None, []
         def gen(): yield row; yield from it
         return row, gen()
+class peekF(BaseCli):
+    def __init__(self, f:Union[BaseCli, Callable[[T], T]]):
+        r"""Similar to :class:`peek`, but will execute ``f(row)`` and
+return the input Iterator. Example::
+
+    it = lambda: iter([[1, 2, 3], [1, 2]])
+    # prints "[1, 2, 3]" and returns [[1, 2, 3], [1, 2]]
+    it() | peekF(lambda x: print(x)) | dereference()
+    # prints "1\n2\n3"
+    it() | peekF(headOut()) | dereference()"""
+        super().__init__(); self.f = f
+    def __ror__(self, it:Iterator[T]) -> Iterator[T]:
+        super().__ror__(it)
+        if (row := next(it, sentinel := object())) == sentinel: return []
+        def gen(): yield row; yield from it
+        self.f(row); return gen()
 class repeat(BaseCli):
     """Yields a specified amount of the passed in object.
 Example::
@@ -289,6 +357,7 @@ Example::
     def __init__(self, limit:int=None):
         super().__init__(); self.limit = limit
     def __ror__(self, o:T) -> Iterator[T]:
+        super().__ror__(o)
         if self.limit is None:
             while True: yield o
         else:

@@ -22,7 +22,7 @@ You want to download this automatically? (y/n) """)
             cli.wget(url); print("Finished!")
         else: return print("Aborted")
     file = settings["oboFile"] or "go.obo"; term = f"{term}".rjust(7, "0")
-    cli.cat(file) | cli.grep(f"id: GO:{term}", 0, 10) > cli.stdout
+    cli.cat(file) | cli.grep(f"id: GO:{term}", 0, 10) > cli.stdout()
     print(f"https://www.ebi.ac.uk/QuickGO/GTerm?id=GO:{term}")
     if settings["lookupImgs"]:
         class Repr:
@@ -84,6 +84,7 @@ class translate(BaseCli):
         super().__init__(); self.delim = "" if length == 0 else " "
         self.dict = [_shortAa, _medAa, _longAa][length]
     def __ror__(self, it:Iterator[str]):
+        super().__ror__(it)
         if isinstance(it, str): it = [it]
         it = it | transcribe()
         for line in it:

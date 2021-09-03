@@ -9,7 +9,8 @@ __all__ = ["size", "shape", "item", "identity",
            "toStr", "to1Str", "toNumpy", "toTensor",
            "toList", "wrapList", "toSet", "toIter", "toRange",
            "equals", "reverse", "ignore",
-           "toSum", "toAvg", "lengths", "headerIdx", "dereference"]
+           "toSum", "toAvg", "toMax", "toMin",
+           "lengths", "headerIdx", "dereference"]
 class size(BaseCli):
     def __init__(self, idx=None):
         """Returns number of rows and columns in the input.
@@ -18,6 +19,7 @@ class size(BaseCli):
     or columns"""
         super().__init__(); self.idx = idx
     def __ror__(self, it:Iterator[str]):
+        super().__ror__(it)
         if self.idx == 0: # get rows only
             rows = 0
             for line in it: rows += 1
@@ -50,7 +52,7 @@ class to1Str(BaseCli):
         """Merges all strings into 1, with `delim` in the middle"""
         super().__init__(); self.delim = patchDefaultDelim(delim)
     def __ror__(self, it:Iterator[str]):
-        yield self.delim.join(it | toStr())
+        super().__ror__(it); yield self.delim.join(it | toStr())
 class toNumpy(BaseCli):
     """Converts generator to numpy array"""
     def __ror__(self, it:Iterator[float]):
@@ -117,35 +119,90 @@ class toAvg(BaseCli):
         i += 1
         if not settings["strict"] and i == 0: return float("nan")
         return s / i
+class toMax(BaseCli):
+    """Calculates the max of a bunch of numbers"""
+    def __ror__(self, it:Iterator[float]) -> float: return max(it)
+class toMin(BaseCli):
+    """Calculates the min of a bunch of numbers"""
+    def __ror__(self, it:Iterator[float]) -> float: return min(it)
 class lengths(BaseCli):
     """Returns the lengths of each row."""
     def __ror__(self, it:Iterator[List[Any]]) -> Iterator[int]:
         for e in it: yield len(e)
 def headerIdx():
     """Cuts out first line, put an index column next to it, and prints it
-out. Useful when you want to know what your column's index is to cut it out.
+out. Useful when you want to know what your column's index is to cut it
+out. Also sets the context variable "header", in case you need it later.
 Example::
 
     # returns [[0, 'a'], [1, 'b'], [2, 'c']]
-    ["abc"] | headerIdx() | dereference()"""
-    return item() | wrapList() | cli.transpose() | cli.insertIdColumn(True)
+    ["abc"] | headerIdx() | dereference()
+    # returns "abc"
+    ctx["header"]()
+    """
+    return item() | cli.ctx.consume("header") | cli.tableFromList() | cli.insertIdColumn(True)
+Number = numbers.Number; Tensor = torch.Tensor; NpNumber = np.number
+class inv_dereference(BaseCli):
+    def __init__(self, ignoreTensors=False):
+        """Kinda the inverse to :class:`dereference`"""
+        super().__init__(); self.ignoreTensors = ignoreTensors
+    def __ror__(self, it:Iterator[Any]) -> List[Any]:
+        super().__ror__(it); ignoreTensors = self.ignoreTensors; 
+        for e in it:
+            if isinstance(e, cli.ctx.Promise): e = e()
+            if e is None or isinstance(e, (Number, NpNumber, str)): yield e
+            elif isinstance(e, Tensor):
+                if not ignoreTensors and len(e.shape) == 0: yield e.item()
+                else: yield e
+            else:
+                try: yield e | self
+                except: yield e
 class dereference(BaseCli):
-    """Recursively converts any iterator into a list. Only :class:`str`,
+    def __init__(self, ignoreTensors=False, maxDepth=float("inf")):
+        """Recursively converts any iterator into a list. Only :class:`str`,
 :class:`numbers.Number` are not converted. Example::
 
-    iter(range(5)) # returns something like "<range_iterator at 0x7fa8c52ca870>"
-    iter(range(5)) | deference() # returns [0, 1, 2, 3, 4]
+    # returns something like "<range_iterator at 0x7fa8c52ca870>"
+    iter(range(5))
+    # returns [0, 1, 2, 3, 4]
+    iter(range(5)) | deference()
+
+You can also specify a ``maxDepth``::
+
+    # returns something like "<list_iterator at 0x7f810cf0fdc0>"
+    iter([range(3)]) | dereference(maxDepth=0)
+    # returns [range(3)]
+    iter([range(3)]) | dereference(maxDepth=1)
+    # returns [[0, 1, 2]]
+    iter([range(3)]) | dereference(maxDepth=2)
+
+:param ignoreTensors: if True, then don't loop over :class:`torch.Tensor`
+    internals
 
 .. warning::
 
     Can work well with PyTorch Tensors, but not Numpy's array as they screw things up
     with the __ror__ operator, so do torch.from_numpy(...) first."""
+        super().__init__(); self.ignoreTensors = ignoreTensors
+        self.maxDepth = maxDepth; self.depth = 0
     def __ror__(self, it:Iterator[Any]) -> List[Any]:
-        answer = []
+        super().__ror__(it); answer = []; ignoreTensors = self.ignoreTensors
+        if self.depth >= self.maxDepth: return it
+        self.depth += 1
         for e in it:
-            if e is None or isinstance(e, (numbers.Number, str)):
+            if isinstance(e, cli.ctx.Promise): e = e()
+            if e is None or isinstance(e, (Number, NpNumber, str)):
                 answer.append(e)
-            elif isinstance(e, torch.Tensor) and len(e.shape) == 0:
-                answer.append(e.item())
-            else: answer.append(e | self)
+            elif isinstance(e, Tensor):
+                if not ignoreTensors and len(e.shape) == 0:
+                    answer.append(e.item())
+                else: answer.append(e)
+            else:
+                try: answer.append(e | self)
+                except: answer.append(e)
+        self.depth -= 1
         return answer
+    def __invert__(self) -> BaseCli:
+        """Returns a :class:`~k1lib.bioinfo.cli.init.BaseCli` that makes
+everything an iterator."""
+        return inv_dereference(self.ignoreTensors)

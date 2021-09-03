@@ -65,7 +65,13 @@ bio module
 ctx module
 ----------------------------
 
-.. automodule:: k1lib.bioinfo.cli._ctx
+.. toctree::
+   :maxdepth: 1
+   :hidden:
+
+   ctx
+
+.. automodule:: k1lib.bioinfo.cli.ctx
    :members:
    :undoc-members:
    :show-inheritance:
@@ -134,8 +140,14 @@ init module
    - strict: whether strict mode is on. Turning it on can help you debug stuff, but
      could also be a pain to work with
 
-.. automodule:: k1lib.bioinfo.cli.init
+.. autoclass:: k1lib.bioinfo.cli.init.BaseCli
    :members:
+   :undoc-members:
+   :special-members: __and__, __add__, __or__, __ror__, __lt__, __call__
+   :show-inheritance:
+
+.. automodule:: k1lib.bioinfo.cli.init
+   :members: serial, oneToMany, manyToMany, manyToManySpecific
    :undoc-members:
    :show-inheritance:
 

@@ -7,8 +7,7 @@ from collections import deque
 from typing import Iterator
 class grep(BaseCli):
     def __init__(self, pattern:str, before:int=0, after:int=0):
-        """Find lines that has the specified pattern. Example:
-.. code-block::
+        """Find lines that has the specified pattern. Example::
 
     # returns ['c', 'd', '2', 'd']
     "abcde12d34" | grep("d", 1) | dereference()
@@ -27,7 +26,7 @@ class grep(BaseCli):
 but after lines will be set to inf. Inclusive."""
         self.tillPattern = re.compile(pattern); self.after = 1e9; return self
     def __ror__(self, it:Iterator[str]) -> Iterator[str]:
-        self.sectionIdx = 0
+        super().__ror__(it); self.sectionIdx = 0
         queue = deque(); counter = 0 # remaining lines after to display
         for line in it:
             queue.append(line) # saves recent past lines
@@ -53,6 +52,7 @@ lines in different columns. Example::
         super().__init__()
         self.pattern = pattern; self.before = before; self.after = after
     def __ror__(self, it:Iterator[str]) -> Table[str]:
+        super().__ror__(it)
         gr = grep(self.pattern, self.before, self.after)
         elems = []; idx = 0
         for line in (it | gr):
@@ -69,6 +69,7 @@ it to the templateand yields"""
         super().__init__()
         self.pattern = re.compile(pattern); self.template = template
     def __ror__(self, it:Iterator[str]):
+        super().__ror__(it)
         for line in it:
             matchObj = self.pattern.search(line)
             if matchObj is None: continue

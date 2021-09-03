@@ -2,25 +2,27 @@
 """
 This is for functions that cuts out specific parts of the table
 """
-from typing import Callable, Union, List, overload, Iterator, Any, Set
+from typing import Callable, Union, List, overload, Iterator, Any, Set, Tuple
 from k1lib.bioinfo.cli.init import BaseCli, settings, Table, T
 import k1lib.bioinfo.cli as cli
 import k1lib
 from collections import deque
 __all__ = ["filt", "isValue", "inSet", "contains", "nonEmptyStream",
            "startswith", "endswith",
-           "isNumeric", "inRange",
-           "head", "columns", "cut", "rows", "intersection"]
+           "isNumeric", "instanceOf", "inRange",
+           "head", "columns", "cut", "rows",
+           "intersection", "union", "notIn", "unique"]
 class filt(BaseCli):
-    def __init__(self, predicate:Callable[[str], bool], column:int=None):
+    def __init__(self, predicate:Callable[[T], bool], column:int=None):
         """Filters out lines.
 
 :param column:
     - if integer, then predicate(row[column])
-    - if None, then predicate(line)"""
+    - if None, then predicate(row)"""
         super().__init__()
         self.predicate = predicate; self.column = column
-    def __ror__(self, it:Iterator[str]):
+    def __ror__(self, it:Iterator[T]) -> Iterator[T]:
+        super().__ror__(it)
         p = self.predicate; c = self.column
         if c is None: yield from (l for l in it if p(l))
         else:
@@ -60,6 +62,10 @@ def isNumeric(column:int=None):
         try: float(v); return True
         except ValueError: return False
     return filt(f, column)
+def instanceOf(cls:Union[type, Tuple[type]], column:int=None):
+    """Filters out lines that is not an instance of the given type"""
+    if isinstance(cls, list): cls = tuple(cls)
+    return filt(lambda e: isinstance(e, cls), column)
 def inRange(min:float=None, max:float=None, column:int=None):
     """Checks whether a column is in range or not"""
     if min is None: min = float("-inf")
@@ -76,7 +82,7 @@ class head(BaseCli):
     "0123456" | ~head(-3) | dereference() # returns ['4', '5', '6']"""
         super().__init__(); self.n = n; self.inverted = False
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
-        n = self.n
+        super().__ror__(it); n = self.n
         if n >= 0:
             if not self.inverted:
                 for i, line in enumerate(it):
@@ -105,6 +111,7 @@ this directly, use :class:`rows` instead"""
     def __init__(self, _slice):
         super().__init__(); self._slice = _slice; self.inverted = False
     def __ror__(self, it:Iterator[str]):
+        super().__ror__(it)
         it = list(it); full = range(len(it))
         rows = full[self._slice]
         if self.inverted: rows = [e for e in full if e not in rows]
@@ -153,6 +160,7 @@ Example::
         answer = rows(_slice); answer.inverted = self.inverted; return answer
     def __invert__(self): self.inverted = not self.inverted; return self
     def __ror__(self, it:Iterator[str]):
+        super().__ror__(it)
         true, false = (False, True) if self.inverted else (True, False)
         def gates():
             gate = self.domain.intIter(self.every); x = 0
@@ -176,6 +184,7 @@ Table[T]."""
         if len(columns) == 1 and isinstance(columns[0], slice): columns = columns[0]
         self.columns = columns; self.inverted = False
     def __ror__(self, it:Table[T]) -> Table[T]:
+        super().__ror__(it)
         columns = self.columns; it = iter(it); row = None
         row, it = it | cli.peek()
         if row is None: return iter(range(0))
@@ -189,13 +198,49 @@ Table[T]."""
     def __invert__(self): self.inverted = not self.inverted; return self
 cut = columns
 class intersection(BaseCli):
-    """Returns the intersection of multiple streams. Example::
+    """Returns the intersection of multiple streams.
+Example::
 
-    [[1, 2, 3, 4, 5], [7, 2, 4, 6, 5]] | intersection() # will return set([2, 4, 5])
-"""
+    # returns set([2, 4, 5])
+    [[1, 2, 3, 4, 5], [7, 2, 4, 6, 5]] | intersection()"""
     def __ror__(self, its:Iterator[Iterator[Any]]) -> Set[Any]:
         answer = None
         for it in its:
             if answer is None: answer = set(it); continue
             answer = answer.intersection(it)
         return answer
+class union(BaseCli):
+    """Returns the union of multiple streams.
+Example::
+
+    # returns {0, 1, 2, 10, 11, 12, 13, 14}
+    [range(3), range(10, 15)] | union()
+"""
+    def __ror__(self, its:Iterator[Iterator[Any]]) -> Set[Any]:
+        answer = set()
+        for it in its: answer = set.union(answer, set(it))
+        return answer
+class notIn:
+    def __init__(self, s:Iterator[T]):
+        """Returns elements that are not in the specified list.
+Example::
+
+    # returns [-5, -4, -3, -2, -1, 10, 11]
+    range(-5, 12) | notIn(range(10)) | dereference()"""
+        super().__init__(); self.s = set(s)
+    def __ror__(self, it:Iterator[T]) -> Iterator[T]:
+        s = self.s; return (r for r in it if r not in s)
+class unique(BaseCli):
+    def __init__(self, column:int):
+        """Filters out non-unique row elements.
+Example::
+
+    # returns [[1, "a"], [2, "a"]]
+    [[1, "a"], [2, "a"], [1, "b"]] | unique(0) | dereference()"""
+        self.column = column
+    def __ror__(self, it):
+        terms = set(); c = self.column
+        for row in it:
+            row = list(row); e = row[c]
+            if e not in terms: yield row
+            terms.add(e)

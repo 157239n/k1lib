@@ -17,6 +17,7 @@ class batch(_BaseCli):
     display the browser"""
         super().__init__(); self.headless = headless
     def __ror__(self, it:_List[str]):
+        super().__ror__(it)
         import selenium; from selenium import webdriver
         query = "\n".join(it | _cli.strip() | ~_cli.isValue(""))
         options = selenium.webdriver.chrome.options.Options()

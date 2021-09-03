@@ -2,6 +2,43 @@
 Changelogs
 ==========
 
+`0.1.12 </0.1.12>`_
+-------------------
+
+Background stuff:
+
+- Removed docs's generated ``fonts`` folder, as it takes 8MB and isn't even used. Should now be sustainable for 100 versions on github pages.
+
+.. currentmodule:: k1lib.bioinfo.cli
+
+Bioinfo cli:
+
+- Removed wrapping ``__ror__`` operator if ``__init__`` is not defined, to make things performant.
+- Added speed analysis in the `cli tutorial <tutorials.html>`_.
+- Added :meth:`init.BaseCli.__call__`, :class:`~modifier.consume`, :meth:`ctx.ctx`, :class:`ctx.f`, :class:`~structural.peekF`, :class:`~structural.expandE`, :meth:`utils.dereference.__invert__`, :class:`~filt.unique`, :class:`~filt.notIn`, :class:`~modifier.sortF`, :class:`~utils.toMax`, :class:`~utils.toMin`, :class:`~filt.union`, :meth:`~inp.ls`, :meth:`~filt.instanceOf`, :class:`~modifier.randomize`
+- Removed :class:`ctx.identity`
+- Added shortcuts to :meth:`ctx.setC` and :meth:`ctx.getC`
+- Made :meth:`~structural.headerIdx` context-aware
+- Put :class:`ctx.Promise` dereferencing at :meth:`init.BaseCli.__ror__`, instead of dynamic patching at :mod:`k1lib.bioinfo.cli` construction time
+- Get rid of :class:`~output.stdout` style inconsistencies. Previously, it looks like ``[1, 2] | stdout``, now it looks like ``[1, 2] | stdout()``.
+- Added multiprocessing capabilities with :class:`~modifier.applyMp`
+- Added ``maxDepth`` option for :class:`~utils.dereference`
+- Added ``includeLast`` option to :class:`~structural.batched`
+- Added ``float("inf")`` option to ``bs`` parameter of :class:`~structural.batched`
+- Fixed :class:`~structural.permute` to be able to take in generator for rows.
+- Fixed :class:`~output.stdout` to be able to display non-iterable inputs
+- Fixed :class:`~utils.dereference` so that it will handle poking errors
+- Fixed :class:`~structural.count` so that it can deal with list. Used to throw unhashable type: 'list'
+- Added more flexibility with :meth:`~modifier.toFloat`, :meth:`~modifier.toInt` and :class:`~modifier.sort`
+
+.. currentmodule:: k1lib.callbacks
+
+DL:
+
+- Added classes :class:`~k1lib.AutoIncrement`, :class:`~k1lib.Wrapper`
+- Added functions :meth:`~k1lib.positionalEncode`, :meth:`~k1lib.debounce`
+- Fixed :class:`~k1lib.executeNb`'s ``_globals`` doc-backref problem. Also clears plot automatically after executing a cell now.
+
 `0.1.11 </0.1.11>`_
 -------------------
 
@@ -21,9 +58,9 @@ Bioinfo cli:
 - Added :class:`~utils.toTensor`
 - Replaced :class:`~structural.infinite` in favor of :class:`~structural.repeat`
 - Updated all cli tools to use ``super().__init__()``
-- Added :mod:`~k1lib.bioinfo.cli._ctx` module, with :class:`~_ctx.Promise`,
-  :class:`~_ctx.enum`, :class:`~_ctx.identity` classes, and :meth:`~_ctx.getC`,
-  :meth:`~_ctx.setC` methods
+- Added :mod:`~k1lib.bioinfo.cli.ctx` module, with :class:`~ctx.Promise`,
+  :class:`~ctx.enum`, :class:`~ctx.identity` classes, and :meth:`~ctx.getC`,
+  :meth:`~ctx.setC` methods
 
 .. currentmodule:: k1lib.callbacks
 

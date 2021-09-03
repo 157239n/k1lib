@@ -17,6 +17,7 @@ class header(_BaseCli):
 :param long: whether to use a long descriptive header, or a short one"""
         super().__init__(); self.long = long
     def __ror__(self, it):
+        super().__ror__(it)
         header = _longHeader if self.long else _shortHeader
         return it | _cli.insertRow(header)
 _phred = """!"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJ"""
@@ -29,5 +30,6 @@ class quality(_BaseCli):
 :param log: whether to use log scale (0 -> 40), or linear scale (1 -> 0.0001)"""
         super().__init__(); self.log = log
     def __ror__(self, line):
+        super().__ror__(line)
         scale = _phredLog if self.log else _phredLinear
         for char in line: yield scale[char]

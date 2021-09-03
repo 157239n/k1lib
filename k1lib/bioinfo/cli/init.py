@@ -14,6 +14,7 @@ def patchDefaultIndent(s:str):
     - else returns the default indent character in settings"""
     return settings["defaultIndent"] if s is None else s
 from typing import List, Iterator, Any, NewType, TypeVar
+import k1lib.bioinfo.cli as cli
 import itertools, copy
 __all__ = ["BaseCli", "serial", "oneToMany", "manyToMany", "manyToManySpecific"]
 class _MetaType(type):
@@ -51,33 +52,51 @@ class Row(list):
 T = TypeVar("T")
 class BaseCli:
     def __init__(self):
+        """Not expected to be instantiated by the end user."""
         self._ind_resolved = False
         self._ind_initial_scan_finished = False
-    def __and__(self, cli:"BaseCli"):
+    def __and__(self, cli:"BaseCli") -> "oneToMany":
+        """Duplicates input stream to multiple joined clis."""
         if isinstance(self, oneToMany):
             self.clis.append(cli); return self
         if isinstance(cli, oneToMany):
             cli.clis.append(self); return cli
         return oneToMany(self, cli)
-    def __add__(self, cli):
+    def __add__(self, cli:"BaseCli") -> "manyToManySpecific":
+        """Parallel pass multiple streams to multiple clis."""
         if isinstance(self, manyToManySpecific):
             self.clis.append(cli); return self
         if isinstance(cli, manyToManySpecific):
             cli.clis.append(self); return cli
         return manyToManySpecific(self, cli)
     def all(self) -> "BaseCli":
-        """Applies this BaseCli to all incoming streams"""
+        """Applies this cli to all incoming streams"""
         return manyToMany(self)
-    def __or__(self, it):
-        if isinstance(it, BaseCli):
-            return serial(self, it)
-    def __ror__(self, it): pass
+    def __or__(self, it) -> "serial":
+        """Joins clis end-to-end"""
+        if isinstance(it, BaseCli): return serial(self, it)
+    def __ror__(self, it):
+        # Dereferences every :class:`~k1lib.bioinfo.cli.ctx.Promise`
+        # attributes inside this. Intended to be overridden by subclass
+        Promise = cli.ctx.Promise
+        if not self._ind_resolved: # short circuits
+            if not self._ind_initial_scan_finished:
+                self._ind_initial_scan_finished = True
+                # scan for promises, and set _promise_varname instead
+                for k in [k for k in self.__dict__ if isinstance(getattr(self, k), Promise)]:
+                    setattr(self, f"_promise_{k}", v := getattr(self, k)); v = v()
+            a = [k for k in self.__dict__ if k.startswith("_promise_")]
+            if len(a) == 0: self._ind_resolved = True
+            for k in a: setattr(self, k[9:], getattr(self, k)())
     def f(self):
         """Creates a normal function :math:`f(x)` which is equivalent to
 ``x | self``."""
         return lambda it: self.__ror__(it)
     def __lt__(self, it):
         """Default backup join symbol `>`, in case `it` implements __ror__()"""
+        return self.__ror__(it)
+    def __call__(self, it):
+        """Another way to do ``it | cli``"""
         return self.__ror__(it)
 class serial(BaseCli):
     def __init__(self, *clis:List[BaseCli]):
@@ -89,6 +108,7 @@ fails to run::
     c = a() | b(); [1, 2] | c # doesn't run if this class doesn't exist"""
         super().__init__(); self.clis = clis
     def __ror__(self, it:Iterator[Any]) -> Iterator[Any]:
+        super().__ror__(it)
         for cli in self.clis: it = cli.__ror__(it)
         return it
 class oneToMany(BaseCli):
@@ -97,23 +117,22 @@ class oneToMany(BaseCli):
 list. Used in the "a & b" joining operator"""
         super().__init__(); self.clis = clis
     def __ror__(self, it:Iterator[Any]) -> Iterator[Iterator[Any]]:
-        its = itertools.tee(it, len(self.clis))
-        for cli, it in zip(self.clis, its):
-            yield cli.__ror__(it)
+        super().__ror__(it); its = itertools.tee(it, len(self.clis))
+        for cli, it in zip(self.clis, its): yield cli.__ror__(it)
 class manyToMany(BaseCli):
-    def __init__(self, cli):
+    def __init__(self, cli:BaseCli):
         """Applies multiple streams to a single cli. Used in the "a.all()"
-operator."""
+operator. Note that this operation will use a different copy of the
+cli for each of the streams."""
         super().__init__(); self.cli = cli
     def __ror__(self, it:Iterator[Iterator[Any]]) -> Iterator[Iterator[Any]]:
-        for stream in it:
-            cli = copy.deepcopy(self.cli)
-            yield cli.__ror__(stream)
+        super().__ror__(it)
+        for stream in it: yield copy.deepcopy(self.cli).__ror__(stream)
 class manyToManySpecific(BaseCli):
     def __init__(self, *clis:List[BaseCli]):
         """Applies multiple streams to multiple clis independently. Used in
 the "a + b" joining operator """
         super().__init__(); self.clis = clis
     def __ror__(self, its:Iterator[Any]) -> Iterator[Any]:
-        for cli, it in zip(self.clis, its):
-            yield cli.__ror__(it)
+        super().__ror__(its)
+        for cli, it in zip(self.clis, its): yield cli.__ror__(it)

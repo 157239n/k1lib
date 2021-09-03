@@ -28,6 +28,7 @@ class maxDepth(_cli.init.BaseCli):
         self.depth = depth or float("inf")
         self.copy = copy
     def __ror__(self, nodes:_Iterator[_ET.Element]) -> _Iterator[_ET.Element]:
+        super().__ror__(nodes)
         for node in nodes:
             if self.copy: node = _copy.deepcopy(node)
             yield _maxDepth(node, self.depth)
@@ -41,6 +42,7 @@ class tag(_cli.init.BaseCli):
 found, then don't search deeper"""
         super().__init__(); self.tag = tag
     def __ror__(self, nodes:_Iterator[_ET.Element]) -> _Iterator[_ET.Element]:
+        self.__ror__(nodes)
         for node in nodes: yield from _tag(node, self.tag)
 def _pretty(node, depth:int=0, indents=[]):
     attr = "".join([f" {k}=\"{v}\"" for k, v in node.attrib.items()])
@@ -52,8 +54,9 @@ def _pretty(node, depth:int=0, indents=[]):
         yield indents[depth] + f"</{node.tag}>"
 class pretty(_cli.init.BaseCli):
     def __init__(self, indent:str=None):
-        self.indent = _cli.init.patchDefaultIndent(indent)
+        super().__init__(); self.indent = _cli.init.patchDefaultIndent(indent)
     def __ror__(self, it:_Iterator[_ET.Element]) -> _Iterator[str]:
+        super().__ror__(it)
         indents = [i*self.indent for i in range(100)]
         for node in it: yield from _pretty(node, indents=indents)
 class display(_cli.init.BaseCli):
@@ -61,7 +64,8 @@ class display(_cli.init.BaseCli):
         """Convenience method for getting head, make it pretty and print it out"""
         super().__init__(); self.depth = depth; self.lines = lines
     def __ror__(self, it:_Iterator[_ET.Element], lines=10):
+        super().__ror__(it)
         if self.depth is not None: it = it | maxDepth(self.depth)
         it = it | pretty()
         if self.lines is not None: it = it | _cli.head(self.lines)
-        it > _cli.stdout
+        it > _cli.stdout()

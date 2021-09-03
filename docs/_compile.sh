@@ -16,6 +16,8 @@ echo Building main docs --------------------
 rm -r _build
 make html
 
+rm -r _build/html/_static/fonts
+
 echo Building tutorials --------------------
 tutorials/build.py
 cp -r tutorials/tutorials _build/html/tutorials

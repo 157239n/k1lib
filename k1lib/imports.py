@@ -8,12 +8,14 @@ and everything will be in place"""
 import torch; from torch import nn, optim
 import torch.nn.functional as F, torch.utils.data as data
 import matplotlib.pyplot as plt, matplotlib
-import numpy as np, dill as pickle
+import numpy as np, dill as pickle, multiprocessing as mp, concurrent.futures as futures
 import k1lib; import k1lib.schedule as schedule
 import math, os, time, sys, random, logging, traceback, re, typing, glob, warnings
 from functools import partial
 from typing import List, Tuple, Callable, Union, Iterator
 k1lib.dontWrap()
+inf = float("inf")
+plt.rcParams['figure.dpi'] = 100
 class _OptionalImports:
     def __init__(self):
         """Class for importing optional modules. Can...
