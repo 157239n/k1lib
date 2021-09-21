@@ -48,7 +48,8 @@ class Schedule:
         x = _np.linspace(0, 1, 1000); y = [self.scheduleF(x) for x in x]; _plt.plot(x, y)
         y = self(0); _plt.plot(0, y, "o", **c); _plt.annotate("(0, {:.1e})".format(y), (0, y))
         y = self(1); _plt.plot(1, y, "o", **c); _plt.annotate("(1, {:.1e})".format(y), (1, y))
-        if (x := self.progress) is not None:
+        x = self.progress
+        if x is not None:
             blur = not (x in _k1lib.Range(0.1, 0.9))
             y = self(x); _plt.plot(x, y, "o", **c, alpha=(0.5 if blur else 1))
             if not blur: _plt.annotate("({:.1e}, {:.1e})".format(x, y), (x, y))

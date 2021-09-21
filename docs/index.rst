@@ -91,6 +91,11 @@ Classes:
    :undoc-members:
    :show-inheritance:
 
+.. autoclass:: k1lib.CaptureStdout
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 .. autoclass:: k1lib.ignoreWarnings
    :members:
    :undoc-members:

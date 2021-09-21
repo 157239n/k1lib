@@ -78,7 +78,8 @@ def plotF(params:Union[HookParam, Param, List[Param]], rangeSlice:slice):
     axes = axes.flatten()
     for field, ax in zip(fields, axes):
         for param in params:
-            r = k1lib.Range(len(fieldData := param.data[field]))[rangeSlice]
+            fieldData = param.data[field]
+            r = k1lib.Range(len(fieldData))[rangeSlice]
             ax.plot(r.range_[::step], fieldData[r.slice_][::step])
         ax.set_title(field.capitalize())
     plt.figlegend([p.name for p in params], loc='right')

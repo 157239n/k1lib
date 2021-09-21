@@ -13,7 +13,7 @@ class MemoryData:
         def hk(v, m, i, o=None):
             """v: type of hook"""
             mP = self.mProfiler
-            self.values[v] += (value := allocated() - mP.startMemory)
+            value = allocated() - mP.startMemory; self.values[v] += value
             if v == "f" or v == "b":
                 if v == "b" and mP.startBackwardPoint is None:
                     mP.startBackwardPoint = len(mP.linear)
@@ -73,7 +73,7 @@ architecture is required, then create a new one"""
     def __repr__(self):
         plt.figure(dpi=120); plt.grid(True)
         l = self.linear; s = self.linState; plt.xlabel("Time")
-        l=l/1000**(idx := math.floor(math.log10(l.max())/3))
+        idx = math.floor(math.log10(l.max())/3); l=l/1000**idx
         plt.ylabel(k1lib.format.sizes[idx])
         k1lib.viz.plotSegments(range(len(l)), l, s)
         plt.axvline(self.startBackwardPoint, linestyle="--")

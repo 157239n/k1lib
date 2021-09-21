@@ -22,7 +22,7 @@ class Profiler(Callback):
     def _memory(self): # do this to quickly debug, cause if not, Callback will just raise AttributeError on .memory
         if self._mpCache != None: return self._mpCache
         with self.cbs.context():
-            self.cbs.append(mp := MemoryProfiler())
+            mp = MemoryProfiler(); self.cbs.append(mp)
             mp.run(); self._mpCache = mp; return mp
     @property
     def memory(self) -> MemoryProfiler:
@@ -31,7 +31,7 @@ class Profiler(Callback):
     def _computation(self):
         if self._cpCache != None: return self._cpCache
         with self.cbs.context():
-            self.cbs.append(cp := ComputationProfiler(self))
+            cp = ComputationProfiler(self); self.cbs.append(cp)
             cp.run(); self._cpCache = cp; return cp
     @property
     def computation(self) -> ComputationProfiler:
@@ -40,7 +40,7 @@ class Profiler(Callback):
     def _time(self):
         if self._tpCache != None: return self._tpCache
         with self.cbs.context():
-            self.cbs.append(tp := TimeProfiler())
+            tp = TimeProfiler(); self.cbs.append(tp)
             tp.run(); self._tpCache = tp; return tp
     @property
     def time(self) -> TimeProfiler:
@@ -49,7 +49,7 @@ class Profiler(Callback):
     def _io(self):
         if self._ioCache != None: return self._ioCache
         with self.cbs.context():
-            self.cbs.append(io := IOProfiler())
+            io = IOProfiler(); self.cbs.append(io)
             io.run(); self._ioCache = io; return io
     @property
     def io(self) -> IOProfiler:

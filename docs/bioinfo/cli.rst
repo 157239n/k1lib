@@ -202,10 +202,20 @@ sam module
 structural module
 -----------------------------------
 
+.. currentmodule:: k1lib.bioinfo.cli.structural
+
 .. automodule:: k1lib.bioinfo.cli.structural
    :members:
+   :exclude-members: joinStreamsRandom
    :undoc-members:
    :show-inheritance:
+
+   .. attribute:: yieldSentinel
+
+      Object that can be yielded in a stream to ignore this stream for the moment in :class:`joinStreamsRandom`.
+
+   .. autoclass:: joinStreamsRandom
+      :members:
 
 utils module
 ------------------------------

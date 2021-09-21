@@ -7,7 +7,8 @@ metricPrefixes = {-8:"y",-7:"z",-6:"a",-5:"f",-4:"p",-3:"n",-2:"u",-1:"m",0:"",1
 sizes = {i: f"{p}B" for i, p in metricPrefixes.items() if i >= 0}; sizes[0] = "bytes"
 def _formatScale(x, units:Dict[int, str]):
     for i, unit in units.items():
-        if abs(x) < (upperBound := 1000 * 1000**i):
+        upperBound = 1000 * 1000**i
+        if abs(x) < upperBound:
             return f"{round(1e3*x/upperBound, 2)} {unit}"
     return f"{round(1e3*x/upperBound, 2)} {unit}"
 def size(_bytes=0): return _formatScale(_bytes, sizes)

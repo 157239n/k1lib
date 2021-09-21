@@ -5,16 +5,24 @@ This is for functions that cuts out specific parts of the table
 from typing import Callable, Union, List, overload, Iterator, Any, Set, Tuple
 from k1lib.bioinfo.cli.init import BaseCli, settings, Table, T
 import k1lib.bioinfo.cli as cli
-import k1lib
+import k1lib, os
 from collections import deque
-__all__ = ["filt", "isValue", "inSet", "contains", "nonEmptyStream",
+__all__ = ["filt", "isValue", "isFile", "inSet", "contains", "nonEmptyStream",
            "startswith", "endswith",
            "isNumeric", "instanceOf", "inRange",
            "head", "columns", "cut", "rows",
-           "intersection", "union", "notIn", "unique"]
+           "intersection", "union", "notIn", "unique", "breakIf"]
 class filt(BaseCli):
     def __init__(self, predicate:Callable[[T], bool], column:int=None):
         """Filters out lines.
+Examples::
+
+    # returns [2, 6]
+    [2, 3, 5, 6] | filt(lambda x: x%2 == 0) | deref()
+    # returns [3, 5]
+    [2, 3, 5, 6] | ~filt(lambda x: x%2 == 0) | deref()
+    # returns [[2, 'a'], [6, 'c']]
+    [[2, "a"], [3, "b"], [5, "a"], [6, "c"]] | filt(lambda x: x%2 == 0, 0) | deref()
 
 :param column:
     - if integer, then predicate(row[column])
@@ -33,16 +41,46 @@ class filt(BaseCli):
         """Negate the condition"""
         return filt(lambda s: not self.predicate(s), self.column)
 def isValue(value, column:int=None):
-    """Filters out lines that is different from the given value"""
+    """Filters out lines that is different from the given value.
+Example::
+
+    # returns [2, 2]
+    [1, 2, 3, 2, 1] | isValue(2) | deref()
+    # returns [1, 3, 1]
+    [1, 2, 3, 2, 1] | ~isValue(2) | deref()
+    # returns [[1, 2]]
+    [[1, 2], [2, 1], [3, 4]] | isValue(2, 1) | deref()"""
     return filt(lambda l: l == value, column)
+def isFile():
+    """Filters out non-files.
+Example::
+
+    # returns ["a.py", "b.py"], if those files really do exist
+    ["a.py", "hg/", "b.py"] | isFile()"""
+    return filt(lambda l: os.path.isfile(l))
 def inSet(values:Set[Any], column:int=None):
-    """Filters out lines that is not in the specified set"""
+    """Filters out lines that is not in the specified set.
+Example::
+
+    # returns [2, 3]
+    range(5) | inSet([2, 8, 3]) | cli.deref()
+    # returns [0, 1, 4]
+    range(5) | ~inSet([2, 8, 3]) | cli.deref()"""
+    values = set(values)
     return filt(lambda l: l in values, column)
 def contains(s:str, column:int=None):
-    """Filters out lines that don't contain the specified substring"""
+    """Filters out lines that don't contain the specified substring.
+Example::
+
+    # returns ['abcd', '2bcr']
+    ["abcd", "0123", "2bcr"] | contains("bc") | deref()"""
     return filt(lambda e: s in e, column)
 class nonEmptyStream(BaseCli):
-    """Filters out streams that have no rows"""
+    """Filters out streams that have no rows.
+Example::
+
+    # returns [[1, 2], ['a']]
+    [[], [1, 2], [], ["a"]] | nonEmptyStream() | deref()"""
     def __ror__(self, streams:Iterator[Iterator[Any]]) -> Iterator[Iterator[Any]]:
         for stream in streams:
             try:
@@ -51,35 +89,55 @@ class nonEmptyStream(BaseCli):
                 yield newGen()
             except StopIteration: pass
 def startswith(s:str, column:int=None):
-    """Filters out lines that don't start with `s`"""
+    """Filters out lines that don't start with `s`.
+Example::
+
+    # returns ['ab', 'ac']
+    ["ab", "cd", "ac"] | startswith("a") | deref()
+    # returns ['cd']
+    ["ab", "cd", "ac"] | ~startswith("a") | deref()"""
     return filt(lambda l: l.startswith(s), column)
 def endswith(s:str, column:int=None):
-    """Filters out lines that don't end with `s`"""
+    """Filters out lines that don't end with `s`. See also: :meth:`startswith`"""
     return filt(lambda l: l.endswith(s), column)
 def isNumeric(column:int=None):
-    """Filters out a line if that column is not a number"""
+    """Filters out a line if that column is not a number.
+Example:
+
+    # returns [0, 2, '3']
+    [0, 2, "3", "a"] | isNumeric() | deref()"""
     def f(v):
         try: float(v); return True
         except ValueError: return False
     return filt(f, column)
 def instanceOf(cls:Union[type, Tuple[type]], column:int=None):
-    """Filters out lines that is not an instance of the given type"""
+    """Filters out lines that is not an instance of the given type.
+Example::
+
+    # returns [2]
+    [2, 2.3, "a"] | instanceOf(int) | deref()
+    # returns [2, 2.3]
+    [2, 2.3, "a"] | instanceOf((int, float)) | deref()"""
     if isinstance(cls, list): cls = tuple(cls)
     return filt(lambda e: isinstance(e, cls), column)
-def inRange(min:float=None, max:float=None, column:int=None):
-    """Checks whether a column is in range or not"""
-    if min is None: min = float("-inf")
-    if max is None: max = float("inf")
+def inRange(min:float=float("-inf"), max:float=float("inf"), column:int=None) -> filt:
+    """Checks whether a column is in range or not.
+Example::
+
+    # returns [-2, 3, 6]
+    [-2, -8, 3, 6] | inRange(min=-3) | deref()
+    # returns [-8]
+    [-2, -8, 3, 6] | ~inRange(min=-3) | deref()"""
     return filt(lambda e: e >= min and e < max, column)
 class head(BaseCli):
     def __init__(self, n:int=10):
         """Only outputs first ``n`` lines. You can also negate it (like
 ``~head(5)``), which then only outputs after first ``n`` lines. Examples::
 
-    "abcde" | head(2) | dereference() # returns ["a", "b"]
-    "abcde" | ~head(2) | dereference() # returns ["c", "d", "e"]
-    "0123456" | head(-3) | dereference() # returns ['0', '1', '2', '3']
-    "0123456" | ~head(-3) | dereference() # returns ['4', '5', '6']"""
+    "abcde" | head(2) | deref() # returns ["a", "b"]
+    "abcde" | ~head(2) | deref() # returns ["c", "d", "e"]
+    "0123456" | head(-3) | deref() # returns ['0', '1', '2', '3']
+    "0123456" | ~head(-3) | deref() # returns ['4', '5', '6']"""
         super().__init__(); self.n = n; self.inverted = False
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
         super().__ror__(it); n = self.n
@@ -126,13 +184,13 @@ constructed (unless you're using some really weird slices).
 
 Example::
 
-    "0123456789" | rows(2) | dereference() # returns ["2"]
-    "0123456789" | rows(5, 8) | dereference() # returns ["5", "8"]
-    "0123456789" | rows()[2:5] | dereference() # returns ["2", "3", "4"]
-    "0123456789" | ~rows()[2:5] | dereference() # returns ["0", "1", "5", "6", "7", "8", "9"]
-    "0123456789" | ~rows()[:7:2] | dereference() # returns ['1', '3', '5', '7', '8', '9']
-    "0123456789" | rows()[:-4] | dereference() # returns ['0', '1', '2', '3', '4', '5']
-    "0123456789" | ~rows()[:-4] | dereference() # returns ['6', '7', '8', '9']"""
+    "0123456789" | rows(2) | deref() # returns ["2"]
+    "0123456789" | rows(5, 8) | deref() # returns ["5", "8"]
+    "0123456789" | rows()[2:5] | deref() # returns ["2", "3", "4"]
+    "0123456789" | ~rows()[2:5] | deref() # returns ["0", "1", "5", "6", "7", "8", "9"]
+    "0123456789" | ~rows()[:7:2] | deref() # returns ['1', '3', '5', '7', '8', '9']
+    "0123456789" | rows()[:-4] | deref() # returns ['0', '1', '2', '3', '4', '5']
+    "0123456789" | ~rows()[:-4] | deref() # returns ['6', '7', '8', '9']"""
         super().__init__()
         if len(rows) == 1 and isinstance(rows[0], slice):
             s = rows[0]
@@ -173,10 +231,10 @@ class columns(BaseCli):
     def __init__(self, *columns:List[int]):
         """Cuts out specific columns, sliceable. Examples::
 
-    ["0123456789"] | cut(5, 8) | dereference() # returns [['5', '8']]
-    ["0123456789"] | cut(2) | dereference() # returns ['2']
-    ["0123456789"] | cut(5, 8) | dereference() # returns [['5', '8']]
-    ["0123456789"] | ~cut()[:7:2] | dereference() # returns [['1', '3', '5', '7', '8', '9']]
+    ["0123456789"] | cut(5, 8) | deref() # returns [['5', '8']]
+    ["0123456789"] | cut(2) | deref() # returns ['2']
+    ["0123456789"] | cut(5, 8) | deref() # returns [['5', '8']]
+    ["0123456789"] | ~cut()[:7:2] | deref() # returns [['1', '3', '5', '7', '8', '9']]
 
 If you're selecting only 1 column, then Iterator[T] will be returned, not
 Table[T]."""
@@ -226,7 +284,7 @@ class notIn:
 Example::
 
     # returns [-5, -4, -3, -2, -1, 10, 11]
-    range(-5, 12) | notIn(range(10)) | dereference()"""
+    range(-5, 12) | notIn(range(10)) | deref()"""
         super().__init__(); self.s = set(s)
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
         s = self.s; return (r for r in it if r not in s)
@@ -236,11 +294,27 @@ class unique(BaseCli):
 Example::
 
     # returns [[1, "a"], [2, "a"]]
-    [[1, "a"], [2, "a"], [1, "b"]] | unique(0) | dereference()"""
-        self.column = column
-    def __ror__(self, it):
-        terms = set(); c = self.column
+    [[1, "a"], [2, "a"], [1, "b"]] | unique(0) | deref()
+
+:param column: doesn't have the default case of None, because you can always use
+    :class:`k1lib.bioinfo.cli.utils.toSet`"""
+        super().__init__(); self.column = column
+    def __ror__(self, it:Table[T]) -> Table[T]:
+        self.__ror__(it); terms = set(); c = self.column
         for row in it:
             row = list(row); e = row[c]
             if e not in terms: yield row
             terms.add(e)
+class breakIf(BaseCli):
+    def __init__(self, f):
+        """Breaks the input iterator if a condition is met.
+Example::
+
+    # returns [0, 1, 2, 3, 4, 5]
+    [*range(10), 2, 3] | breakIf(lambda x: x > 5) | deref()"""
+        super().__init__(); self.f = f
+    def __ror__(self, it:Iterator[T]) -> Iterator[T]:
+        super().__ror__(it); f = self.f
+        for line in it:
+            if f(line): break
+            yield line

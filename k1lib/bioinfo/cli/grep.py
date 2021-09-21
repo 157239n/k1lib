@@ -10,9 +10,9 @@ class grep(BaseCli):
         """Find lines that has the specified pattern. Example::
 
     # returns ['c', 'd', '2', 'd']
-    "abcde12d34" | grep("d", 1) | dereference()
+    "abcde12d34" | grep("d", 1) | deref()
     # returns ['d', 'e', 'd', '3', '4']
-    "abcde12d34" | grep("d", 0, 3).till("e") | dereference()
+    "abcde12d34" | grep("d", 0, 3).till("e") | deref()
 
 :param pattern: regex pattern to search for in a line
 :param before: lines before the hit. Outputs independent lines
@@ -48,7 +48,7 @@ class grepToTable(BaseCli):
 lines in different columns. Example::
 
     # returns [['2', 'b'], ['5', 'b']]
-    "1a\\n 2b\\n 3c\\n 4d\\n 5b\\n 6c\\n f" | grepToTable("b", 1) | dereference()"""
+    "1a\\n 2b\\n 3c\\n 4d\\n 5b\\n 6c\\n f" | grepToTable("b", 1) | deref()"""
         super().__init__()
         self.pattern = pattern; self.before = before; self.after = after
     def __ror__(self, it:Iterator[str]) -> Table[str]:

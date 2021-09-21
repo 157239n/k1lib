@@ -28,7 +28,7 @@ class pretty(BaseCli):
         for row in it:
             _row = []
             for i, e in enumerate(row):
-                _row.append(e := f"{e}")
+                e = f"{e}"; _row.append(e)
                 widths[i] = max(len(e), widths[i])
             table.append(_row)
         for row in table:

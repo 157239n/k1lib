@@ -3,17 +3,15 @@ import k1lib as _k1lib, time as _time
 def beepOnAvailable(url:str, timeout=5, **kwargs):
     """Tries to connect with a url repeatedly, and if successful, plays
 a beep sound"""
-    if (requests := _k1lib.imports.optionalImports("requests")) is None:
-        raise ImportError("Module requests not found")
+    requests = _k1lib.imports.optionalImports("requests")
+    if requests is None: raise ImportError("Module requests not found")
     try:
         while True:
-            _time.sleep(1)
-            successful = False
+            _time.sleep(1); successful = False
             try:
                 if requests.get(url, timeout=timeout, **kwargs).ok:
                     successful = True
             except: pass
             if successful:
-                _k1lib.beep()
-                break
+                _k1lib.beep(); break
     except KeyboardInterrupt: print("Still not available")

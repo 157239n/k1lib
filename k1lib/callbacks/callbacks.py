@@ -212,6 +212,7 @@ checkpoint. This is useful for profiling stuff."""
 Can...
 - t.startRun: to get specific checkpoint's execution time
 - t.plot(): to plot all checkpoints"""
+_time = time.time
 class Callbacks:
     def __init__(self):
         self._l: k1lib.Learner = None; self.cbsDict = {}; self._timings = Timings()
@@ -260,9 +261,9 @@ Returns True if any of the checkpoints return anything at all"""
         self._checkpointGraph_call(checkpoints)
         answer = False
         for checkpoint in checkpoints:
-            beginTime = time.time()
+            beginTime = _time()
             answer |= any([cb(checkpoint) for cb in self.cbs])
-            self._timings[checkpoint] += time.time() - beginTime
+            self._timings[checkpoint] += _time() - beginTime
         return answer
     def __getitem__(self, idx:Union[int, str]) -> Callback:
         return self.cbs[idx] if isinstance(idx, int) else self.cbsDict[idx]

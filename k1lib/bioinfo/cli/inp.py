@@ -4,8 +4,7 @@ from typing import Iterator, Union
 import urllib, subprocess, warnings, os
 from k1lib.bioinfo.cli.init import BaseCli
 import k1lib.bioinfo.cli as cli
-__all__ = ["cat", "cats", "curl", "wget", "ls", "cmd", "requireCli",
-           "infiniteF"]
+__all__ = ["cat", "cats", "curl", "wget", "ls", "cmd", "requireCli"]
 def _catSimple(fileName:str=None) -> Iterator[str]:
     with open(fileName) as f:
         for line in f.readlines():
@@ -121,6 +120,3 @@ if not found, else do nothing"""
     if len(a.err) > 0:
         raise ImportError(f"""Can't find cli tool {cliTool}. Please install
 it first.""")
-def infiniteF(f):
-    """Essentially just ``while True: yield f()``."""
-    while True: yield f()

@@ -2,6 +2,36 @@
 Changelogs
 ==========
 
+`0.1.13 </0.1.13>`_
+-------------------
+
+Background stuff:
+
+- Removed walrus operator library-wide, so that it can be used with Python < 3.8
+
+.. currentmodule:: k1lib.bioinfo.cli
+
+Bioinfo cli:
+
+- Added :class:`~filt.breakIf`, :class:`~filt.isFile`
+- Replaced :class:`~inp.infiniteF` with :class:`~structural.repeatF`
+- Replaced :class:`~structural.infiniteFrom` with :class:`~structural.repeatFrom`
+- Replaced :class:`~utils.dereference` with :class:`~utils.deref`
+- Replaced :class:`ctx.dereference` with :class:`ctx.deref`
+- Modified :class:`~modifier.applyMp` to use ``dill`` to deserialize everything
+- Modified :class:`~utils.to1Str` so that it returns a string, instead of yielding
+- Modified :class:`~utils.toStr` so that it can accept an optional column
+- Modified :class:`~structural.splitList` so that it accepts \*args
+- Removed :class:`~modifier.applySingle`, but retain :class:`~modifier.applyS`
+
+.. currentmodule:: k1lib.callbacks
+
+DL:
+
+- Added class :class:`~k1lib.CaptureStdout`
+- Patched :class:`torch.Tensor` with :meth:`~torch.Tensor.crissCross`,
+  :meth:`~torch.Tensor.histBounds` and :meth:`~torch.Tensor.histScaled`
+
 `0.1.12 </0.1.12>`_
 -------------------
 

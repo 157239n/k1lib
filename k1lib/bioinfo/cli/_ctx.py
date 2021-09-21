@@ -14,7 +14,7 @@ from k1lib.bioinfo.cli.init import BaseCli, settings, Table, T
 import k1lib.bioinfo.cli as cli
 import k1lib, numpy as np, numbers, torch
 from collections import deque
-__all__ = ["ctx", "Promise", "getC", "setC", "dereference",
+__all__ = ["ctx", "Promise", "getC", "setC", "deref",
            "consume", "enum", "f"]
 context = dict()
 def ctx():
@@ -44,9 +44,9 @@ If you don't interact with it directly like the above operations, but
 just pass it around, then it won't dereference. You can then force it to
 do so like this::
 
-    [ctx['a'], 5] | ctx.dereference() # returns an iterator, with the first variable dereferenced
-    [ctx['a'], 5] | ctx.dereference() | toList() # returns ['a', 5]
-    [ctx['a'], 5] | dereference() # returns ['a', 5]"""
+    [ctx['a'], 5] | ctx.deref() # returns an iterator, with the first variable dereferenced
+    [ctx['a'], 5] | ctx.deref() | toList() # returns ['a', 5]
+    [ctx['a'], 5] | deref() # returns ['a', 5]"""
         self.ctx = ctx
     def __call__(self): return context[self.ctx]
     @staticmethod
@@ -79,16 +79,19 @@ this::
 basicTypes = (numbers.Number, torch.Tensor, np.number, str)
 def gen(self, it):
     for e in it: yield e | self
-class dereference(BaseCli):
+class deref(BaseCli):
     """If encountered a :class:`Promise`, then replaces it with the value.
-It's important to note that :class:`k1lib.bioinfo.cli.utils.dereference`
-already replaced every :class:`Promise`, so you don't have to pass
+It's important to note that :class:`k1lib.bioinfo.cli.utils.deref`
+already replaces every :class:`Promise`, so you don't have to pass
 through this cli beforehand if you intend to dereference. Example::
 
     ctx.setC('a', 4)
     # returns [4]
-    [ctx.Promise('a')] | ctx.dereference() | toList()
-"""
+    [ctx.Promise('a')] | ctx.deref() | toList()
+
+Note that this ``deref()`` is inside a quite obscure module, and not the
+main one at :class:`k1lib.bioinfo.cli.utils.deref` that's used much more
+often."""
     def __ror__(self, it):
         if isinstance(it, basicTypes): return it
         if isinstance(it, Promise): return it()
@@ -103,10 +106,10 @@ Example::
     # returns [0, 1, 2, 3, 4]
     ctx['a']()
 
-:param kwargs: args to pass to :class:`~k1lib.bioinfo.cli.utils.dereference`."""
+:param kwargs: args to pass to :class:`~k1lib.bioinfo.cli.utils.deref`."""
         super().__init__(); self.ctx = ctx; self.kwargs = kwargs
     def __ror__(self, it:T) -> T:
-        it = it | cli.dereference(**self.kwargs)
+        it = it | cli.deref(**self.kwargs)
         context[self.ctx] = it; return it
 class enum(BaseCli):
     def __init__(self, ctx:str):
@@ -114,7 +117,7 @@ class enum(BaseCli):
 Example::
 
     # returns [['abc', 0], ['def', 1]]
-    ["abc", "def"] | ctx.enum("a") | apply(lambda r: [r, ctx['a']]) | dereference()"""
+    ["abc", "def"] | ctx.enum("a") | apply(lambda r: [r, ctx['a']]) | deref()"""
         super().__init__(); self.ctx = ctx
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
         ctx = self.ctx
@@ -125,7 +128,7 @@ class f(BaseCli):
 Example::
 
     # returns [['abc', 3], ['ab', 2]]
-    ["abc", "ab"] | ctx.f('a', lambda s: len(s)) | apply(lambda r: [r, ctx['a']]) | dereference()
+    ["abc", "ab"] | ctx.f('a', lambda s: len(s)) | apply(lambda r: [r, ctx['a']]) | deref()
 
 :param f: if not specified, then just save the object as-if"""
         self.ctx = ctx; self.f = f or (lambda x: x)

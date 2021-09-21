@@ -84,7 +84,8 @@ class BaseCli:
                 self._ind_initial_scan_finished = True
                 # scan for promises, and set _promise_varname instead
                 for k in [k for k in self.__dict__ if isinstance(getattr(self, k), Promise)]:
-                    setattr(self, f"_promise_{k}", v := getattr(self, k)); v = v()
+                    v = getattr(self, k)
+                    setattr(self, f"_promise_{k}", v); v = v()
             a = [k for k in self.__dict__ if k.startswith("_promise_")]
             if len(a) == 0: self._ind_resolved = True
             for k in a: setattr(self, k[9:], getattr(self, k)())
@@ -108,8 +109,8 @@ fails to run::
     c = a() | b(); [1, 2] | c # doesn't run if this class doesn't exist"""
         super().__init__(); self.clis = clis
     def __ror__(self, it:Iterator[Any]) -> Iterator[Any]:
-        super().__ror__(it)
-        for cli in self.clis: it = cli.__ror__(it)
+        super().__ror__(it); clis = iter(self.clis)
+        for cli in clis: it = cli.__ror__(it)
         return it
 class oneToMany(BaseCli):
     def __init__(self, *clis:List[BaseCli]):

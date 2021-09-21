@@ -6,9 +6,10 @@ module name, like this::
     kcsv.cat("file.csv") | display()
 """
 import k1lib.bioinfo.cli as _cli
+from k1lib.bioinfo.cli.init import Table as _Table
 import csv as _csv
 from typing import Iterator as _Iterator
-def cat(file:str) -> _Iterator[str]:
+def cat(file:str) -> _Table[str]:
     """Opens a csv file, and turns them into nice row elements"""
     with open(file) as f:
         yield from _csv.reader(f)

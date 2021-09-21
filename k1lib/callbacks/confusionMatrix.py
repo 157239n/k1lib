@@ -17,8 +17,10 @@ This is implemented in :class:`~k1lib.callbacks.lossFunctions.shorts.LossNLLCros
         self.matrix = torch.zeros(self.n, self.n)
     def _adapt(self, idxs):
         """Adapts the internal matrix so that it supports new categories"""
-        if (m := idxs.max().item() + 1) > self.n: # +1 because max index = len() - 1
-            (matrix := torch.zeros(m, m))[:self.n, :self.n] = self.matrix
+        m = idxs.max().item() + 1
+        if m > self.n: # +1 because max index = len() - 1
+            matrix = torch.zeros(m, m)
+            matrix[:self.n, :self.n] = self.matrix
             self.matrix = matrix; self.n = len(self.matrix)
         return idxs
     def startEpoch(self): self.matrix = torch.zeros(self.n, self.n)
