@@ -56,7 +56,7 @@ def wget(url:str, fileName:str=None):
 :param fileName: if None, then tries to infer it from the url"""
     if fileName is None: fileName = url.split("/")[-1]
     urllib.request.urlretrieve(url, fileName)
-def ls(folder:str=None, dirs=True, files=True):
+def ls(folder:str=None):
     """List every file and folder inside the specified folder.
 Example::
 
@@ -65,19 +65,14 @@ Example::
     # same as above
     "/home" | ls()
     # only outputs files, not folders
-    ls("/home", dirs=False)
-    # same as above
-    "/home" | ls(dirs=False)"""
-    if folder is None: return _ls(dirs, files)
-    else: return folder | _ls(dirs, files)
+    ls("/home") | isFile()
+
+See also: :meth:`~k1lib.bioinfo.cli.filt.isFile`"""
+    if folder is None: return _ls()
+    else: return folder | _ls()
 class _ls(BaseCli):
-    def __init__(self, dirs:bool, files:bool):
-        self.dirs = dirs; self.files = files
     def __ror__(self, folder:str):
-        answer = (f"{folder}/{e}" for e in os.listdir(folder))
-        if not self.dirs: answer = (f for f in answer if not os.path.isdir(f))
-        if not self.files: answer = (f for f in answer if not os.path.isfile(f))
-        return list(answer)
+        return [f"{folder}/{e}" for e in os.listdir(folder)]
 def executeCmd(cmd:str, inp:str=None):
     """Runs a command, and returns the output line by line"""
     if inp is None:

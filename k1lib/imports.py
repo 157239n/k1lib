@@ -7,7 +7,7 @@ do. I put it here so that I can do::
 and everything will be in place"""
 import torch; from torch import nn, optim
 import torch.nn.functional as F, torch.utils.data as data
-import matplotlib.pyplot as plt, matplotlib
+import matplotlib.pyplot as plt, matplotlib as mpl
 import numpy as np, dill as pickle, multiprocessing as mp, concurrent.futures as futures
 import k1lib; import k1lib.schedule as schedule
 import math, os, time, sys, random, logging, traceback, re, typing, glob, warnings

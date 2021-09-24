@@ -7,7 +7,10 @@ module name, like this::
     ctx["country"] = 3
 
 Note that this is quite a niche module, and the full purpose of it is
-therefore under question.
+therefore under question. Also remember that by default, this module is
+not active. Do this to turn it on::
+
+    bioinfoSettings["useCtx"] = True
 """
 from typing import Callable, Union, List, overload, Iterator, Any, Set
 from k1lib.bioinfo.cli.init import BaseCli, settings, Table, T
@@ -32,6 +35,7 @@ that you do with it will dereferences it right away, like this::
 
     from k1lib.bioinfo.cli import *
     ctx["a"] = 4
+    ctx['a'] # returns Promise object
     f"value: {ctx['a']}" # returns string "value: 4"
     ctx['a'] + 5 # returns 9
     ctx['a'] / 5 # returns 0.8
@@ -44,9 +48,12 @@ If you don't interact with it directly like the above operations, but
 just pass it around, then it won't dereference. You can then force it to
 do so like this::
 
-    [ctx['a'], 5] | ctx.deref() # returns an iterator, with the first variable dereferenced
-    [ctx['a'], 5] | ctx.deref() | toList() # returns ['a', 5]
-    [ctx['a'], 5] | deref() # returns ['a', 5]"""
+    # returns an iterator, with the first variable dereferenced
+    [ctx['a'], 5] | ctx.deref()
+    # returns [4, 5]
+    [ctx['a'], 5] | ctx.deref() | toList()
+    # returns [4, 5]
+    [ctx['a'], 5] | deref()"""
         self.ctx = ctx
     def __call__(self): return context[self.ctx]
     @staticmethod

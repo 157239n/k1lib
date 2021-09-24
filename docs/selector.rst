@@ -107,8 +107,8 @@ in CSS too.
 
 .. note::
 
-   You can also use the asterisk "*" to select everything. So, ``#a > \*`` will match
-   all child of module with name "a", and ``#a \*`` will select everything
+   You can also use the asterisk "*" to select everything. So, ``#a > *`` will match
+   all child of module with name "a", and ``#a *`` will select everything
    recursively under it. In fact, when you first create :class:`k1lib.Learner`,
    the css is "*" to select everything by default
 

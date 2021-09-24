@@ -232,7 +232,7 @@ class deref(BaseCli):
     # returns something like "<range_iterator at 0x7fa8c52ca870>"
     iter(range(5))
     # returns [0, 1, 2, 3, 4]
-    iter(range(5)) | deference()
+    iter(range(5)) | deref()
 
 You can also specify a ``maxDepth``::
 

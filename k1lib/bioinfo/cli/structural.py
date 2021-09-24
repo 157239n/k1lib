@@ -43,9 +43,9 @@ class joinList(BaseCli):
 Example::
 
     # returns [5, 2, 6, 8]
-    [5, [2, 6, 8]] | joinList()
+    [5, [2, 6, 8]] | joinList() | deref()
     # also returns [5, 2, 6, 8]
-    [2, 6, 8] | joinList(5)"""
+    [2, 6, 8] | joinList(5) | deref()"""
         super().__init__(); self.element = element; self.begin = begin
     def __ror__(self, it:Tuple[T, Iterator[T]]) -> Iterator[T]:
         super().__ror__(it); it = iter(it)
@@ -118,15 +118,13 @@ Example::
     range(5) | batched(float("inf"), False) | deref()"""
         super().__init__(); self.bs = bs; self.includeLast = includeLast
     def __ror__(self, it):
-        super().__ror__(it); it = iter(it)
-        l = []
-        if self.bs == float("inf"):
-            if self.includeLast: yield list(it)
-            else: pass
+        super().__ror__(it); it = iter(it); l = []; bs = self.bs
+        if bs == float("inf"):
+            if self.includeLast: yield it
             return
         try:
             while True:
-                for i in range(self.bs): l.append(next(it))
+                for i in range(bs): l.append(next(it))
                 yield l; l = []
         except StopIteration:
             if self.includeLast: yield l
@@ -327,7 +325,8 @@ say you have a set "A", then "not A" is commonly written as A with an overline
         return [gen(idx) for idx in idxs]
 class peek(BaseCli):
     """Returns (firstRow, iterator). This sort of peaks at the first row, to
-potentially gain some insights about the internal formats. Example::
+potentially gain some insights about the internal formats. The returned iterator
+is not tampered. Example::
 
     e, it = iter([[1, 2, 3], [1, 2]]) | peek()
     print(e) # prints "[1, 2, 3]"
@@ -335,14 +334,15 @@ potentially gain some insights about the internal formats. Example::
     for e in it: s += len(e)
     print(s) # prints "5", or length of 2 lists"""
     def __ror__(self, it:Iterator[T]) -> Tuple[T, Iterator[T]]:
-        super().__ror__(it); sentinel = object(); row = next(it, sentinel)
+        super().__ror__(it); it = iter(it)
+        sentinel = object(); row = next(it, sentinel)
         if row == sentinel: return None, []
         def gen(): yield row; yield from it
         return row, gen()
 class peekF(BaseCli):
     def __init__(self, f:Union[BaseCli, Callable[[T], T]]):
         r"""Similar to :class:`peek`, but will execute ``f(row)`` and
-return the input Iterator. Example::
+return the input Iterator, which is not tampered. Example::
 
     it = lambda: iter([[1, 2, 3], [1, 2]])
     # prints "[1, 2, 3]" and returns [[1, 2, 3], [1, 2]]
@@ -351,13 +351,15 @@ return the input Iterator. Example::
     it() | peekF(headOut()) | deref()"""
         super().__init__(); self.f = f
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
-        super().__ror__(it); sentinel = object(); row = next(it, sentinel)
+        super().__ror__(it); it = iter(it)
+        sentinel = object(); row = next(it, sentinel)
         if row == sentinel: return []
         def gen(): yield row; yield from it
         self.f(row); return gen()
 class repeat(BaseCli):
-    """Yields a specified amount of the passed in object.
-Example::
+    """Yields a specified amount of the passed in object. If you intend to pass in
+an iterator, then make a list out of it first, as second copy of iterator probably
+won't work as you will have used it the first time. Example::
 
     # returns [[1, 2, 3], [1, 2, 3], [1, 2, 3]]
     [1, 2, 3] | repeat(3) | toList()

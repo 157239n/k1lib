@@ -538,20 +538,48 @@ def polyfit(x:List[float], y:List[float], deg:int=6) -> Func:
         return answer
     return _inner
 def derivative(f:Func, delta:float=1e-6) -> Func:
-    """Returns the derivative of a function"""
+    """Returns the derivative of a function.
+Example::
+
+    f = lambda x: x**2
+    df = k1lib.derivative(f)
+    df(3) # returns roughly 6 """
     return lambda x: (f(x + delta) - f(x)) / delta
 def optimize(f:Func, v:float=1, threshold:float=1e-6) -> float:
-    """Given :math:`f(x) = 0`, solves for x, using initial value `v`"""
+    r"""Given :math:`f(x) = 0`, solves for x, using initial value `v`.
+Example::
+
+    f = lambda x: x**2-2
+    # returns sqrt(2)
+    k1lib.optimize(f)
+    # returns -sqrt(2)
+    k1lib.optimize(f, -1)"""
     fD = derivative(f)
     while abs(f(v)) > threshold: v = v - f(v)/fD(v)
     return v
 def inverse(f:Func) -> Func:
-    """Returns the inverse of a function. The inverse function takes
-a long time to run, so don't use this where you need lots
-of speed."""
+    """Returns the inverse of a function.
+Example::
+
+    f = lambda x: x**2
+    fInv = k1lib.inverse(f)
+    # returns roughly 3
+    fInv(9)
+
+.. warning::
+    The inverse function takes a long time to run, so don't use this
+    where you need lots of speed. Also, as you might imagine, the
+    inverse function isn't really airtight. Should work well with
+    monotonic functions, but all bets are off with other functions."""
     return lambda y: optimize(lambda x: f(x) - y)
 def integrate(f:Func, _range:Range) -> float:
-    """Integrates a function over a range"""
+    """Integrates a function over a range.
+Example::
+
+    f = lambda x: x**2
+    # returns roughly 9
+    k1lib.integrate(f, [0, 3])"""
+    _range = Range(_range)
     n = 1000; xs = np.linspace(*_range, n)
     return sum([f(x)*_range.delta/n for x in xs])
 @patch(nn.Module)
@@ -799,7 +827,7 @@ Example::
             print("inside inner")
         print("else")
     # prints "['something', 'else']"
-    print(answer)
+    print(outer)
     # prints "['inside inner']"
     print(inner)
 

@@ -11,15 +11,14 @@ So let's say you have a list of files::
 
     fileNames = ["a.txt", "b.txt", "c.txt"]
 
-You now want to read every line from every file quickly, using cli tools, and get
-the number of rows in each file, instead of something like this::
+Let's say you now want to read every line from every file quickly, using cli tools,
+and get the number of rows in each file. Instead of something like this::
 
     sizes = []
     for fileName in fileNames:
         sizes.append(cat(fileName) | shape(0))
 
-...which really defeats the purpose of the elegant cli tool workflow. Instead, you
-can do::
+...which really defeats the purpose of the elegant cli tool workflow, you can do::
 
     sizes = fileNames | cats() | shape(0).all() | toList()
 
@@ -81,9 +80,9 @@ example::
     even = filt(lambda x: x % 2 == 0, None)
     odd = filt(lambda x: x % 2 == 1, None)
     # returns [[10, 12, 14, 16, 18], [31, 33, 35, 37, 39]]
-    [range(10, 20), range(30, 40)] | (even + odd) | dereference()
+    [range(10, 20), range(30, 40)] | (even + odd) | deref()
     # pretty much identical to:
-    [range(10, 20) | even, range(30, 40) | odd] | dereference()
+    [range(10, 20) | even, range(30, 40) | odd] | deref()
 
 This time, we're using the ``+`` operator. What this does is pass different streams
 to their corresponding cli operator.

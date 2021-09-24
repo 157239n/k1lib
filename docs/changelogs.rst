@@ -2,6 +2,25 @@
 Changelogs
 ==========
 
+`0.2 </0.2>`_
+-------------
+
+Pretty minor update. I just want to push this out as soon as possible
+
+Background stuff:
+
+- Changed versioning system so that it makes more sense
+- Added osic and mp tutorials
+- Added more speed analysis in the cli tutorial
+
+.. currentmodule:: k1lib.bioinfo.cli
+
+Bioinfo cli:
+
+- Removed ``dirs`` and ``files`` parameters in :class:`~inp.ls`, as :class:`~filt.isFile` is good enough
+- Disable module :mod:`~k1lib.bioinfo.cli.ctx` by default, to improve performance
+- Replaced :class:`~filt.nonEmptyStream` to :class:`~filt.empty`
+
 `0.1.13 </0.1.13>`_
 -------------------
 

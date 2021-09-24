@@ -81,7 +81,8 @@ class applyS(BaseCli):
 object, essentially"""
         super().__init__(); self.f = f
     def __ror__(self, it:T) -> T:
-        super().__ror__(it); return self.f(it)
+        if settings["useCtx"]: super().__ror__(it)
+        return self.f(it)
 def lstrip(column:int=None, char:str=None):
     """Strips left of every line.
 Example::
@@ -230,5 +231,5 @@ in ``float("inf")``, or ``None``. Example::
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
         super().__ror__(it)
         for batch in it | cli.batched(self.bs, True):
-            perms = torch.randperm(len(batch))
+            batch = list(batch); perms = torch.randperm(len(batch))
             for idx in perms: yield batch[idx]

@@ -7,7 +7,7 @@ from k1lib.bioinfo.cli.init import BaseCli, settings, Table, T
 import k1lib.bioinfo.cli as cli
 import k1lib, os
 from collections import deque
-__all__ = ["filt", "isValue", "isFile", "inSet", "contains", "nonEmptyStream",
+__all__ = ["filt", "isValue", "isFile", "inSet", "contains", "empty",
            "startswith", "endswith",
            "isNumeric", "instanceOf", "inRange",
            "head", "columns", "cut", "rows",
@@ -40,7 +40,7 @@ Examples::
     def __invert__(self):
         """Negate the condition"""
         return filt(lambda s: not self.predicate(s), self.column)
-def isValue(value, column:int=None):
+def isValue(value, column:int=None) -> filt:
     """Filters out lines that is different from the given value.
 Example::
 
@@ -51,44 +51,54 @@ Example::
     # returns [[1, 2]]
     [[1, 2], [2, 1], [3, 4]] | isValue(2, 1) | deref()"""
     return filt(lambda l: l == value, column)
-def isFile():
+def isFile() -> filt:
     """Filters out non-files.
 Example::
 
     # returns ["a.py", "b.py"], if those files really do exist
     ["a.py", "hg/", "b.py"] | isFile()"""
     return filt(lambda l: os.path.isfile(l))
-def inSet(values:Set[Any], column:int=None):
+def inSet(values:Set[Any], column:int=None) -> filt:
     """Filters out lines that is not in the specified set.
 Example::
 
     # returns [2, 3]
-    range(5) | inSet([2, 8, 3]) | cli.deref()
+    range(5) | inSet([2, 8, 3]) | deref()
     # returns [0, 1, 4]
-    range(5) | ~inSet([2, 8, 3]) | cli.deref()"""
+    range(5) | ~inSet([2, 8, 3]) | deref()"""
     values = set(values)
     return filt(lambda l: l in values, column)
-def contains(s:str, column:int=None):
-    """Filters out lines that don't contain the specified substring.
+def contains(s:str, column:int=None) -> filt:
+    """Filters out lines that don't contain the specified substring. Sort of similar
+to :class:`~k1lib.bioinfo.cli.grep.grep`, but this is simpler, and can be inverted.
 Example::
 
     # returns ['abcd', '2bcr']
     ["abcd", "0123", "2bcr"] | contains("bc") | deref()"""
     return filt(lambda e: s in e, column)
-class nonEmptyStream(BaseCli):
-    """Filters out streams that have no rows.
-Example::
+class empty(BaseCli):
+    def __init__(self, reverse=False):
+        """Filters out streams that is not empty. Almost always used inverted,
+but "empty" is a short, sweet name easy to remember. Example::
 
     # returns [[1, 2], ['a']]
-    [[], [1, 2], [], ["a"]] | nonEmptyStream() | deref()"""
-    def __ror__(self, streams:Iterator[Iterator[Any]]) -> Iterator[Iterator[Any]]:
+    [[], [1, 2], [], ["a"]] | ~empty() | deref()
+
+:param reverse: not intended to be used by the end user. Do ``~empty()`` instead."""
+        super().__init__(); self.reverse = reverse
+    def __ror__(self, streams:Iterator[Iterator[T]]) -> Iterator[Iterator[T]]:
+        super().__ror__(streams); r = self.reverse
         for stream in streams:
             try:
-                it = iter(stream); firstValue = next(it)
-                def newGen(): yield firstValue; yield from it
-                yield newGen()
+                item, it = stream | cli.peek()
+                if not r:
+                    if it == []: yield it
+                else:
+                    if it != []: yield it
             except StopIteration: pass
-def startswith(s:str, column:int=None):
+    def __invert__(self):
+        return empty(not self.reverse)
+def startswith(s:str, column:int=None) -> filt:
     """Filters out lines that don't start with `s`.
 Example::
 
@@ -97,10 +107,10 @@ Example::
     # returns ['cd']
     ["ab", "cd", "ac"] | ~startswith("a") | deref()"""
     return filt(lambda l: l.startswith(s), column)
-def endswith(s:str, column:int=None):
+def endswith(s:str, column:int=None) -> filt:
     """Filters out lines that don't end with `s`. See also: :meth:`startswith`"""
     return filt(lambda l: l.endswith(s), column)
-def isNumeric(column:int=None):
+def isNumeric(column:int=None) -> filt:
     """Filters out a line if that column is not a number.
 Example:
 
@@ -110,7 +120,7 @@ Example:
         try: float(v); return True
         except ValueError: return False
     return filt(f, column)
-def instanceOf(cls:Union[type, Tuple[type]], column:int=None):
+def instanceOf(cls:Union[type, Tuple[type]], column:int=None) -> filt:
     """Filters out lines that is not an instance of the given type.
 Example::
 
