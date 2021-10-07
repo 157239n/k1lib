@@ -78,7 +78,7 @@ class apply(BaseCli):
 class applyS(BaseCli):
     def __init__(self, f:Callable[[T], T]):
         """Like :class:`apply`, but much simpler, just operating on the entire input
-object, essentially"""
+object, essentially. The "S" stands for "single"."""
         super().__init__(); self.f = f
     def __ror__(self, it:T) -> T:
         if settings["useCtx"]: super().__ror__(it)

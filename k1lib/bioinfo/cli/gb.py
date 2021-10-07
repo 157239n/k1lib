@@ -47,4 +47,4 @@ class origin(_BaseCli):
     def __ror__(self, it):
         return it | _cli.grep("ORIGIN", 0, 1e9) | ~_cli.head(1) | _cli.strip()\
         | _cli.table(" ") | _cli.cut()[1:] | _cli.stitch("")\
-        | _cli.remove("/") | _cli.to1Str("") | _cli.item()
+        | _cli.remove("/") | _cli.to1Str("")

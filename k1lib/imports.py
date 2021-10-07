@@ -9,10 +9,10 @@ import torch; from torch import nn, optim
 import torch.nn.functional as F, torch.utils.data as data
 import matplotlib.pyplot as plt, matplotlib as mpl
 import numpy as np, dill as pickle, multiprocessing as mp, concurrent.futures as futures
-import k1lib; import k1lib.schedule as schedule
 import math, os, time, sys, random, logging, traceback, re, typing, glob, warnings
 from functools import partial
 from typing import List, Tuple, Callable, Union, Iterator
+import k1lib; from k1lib import schedule, graphEqn
 k1lib.dontWrap()
 inf = float("inf")
 plt.rcParams['figure.dpi'] = 100

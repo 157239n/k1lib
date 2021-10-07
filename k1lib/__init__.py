@@ -15,7 +15,7 @@ from .schedule import Schedule, ParamScheduler
 from . import viz
 from . import imports
 
-from . import graphEqn
+#from . import gE
 from . import eqn
 
 from .bioinfo import *

@@ -590,7 +590,7 @@ update the current :class:`torch.nn.Module`'s parameters with it'"""
         oldParam.data = newParam.data.clone()
 @patch(nn.Module)
 def exportParams(self:nn.Module) -> List[torch.Tensor]:
-    """Gets the list of :class:`torch.nn.parameter.Parameter` data"""
+    """Gets the list of :class:`torch.Tensor` data"""
     return [param.data.clone() for param in self.parameters()]
 class ParamsContext:
     def __init__(self, m:nn.Module): self.m = m
