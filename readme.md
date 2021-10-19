@@ -16,7 +16,6 @@ Then in a notebook, do this:
 
 ```python
 from k1lib.imports import *
-from k1lib.bioinfo.cli import *
 ```
 
 ## Some details

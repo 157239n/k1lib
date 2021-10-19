@@ -16,7 +16,7 @@ setup(
               "k1lib.bioinfo", "k1lib.bioinfo.cli",
               "k1lib.callbacks", "k1lib.callbacks.profilers", 
               "k1lib.callbacks.lossFunctions"],
-    version="0.3",
+    version="0.4",
     install_requires=["torch", "numpy", "matplotlib", "dill"],
     extras_require={"graphviz": ["graphviz"]},
     description="Some nice ML overhaul",
