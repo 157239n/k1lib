@@ -11,7 +11,7 @@ import itertools, numpy as np, torch, k1lib
 __all__ = ["joinColumns", "transpose", "splitColumns", "joinList", "splitList",
            "joinStreams", "yieldSentinel", "joinStreamsRandom", "batched", "collate",
            "insertRow", "insertColumn", "insertIdColumn",
-           "toDict", "split", "expandE", "table", "stitch",
+           "toDict", "toDictF", "split", "expandE", "table", "stitch",
            "listToTable", "tableFromList",
            "count", "permute", "accumulate", "AA_", "peek", "peekF",
            "repeat", "repeatF", "repeatFrom"]
@@ -161,13 +161,23 @@ Example::
     if table: return f
     else: return cli.wrapList() | transpose() | f
 class toDict(BaseCli):
+    def __init__(self):
+        """Converts 2 Iterators, 1 key, 1 value into a dictionary.
+Example::
+
+    # returns {1: 3, 2: 4}
+    [[1, 2], [3, 4]] | toDict()"""
+        pass
+    def __ror__(self, it:Tuple[Iterator[T], Iterator[T]]) -> dict:
+        return {_k:_v for _k, _v in zip(*it)}
+class toDictF(BaseCli):
     def __init__(self, keyF:Callable[[Any], str]=None, valueF:Callable[[Any], Any]=None):
         """Transform an incoming stream into a dict using a function for
 values. Example::
 
     names = ["wanda", "vision", "loki", "mobius"]
-    names | toDict(valueF=lambda s: len(s)) # will return {"wanda": 5, "vision": 6, ...}
-    names | toDict(lambda s: s.title(), lambda s: len(s)) # will return {"Wanda": 5, "Vision": 6, ...}
+    names | toDictF(valueF=lambda s: len(s)) # will return {"wanda": 5, "vision": 6, ...}
+    names | toDictF(lambda s: s.title(), lambda s: len(s)) # will return {"Wanda": 5, "Vision": 6, ...}
 """
         super().__init__(); self.keyF = keyF or (lambda s: s)
         self.valueF = valueF or (lambda s: s)

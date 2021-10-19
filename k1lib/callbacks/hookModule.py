@@ -34,9 +34,9 @@ class ModuleData:
         return """Module's saved data. can...
 - d.forward: to get data stored during forward pass
 - d.backward: to get data stored during backward pass"""
-Fn = Callable[[Data, nn.Module, Tuple[torch.Tensor], Tuple[torch.Tensor]], None]
+_Fn = Callable[[Data, nn.Module, Tuple[torch.Tensor], Tuple[torch.Tensor]], None]
 class Function:
-    def __init__(self, f:Fn, name=None):
+    def __init__(self, f:_Fn, name=None):
         self.f = f; self.name = name or "f(<no name>)"
     def __call__(self, *args, **kwargs):
         self.f(*args, **kwargs)
@@ -131,15 +131,15 @@ def _end(self):
             cleanFn(module.data)
     self._unregisterHooks()
 @k1lib.patch(HookModule)
-def withForwardHook(self, hook:Fn, name:str=None):
+def withForwardHook(self, hook:_Fn, name:str=None):
     """Adds a hook to the forward pass. See :func:`~k1lib.callbacks.hookModule.HookModule.withHook`"""
     self.forwardFns += [Function(hook, name)]; return self
 @k1lib.patch(HookModule)
-def withBackwardHook(self, hook:Fn, name:str=None):
+def withBackwardHook(self, hook:_Fn, name:str=None):
     """Adds a hook to the backward pass. See :func:`~k1lib.callbacks.hookModule.HookModule.withHook`"""
     self.backwardFns += [Function(hook, name)]; return self
 @k1lib.patch(HookModule)
-def withHook(self, hook:Fn, name:str=None):
+def withHook(self, hook:_Fn, name:str=None):
     """Adds a hook to both the forward and backward pass.
 
 :param hook: this function is expected to take in these parameters: **(data, module, inp, out)**

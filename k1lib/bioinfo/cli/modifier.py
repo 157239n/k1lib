@@ -66,7 +66,21 @@ https://docs.python.org/3/library/multiprocessing.html#contexts-and-start-method
         return (r.get() for r in fs)
 class apply(BaseCli):
     def __init__(self, f:Callable[[str], str], column:int=None):
-        """Applies a function f to every line
+        """Applies a function f to every line.
+Example::
+
+    # returns [0, 1, 4, 9, 16]
+    range(5) | apply(lambda x: x**2) | deref()
+    # returns [[3.0, 1.0, 1.0], [3.0, 1.0, 1.0]]
+    torch.ones(2, 3) | apply(lambda x: x+2, 0) | cli.deref()
+
+You can also use this as a decorator, like this::
+
+    @apply
+    def f(x):
+        return x**2
+    # returns [0, 1, 4, 9, 16]
+    range(5) | f | deref()
 
 :param column: if not None, then applies the function to that column only"""
         super().__init__(); self.f = f; self.column = column
@@ -78,7 +92,19 @@ class apply(BaseCli):
 class applyS(BaseCli):
     def __init__(self, f:Callable[[T], T]):
         """Like :class:`apply`, but much simpler, just operating on the entire input
-object, essentially. The "S" stands for "single"."""
+object, essentially. The "S" stands for "single". Example::
+
+    # returns 5
+    3 | applyS(lambda x: x+2)
+
+Like :class:`apply`, you can also use this as a decorator like this::
+
+    @applyS
+    def f(x):
+        return x+2
+    # returns 5
+    3 | f
+"""
         super().__init__(); self.f = f
     def __ror__(self, it:T) -> T:
         if settings["useCtx"]: super().__ror__(it)
@@ -120,35 +146,49 @@ Example::
 def remove(s:str, column:int=None):
     """Removes a specific substring in each line."""
     return replace(s, "", column)
-def wrap(f, c): return f if settings["strict"] else cli.isNumeric(c) | f
-def toFloat(*columns:List[int]):
-    """Converts every row into a float. Excludes non numbers if not in
-:ref:`strict mode <bioinfoSettings>`. Example::
+def _op(toOp, c, force, defaultValue):
+    return apply(toOp, c) | (apply(lambda x: x or defaultValue, c) if force else (~cli.isValue(None, c)))
+def _toFloat(e) -> Union[float, None]:
+    try: return float(e)
+    except: return None
+def toFloat(*columns:List[int], force=False):
+    """Converts every row into a float. Example::
 
     # returns [1, 3, -2.3]
     ["1", "3", "-2.3"] | toFloat() | deref()
     # returns [[1.0, 'a'], [2.3, 'b'], [8.0, 'c']]
     [["1", "a"], ["2.3", "b"], [8, "c"]] | toFloat(0) | deref()
 
+With weird rows::
+
+    # returns [[1.0, 'a'], [8.0, 'c']]
+    [["1", "a"], ["c", "b"], [8, "c"]] | toFloat(0) | deref()
+    # returns [[1.0, 'a'], [0.0, 'b'], [8.0, 'c']]
+    [["1", "a"], ["c", "b"], [8, "c"]] | toFloat(0, force=True) | deref()
+
 :param columns: if nothing, then will convert each row. If available, then
-    convert all the specified columns"""
+    convert all the specified columns
+:param force: if True, forces weird values to 0.0, else filters out all weird rows"""
     if len(columns) > 0:
-        return cli.init.serial(*(wrap(apply(lambda e: float(e), c), c) for c in columns))
-    else: return wrap(apply(lambda e: float(e), None), None)
-def toInt(*columns:List[int]):
-    """Converts every row into an integer. Excludes non numbers if not in
-:ref:`strict mode <bioinfoSettings>`. Example::
+        return cli.init.serial(*(_op(_toFloat, c, force, 0.0) for c in columns))
+    else: return _op(_toFloat, None, force, 0.0)
+def _toInt(e) -> Union[int, None]:
+    try: return int(float(e))
+    except: return None
+def toInt(*columns:List[int], force=False):
+    """Converts every row into an integer. Example::
 
     # returns [1, 3, -2]
     ["1", "3", "-2.3"] | toInt() | deref()
 
 :param columns: if nothing, then will convert each row. If available, then
     convert all the specified columns
+:param force: if True, forces weird values to 0, else filters out all weird rows
 
 See also: :meth:`toFloat`"""
     if len(columns) > 0:
-        return cli.init.serial(wrap(apply(lambda e: int(float(e)), c), c) for c in columns)
-    else: return wrap(apply(lambda e: int(float(e)), None), None)
+        return cli.init.serial(*(_op(_toInt, c, force, 0) for c in columns))
+    else: return _op(_toInt, None, force, 0)
 class sort(BaseCli):
     def __init__(self, column:int=0, numeric=True, reverse=False):
         """Sorts all lines based on a specific `column`.

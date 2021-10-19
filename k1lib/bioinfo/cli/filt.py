@@ -11,7 +11,7 @@ __all__ = ["filt", "isValue", "isFile", "inSet", "contains", "empty",
            "startswith", "endswith",
            "isNumeric", "instanceOf", "inRange",
            "head", "columns", "cut", "rows",
-           "intersection", "union", "notIn", "unique", "breakIf"]
+           "intersection", "union", "unique", "breakIf"]
 class filt(BaseCli):
     def __init__(self, predicate:Callable[[T], bool], column:int=None):
         """Filters out lines.
@@ -288,16 +288,6 @@ Example::
         answer = set()
         for it in its: answer = set.union(answer, set(it))
         return answer
-class notIn:
-    def __init__(self, s:Iterator[T]):
-        """Returns elements that are not in the specified list.
-Example::
-
-    # returns [-5, -4, -3, -2, -1, 10, 11]
-    range(-5, 12) | notIn(range(10)) | deref()"""
-        super().__init__(); self.s = set(s)
-    def __ror__(self, it:Iterator[T]) -> Iterator[T]:
-        s = self.s; return (r for r in it if r not in s)
 class unique(BaseCli):
     def __init__(self, column:int):
         """Filters out non-unique row elements.

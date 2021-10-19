@@ -23,6 +23,7 @@ Submodules
    format
    graphEqn
    imports
+   mo
    nn
    schedule
    selector
@@ -39,7 +40,6 @@ Just do this::
 Then in a notebook, do this::
 
    from k1lib.imports import *
-   from k1lib.bioinfo.cli import *
 
 This package has very few dependencies, and all of them are very commonly used
 
@@ -56,6 +56,8 @@ Classes:
 - :class:`k1lib.Domain`
 - :class:`k1lib.AutoIncrement`
 - :class:`k1lib.Wrapper`
+- :class:`k1lib.Every`
+- :class:`k1lib.CaptureStdout`
 - :class:`k1lib.ignoreWarnings`
 
 .. autoclass:: k1lib.Learner
@@ -85,10 +87,17 @@ Classes:
    :members:
    :undoc-members:
    :show-inheritance:
+   :special-members: __call__
 
 .. autoclass:: k1lib.Wrapper
    :members:
    :undoc-members:
+   :show-inheritance:
+
+.. autoclass:: k1lib.Every
+   :members:
+   :undoc-members:
+   :special-members: __call__
    :show-inheritance:
 
 .. autoclass:: k1lib.CaptureStdout
@@ -112,6 +121,7 @@ Classes:
 .. autofunction:: k1lib.close
 .. autofunction:: k1lib.stats
 .. autofunction:: k1lib.patch
+.. autofunction:: k1lib.wraps
 .. autofunction:: k1lib.squeeze
 .. autofunction:: k1lib.raiseEx
 .. autofunction:: k1lib.smooth
@@ -124,6 +134,8 @@ Classes:
 .. autofunction:: k1lib.dontWrap
 .. autofunction:: k1lib.positionalEncode
 .. autofunction:: k1lib.debounce
+.. autofunction:: k1lib.graph
+.. autofunction:: k1lib.digraph
 
 Higher order functions
 ----------------------

@@ -11,11 +11,12 @@ import matplotlib.pyplot as plt, matplotlib as mpl
 import numpy as np, dill as pickle, multiprocessing as mp, concurrent.futures as futures
 import math, os, time, sys, random, logging, traceback, re, typing, glob, warnings
 from functools import partial
-from typing import List, Tuple, Callable, Union, Iterator
-import k1lib; from k1lib import schedule, graphEqn
-k1lib.dontWrap()
-inf = float("inf")
+from typing import List, Tuple, Callable, Union, Iterator, Set, Dict, Any
+import k1lib; from k1lib import schedule, graphEqn, mo, _moparse as moparse
+from k1lib.bioinfo.cli import *
+k1lib.dontWrap(); inf = float("inf")
 plt.rcParams['figure.dpi'] = 100
+plt.rcParams["animation.html"] = "jshtml"
 class _OptionalImports:
     def __init__(self):
         """Class for importing optional modules. Can...

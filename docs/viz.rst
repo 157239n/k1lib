@@ -7,9 +7,11 @@ k1lib.viz module
    .. autoclass:: SliceablePlot
       :members: decorate
 
+   .. autofunction:: plotSegments
+
    .. autoclass:: Carousel
       :members:
 
-   .. autofunction:: plotSegments
-
    .. autofunction:: confusionMatrix
+
+   .. autofunction:: FAnim

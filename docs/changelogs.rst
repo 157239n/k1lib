@@ -5,6 +5,33 @@ Changelogs
 `0.3 </0.3>`_
 -------------
 
+Background stuff:
+
+- Added mo tutorial
+
+.. currentmodule:: k1lib.callbacks
+
+DL:
+
+- Added :meth:`~k1lib.viz.FAnim`
+- Added :mod:`~k1lib.mo` for stuff related to molecular dynamics
+- Added :meth:`~k1lib.graph`, :meth:`~k1lib.digraph`, :meth:`~k1lib.AutoIncrement.__call__`
+- Huge revamp of :mod:`~k1lib.schedule` to make it more intuitive. There's only 1
+  main schedule object now: :class:`~k1lib.schedule.Fn`.
+- Added :meth:`k1lib.wraps`, :meth:`k1lib.Object.__delitem__`, :meth:`k1lib.Range.fromRange`
+- Added :class:`k1lib.Every`
+
+.. currentmodule:: k1lib.bioinfo.cli
+
+Bioinfo cli:
+
+- Removed :class:`~filt.notIn`, as :class:`~filt.inSet` does the job just as well
+- Included cli import command in :mod:`~k1lib.imports` by default
+- Modified :meth:`~modifier.toFloat` and :meth:`modifier.toInt` so they can force
+  weird values to 0.
+- Moved existing :class:`~structural.toDict` to :class:`~structural.toDictF`, and
+  created a new :class:`~structural.toDict`.
+
 `0.2 </0.2>`_
 -------------
 

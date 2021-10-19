@@ -60,6 +60,9 @@ PyTorch's :class:`torch.utils.data.DataLoader` here just fine"""
     def fromDataset(dataset, batchSize:int=32, trainSplit=0.8, *args, **kwargs):
         dl = DataLoader(dataset, batchSize, *args, **kwargs)
         m = _math.ceil(len(dl)*0.8); return Data(dl[:m], dl[m:])
+    def __iter__(self):
+        yield self.train
+        yield self.valid
     def __repr__(self):
         return "`Data` object, just a shell containing 2 `DataLoader`s: `.train` and `.valid`"
 @_k1lib.patch(_torch.utils.data.DataLoader)

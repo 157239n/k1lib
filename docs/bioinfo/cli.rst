@@ -39,7 +39,7 @@ Is equivalent to this list::
 Also, the expected way to use these tools is to import everything directly into the
 current environment, like this::
 
-   from k1lib.bioinfo.cli import *
+   from k1lib.imports import *
 
 Besides operating on string iterators alone, this package can also be extra meta,
 and operate on streams of strings, or streams of streams of anything. I think this

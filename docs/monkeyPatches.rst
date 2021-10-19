@@ -17,3 +17,13 @@ See also: :meth:`k1lib.patch`
    .. automethod:: torch.Tensor.crissCross
    .. automethod:: torch.Tensor.histBounds
    .. automethod:: torch.Tensor.histScaled
+   .. automethod:: torch.Tensor.clearNan
+   .. automethod:: torch.Tensor.hasNan
+
+.. class:: graphviz.dot.Digraph
+
+   .. automethod:: graphviz.dot.Digraph.__call__
+
+.. class:: graphviz.dot.Graph
+
+   .. automethod:: graphviz.dot.Graph.__call__
