@@ -26,8 +26,7 @@ class Learner:
     def model(self, model): self._model = model
     @property
     def data(self):
-        """Set this to change the data (of type :class:`k1lib.data.Data`) to
-run against."""
+        """Set this to change the data (list of 2 dataloader) to run against."""
         return self._data
     @data.setter
     def data(self, data): self._data = data
@@ -157,7 +156,7 @@ def _run1Epoch(self):
     try:
         train, valid = self.data; train = DI(self, train); valid = DI(self, valid)
         try: self.batches = len(train) + len(valid)
-        except: self.batches = None
+        except: pass
         self.model.train()
         for self.batch, (self.xb, self.yb) in enumerate(train):
             self._run1Batch()
@@ -166,6 +165,7 @@ def _run1Epoch(self):
             self.model.eval();
             for self.batch, (self.xb, self.yb) in enumerate(valid):
                 self.batch += trainLen; self._run1Batch()
+        if self.batches is None: self.batches = self.batch + 1
     except k1lib.CancelEpochException as ex:
         self.cbs("cancelEpoch"); print(f"Epoch cancelled: {ex}.")
     except k1lib.CancelRunException as ex:
@@ -181,7 +181,8 @@ def run(self, epochs:int, batches:int=None):
         if not input(f"""You still have these warnings:\n\n{self._warnings}
 Do you want to continue? (y/n) """).lower().startswith("y"):
             print("Run ended"); return
-    self.epochs = epochs; self.css = self.css # update module selector
+    self.epochs = epochs; self.batches = None
+    self.css = self.css # update module selector
     with self.cbs.context():
         if batches != None: self.cbs.withBatchLimit(batches)
         self.cbs("startRun")
@@ -198,8 +199,7 @@ doing.
 :param xb: x batch
 :param yb: y batch. If specified, return (y, loss), else return y alone
 """
-    def gen(): yield xb, (yb or torch.tensor(0))
-    oldData = self.data; self.data = k1lib.data.Data(gen(), iter(range(0)))
+    oldData = self.data; self.data = [[(xb, (yb or torch.tensor(0)))], []]
     with self.cbs.suspendEval(), self.cbs.context():
         ex = lambda _: k1lib.raiseEx(k1lib.CancelBatchException)
         self.cbs.append(k1lib.Callback().withCheckpoint("startLoss" if yb is None else "startBackward", ex))
@@ -217,19 +217,15 @@ just placed here as a convention, so you have to do something like this::
     l.evaluate = partial(evaluate(l))
 """
     raise NotImplementedError("You have to define evaluate() by yourself")
-from k1lib.bioinfo.cli import *
-def getXbs(): return torch.linspace(0, 10, 50) | repeatFrom() | batched(32) | toTensor().all()
+from k1lib.cli import *
 @k1lib.patch(Learner, static=True)
 def sample() -> Learner:
     """Creates an example learner, just for simple testing stuff anywhere. The
 network tries to learn the function y=x."""
-    class DS:
-        def __iter__(self): return [getXbs(), getXbs()] | transpose() | head(100)
-    l = Learner(); l.data = k1lib.data.Data(DS(), range(0))
+    l = Learner(); l.data = k1lib.kdata.FunctionData.main(lambda x: x)
     class Model(torch.nn.Module):
         def __init__(self): super().__init__(); self.linear = torch.nn.Linear(1, 1)
-        def forward(self, x):
-            x = x[:, None]; return self.linear(x + 2).squeeze()
+        def forward(self, x): x = x[:, None]; return self.linear(x + 2).squeeze()
     l.model = Model(); l.cbs = k1lib.Callbacks().withCoreNormal().withLoss().withProgressBar()
     l.lossF = lambda y, yb: ((y - yb) ** 2).sum()
     l.opt = torch.optim.Adam(l.model.parameters(), lr=3e-3); return l

@@ -13,9 +13,10 @@ except:
 setup(
     name="k1lib",
     packages=["k1lib", "k1lib._hidden",
-              "k1lib.bioinfo", "k1lib.bioinfo.cli",
+              "k1lib.cli",
               "k1lib.callbacks", "k1lib.callbacks.profilers", 
-              "k1lib.callbacks.lossFunctions"],
+              "k1lib.callbacks.lossFunctions",
+              "k1lib._mo"],
     version="0.4",
     install_requires=["torch", "numpy", "matplotlib", "dill"],
     extras_require={"graphviz": ["graphviz"]},

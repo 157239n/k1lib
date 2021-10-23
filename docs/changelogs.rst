@@ -2,6 +2,55 @@
 Changelogs
 ==========
 
+`0.4 </0.4>`_
+-------------
+
+This update moves things around a lot. The actual coding experience stays the same,
+but a lot of links \< 0.4 will be broken in 0.4 docs. Go to 0.3 docs if you wish to
+follow links.
+
+.. currentmodule:: k1lib.callbacks
+
+Molecule (:mod:`k1lib.mo`):
+
+- Added close coulomb force calculations to simulator to make it
+  more realistic (cyclohexane chair config possible now!)
+- Added optional Hydrogen viewing to various functions in :mod:`~k1lib.mo`
+- Fixed parsing bug where it doesn't recognize "3-methyl" group in
+  "3-methylpentane".
+
+DL:
+
+- Don't let :class:`~k1lib.AutoIncrement`'s ``value`` property to auto increment
+  internal value.
+- Removed :class:`~k1lib.kdata.CyclicRandomSampler`, as ``range(n) | repeatFrom() | randomize(n)```
+  does the same thing.
+- Removed :class:`~k1lib.kdata.FunctionDataset`, added simpler
+  :class:`~k1lib.kdata.FunctionData` as replacement.
+- Removed :class:`~k1lib.kdata.DataLoader`, :class:`~k1lib.kdata.Data` and
+  :class:`~k1lib.kdata.DatasetWithSampler`, as they're complex and obsolete.
+- Added :meth:`~k1lib.kdata.tfImg`, :meth:`~k1lib.kdata.tfFloat`,
+  :meth:`~k1lib.kdata.analyzeFloat`
+- Monkey-patched :class:`torch.nn.Module` to have piping capabilities.
+- Renamed :mod:`k1lib.data` to :mod:`k1lib.kdata`, and exposed it automatically in
+  :mod:`~k1lib.imports`.
+- Renamed :mod:`k1lib.nn` to :mod:`k1lib.knn`, and exposed it automatically.
+
+.. currentmodule:: k1lib.cli
+
+Bioinfo cli:
+
+- Renamed :mod:`k1lib.bioinfo.cli` to :mod:`k1lib.cli`
+- Added :meth:`~modifier.stagger` as the new interface for dataloaders.
+- Added :class:`~output.intercept`, :class:`~inp.toPIL`.
+- Added PIL conversion mode to :class:`utils.toTensor`
+- Added Tensor shape mode in :class:`utils.shape`.
+- Added :mod:`~k1lib.cli.others` module, with :meth:`~others.crissCross`
+- Added Tensor mode to :class:`~utils.toSum`, :class:`~utils.toAvg`,
+  :class:`~utils.toMin`, :class:`~utils.toMax` and :class:`~init.oneToMany`.
+- Added alias :class:`~utils.toMean`.
+- Added dtype choice to :class:`~utils.toTensor`.
+
 `0.3 </0.3>`_
 -------------
 

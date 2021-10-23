@@ -9,7 +9,7 @@ Subpackages
 .. toctree::
    :maxdepth: 1
 
-   bioinfo/index
+   cli/index
    callbacks/index
 
 Submodules
@@ -18,13 +18,13 @@ Submodules
 .. toctree::
    :maxdepth: 1
 
-   data
+   kdata
    eqn
    format
    graphEqn
    imports
    mo
-   nn
+   knn
    schedule
    selector
    viz
@@ -149,6 +149,6 @@ Higher order functions
 .. toctree::
    :hidden:
 
-   changelogs
    monkeyPatches
    tutorials
+   changelogs

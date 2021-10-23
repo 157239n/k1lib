@@ -376,12 +376,14 @@ read, it gets incremented by 1 automatically."""
         """Creates a new AutoIncrement object that has a random integer initial value"""
         return AutoIncrement(random.randint(0, 1e9))
     @property
-    def value(self): self._value += 1; return self._value
+    def value(self):
+        """Get the value as-is, without auto incrementing it"""
+        return self._value
     @value.setter
     def value(self, value): self._value = value
     def __call__(self):
-        """Same thing as :attr:`value`."""
-        return self.value
+        """Increments internal counter, and return it."""
+        self._value += 1; return self._value
 class Wrapper:
     def __init__(self, value):
         """Creates a wrapper for some value. Get that value using

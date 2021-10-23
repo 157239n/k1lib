@@ -419,9 +419,7 @@ first. Requires graphviz package though. Example::
 
 :param highlightCb: if available, will highlight the checkpoints the callback
     uses. Can be name/class-name/class/self of callback."""
-    graphviz = k1lib.imports.optionalImports("graphviz")
-    g = graphviz.Digraph(graph_attr={"rankdir":"TB"})
-    s = set()
+    g = k1lib.digraph(); s = set()
     for cp1, cp1o in self._checkpointGraphDict.state.items():
         for cp2, v in cp1o.state.items():
             g.edge(cp1, cp2, label=f"  {v}  "); s.add(cp2)

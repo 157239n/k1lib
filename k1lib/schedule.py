@@ -7,6 +7,14 @@ __all__ = ["Fn", "linear", "smooth", "hump", "exp", "ParamScheduler"]
 class Fn:
     def __init__(self, f:Callable[[float], float], param:str=None):
         """Creates a new schedule based on some custom function.
+Example::
+
+    s = schedule.Fn(lambda x: x**2)
+
+    # you can also use this as a decorator
+    @schedule.Fn
+    def s(x):
+        return x**2
 
 :param f: domain should always in [0, 1]
 :param param: (optional) Parameter to schedule (e.g "lr") if using :class:`ParamScheduler`"""

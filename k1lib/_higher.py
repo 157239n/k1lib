@@ -25,14 +25,17 @@ Example::
     df(3) # returns roughly 6 """
     return lambda x: (f(x + delta) - f(x)) / delta
 def optimize(f:Func, v:float=1, threshold:float=1e-6) -> float:
-    r"""Given :math:`f(x) = 0`, solves for x, using initial value `v`.
-Example::
+    r"""Given :math:`f(x) = 0`, solves for x using Newton's method with initial value
+`v`. Example::
 
     f = lambda x: x**2-2
     # returns sqrt(2)
     k1lib.optimize(f)
     # returns -sqrt(2)
-    k1lib.optimize(f, -1)"""
+    k1lib.optimize(f, -1)
+
+Interestingly, for some reason, result of this is more accurate than :meth:`derivative`.
+"""
     fD = derivative(f)
     while abs(f(v)) > threshold: v = v - f(v)/fD(v)
     return v

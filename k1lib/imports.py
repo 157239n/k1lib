@@ -10,38 +10,23 @@ import torch.nn.functional as F, torch.utils.data as data
 import matplotlib.pyplot as plt, matplotlib as mpl
 import numpy as np, dill as pickle, multiprocessing as mp, concurrent.futures as futures
 import math, os, time, sys, random, logging, traceback, re, typing, glob, warnings
-from functools import partial
+import functools; from functools import partial
 from typing import List, Tuple, Callable, Union, Iterator, Set, Dict, Any
-import k1lib; from k1lib import schedule, graphEqn, mo, _moparse as moparse
-from k1lib.bioinfo.cli import *
+import k1lib; from k1lib import schedule, graphEqn, mo, kdata, knn
+import k1lib.cli as cli; from k1lib.cli import *
+for e in cli._scatteredClis: globals()[e.__name__] = e
 k1lib.dontWrap(); inf = float("inf")
 plt.rcParams['figure.dpi'] = 100
 plt.rcParams["animation.html"] = "jshtml"
-class _OptionalImports:
-    def __init__(self):
-        """Class for importing optional modules. Can...
-
-opt("numpy"): try to import module "numpy". Returns None if can't import
-"numpy" in opt: check whether a module is loaded"""
-        self.modules = dict()
-    def __call__(self, module:str, force=False):
-        """Tries to import the module. If successful, return the module,
-else return None
-
-:param force: If True, then errors out if can't import module"""
-        if module in self.modules: m = self.modules[module]
-        else:
-            try: m = __import__(module)
-            except: m = None
-        if force and m is None: raise ImportError(f"Can't import module `{module}`. Please install it first.")
-        self.modules[module] = m; return m
-    def __contains__(self, module:str):
-        """Whether someone already tried to import a module."""
-        return module in self.modules
-    def __repr__(self):
-        mods = '\n'.join(f"- {e}" for e in self.modules.keys())
-        return self.__init__.__doc__ + f"""\n\nLoaded modules:\n{mods}"""
-optionalImports = _OptionalImports()
-datasets = optionalImports("torchvision.datasets")
-transforms = optionalImports("torchvision.transforms")
-IPython = optionalImports("IPython")
+def dummy():
+    """Does nothing. Only here so that you can read source code of this file
+and see what's up."""
+    pass
+try:
+    import torchvision as vision
+    import torchvision.datasets as tvDs
+    import torchvision.transforms as tf
+except: pass
+try:
+    import IPython
+except: pass

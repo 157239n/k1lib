@@ -11,6 +11,7 @@ See also: :meth:`k1lib.patch`
    .. automethod:: torch.nn.modules.Module.paramsContext
    .. automethod:: torch.nn.modules.Module.getParamsVector
    .. automethod:: torch.nn.modules.Module.preserveDevice
+   .. automethod:: torch.nn.modules.Module.__ror__
 
 .. class:: torch.Tensor
 
