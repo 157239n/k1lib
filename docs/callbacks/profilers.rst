@@ -1,6 +1,6 @@
 .. module:: k1lib.callbacks.profilers
 
-profilers package
+profilers module
 =================================
 
 This package is not supposed to be used by the end user though. These are
@@ -11,28 +11,28 @@ idea of what's happening. If you want to dive deeper, then by all means, check o
 the source codes
 
 computation module
---------------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: k1lib.callbacks.profilers.computation
    :members:
    :show-inheritance:
 
 io module
------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: k1lib.callbacks.profilers.io
    :members:
    :show-inheritance:
 
 memory module
----------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: k1lib.callbacks.profilers.memory
    :members:
    :show-inheritance:
 
 time module
--------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: k1lib.callbacks.profilers.time
    :members:

@@ -25,12 +25,12 @@ class ComputationData:
     def __setstate__(self, state): self.__dict__.update(dict(state))
     def __str__(self):
         if self.flop <= 0: return ""
-        a = _spacing(f"{k1lib.format.computation(self.flop)}".ljust(_lcomp))
+        a = _spacing(f"{k1lib.fmt.comp(self.flop)}".ljust(_lcomp))
         b = _spacing(f"{round(100 * self.flop / self.cProfiler.totalFlop)}%".rjust(_lp1))
         c = ""
         if self.cProfiler.tpAvailable:
             self.flops = self.flop / self.tS.data.time
-            c = _spacing(f"{k1lib.format.computationRate(self.flops)}".ljust(_lp2))
+            c = _spacing(f"{k1lib.fmt.compRate(self.flops)}".ljust(_lp2))
         d = ""
         if self.cProfiler.selected:
             if self.mS.selected("_compProf_"):
@@ -46,7 +46,7 @@ layers only, and thus can't really be universal"""
         if not hasattr(self, "selector"): # if no selectors found
             self.selector = self.l.selector.copy().clearProps()
         for m in self.selector.modules(): m.data = ComputationData(self, m)
-        self.selector.displayF = lambda m: (k1lib.format.red if m.selected("_compProf_") else k1lib.format.identity)(m.data)
+        self.selector.displayF = lambda m: (k1lib.fmt.txt.red if m.selected("_compProf_") else k1lib.fmt.txt.identity)(m.data)
         self.totalFlop = 0; self.selectedTotalFlop = None
     @property
     def selected(self): return self.selectedTotalFlop != None
@@ -79,10 +79,10 @@ layers only, and thus can't really be universal"""
         header += _spacing("% total".rjust(_lp1))
         header += _spacing("rate".ljust(_lp2)) if self.tpAvailable else ""
         header += _spacing("% selected".rjust(_lp3)) if self.selected else ""
-        footer = _spacing(f"{k1lib.format.computation(self.totalFlop)}".ljust(_lcomp))
+        footer = _spacing(f"{k1lib.fmt.comp(self.totalFlop)}".ljust(_lcomp))
         footer += _spacing("".rjust(_lp1))
         footer += _spacing("".ljust(_lp2)) if self.tpAvailable else ""
-        footer += _spacing(f"{k1lib.format.computation(self.selectedTotalFlop)}".rjust(_lp3)) if self.selected else ''
+        footer += _spacing(f"{k1lib.fmt.comp(self.selectedTotalFlop)}".rjust(_lp3)) if self.selected else ''
         footer = ("Total", footer)
         return f"""ComputationProfiler:
 {k1lib.tab(self.selector.__repr__(intro=False, header=header, footer=footer))}

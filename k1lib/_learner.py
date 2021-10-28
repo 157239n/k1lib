@@ -221,7 +221,7 @@ from k1lib.cli import *
 @k1lib.patch(Learner, static=True)
 def sample() -> Learner:
     """Creates an example learner, just for simple testing stuff anywhere. The
-network tries to learn the function y=x."""
+network tries to learn the function y=x. Only bare minimum callbacks are included."""
     l = Learner(); l.data = k1lib.kdata.FunctionData.main(lambda x: x)
     class Model(torch.nn.Module):
         def __init__(self): super().__init__(); self.linear = torch.nn.Linear(1, 1)

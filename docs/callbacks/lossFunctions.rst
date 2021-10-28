@@ -1,6 +1,6 @@
 .. module:: k1lib.callbacks.lossFunctions
 
-lossFunctions package
+lossFunctions module
 =====================
 
 Package with a bunch of loss function callbacks. If you're planning to write your
@@ -10,8 +10,15 @@ own loss function classes, then you have to set l's ``loss`` and ``lossG`` field
 a shared detached loss value, for performance reasons.
 
 shorts module
---------------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: k1lib.callbacks.lossFunctions.shorts
+   :members:
+   :show-inheritance:
+
+accuracy module
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. automodule:: k1lib.callbacks.lossFunctions.accuracy
    :members:
    :show-inheritance:

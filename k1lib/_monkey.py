@@ -2,6 +2,7 @@
 import torch, k1lib, numpy as np
 from torch import nn; from k1lib import cli
 from typing import List, Tuple, ContextManager
+from contextlib import contextmanager
 @k1lib.patch(nn.Module)
 def importParams(self:nn.Module, params:List[nn.Parameter]):
     """Given a list of :class:`torch.nn.parameter.Parameter`/:class:`torch.Tensor`,
@@ -17,7 +18,8 @@ class ParamsContext:
     def __enter__(self): self.params = self.m.exportParams(); return self.params
     def __exit__(self, *ignored): self.m.importParams(self.params)
 @k1lib.patch(nn.Module)
-def paramsContext(self:nn.Module) -> ContextManager:
+@contextmanager
+def paramsContext(self:nn.Module):
     """A nice context manager for :meth:`importParams` and :meth:`exportParams`.
 Returns the old parameters on enter context. Example::
 
@@ -25,8 +27,13 @@ Returns the old parameters on enter context. Example::
     with m.paramsContext() as oldParam:
         pass # go wild, train, mutate `m` however much you like
     # m automatically snaps back to the old param
-"""
-    return ParamsContext(self)
+
+Small reminder that this is not foolproof, as there are some :class:`~torch.nn.Module`
+that stores extra information not accessible from the model itself, like
+:class:`~torch.nn.BatchNorm2d`."""
+    params = self.exportParams()
+    try: yield
+    finally: self.importParams(params)
 @k1lib.patch(nn.Module)
 def getParamsVector(model:nn.Module) -> List[torch.Tensor]:
     """For each parameter, returns a normal distributed random tensor
@@ -65,11 +72,22 @@ the module :mod:`k1lib.cli`. Example::
     # returns torch.Size([5, 3])
     torch.randn(5, 2) | nn.Linear(2, 3) | cli.shape()"""
     return self(x)
+@k1lib.patch(nn.Module, name="nParams")
+@property
+def nParams(self):
+    """Get the number of parameters of this module.
+Example::
+
+    # returns 9, because 6 (2*3) for weight, and 3 for bias
+    nn.Linear(2, 3).nParams
+"""
+    return sum([p.numel() for p in self.parameters()])
 @k1lib.patch(torch)
 @k1lib.patch(torch.Tensor)
 def crissCross(*others:Tuple[torch.Tensor]) -> torch.Tensor:
     """Concats multiple 1d tensors, sorts it, and get evenly-spaced values. Also
-available as :meth:`torch.crissCross`. Example::
+available as :meth:`torch.crissCross` and :meth:`~k1lib.cli.others.crissCross`.
+Example::
 
     a = torch.tensor([2, 2, 3, 6])
     b = torch.tensor([4, 8, 10, 12, 18, 20, 30, 35])

@@ -2,29 +2,35 @@
 Monkey patched classes
 ======================
 
-See also: :meth:`k1lib.patch`
+These are functionalities added to other libraries, or "monkey-patched" them. How
+is this possible? Check out :meth:`k1lib.patch`.
 
-.. class:: torch.nn.modules.Module
+Class :class:`torch.nn.Module`
+-------------------------------
 
-   .. automethod:: torch.nn.modules.Module.importParams
-   .. automethod:: torch.nn.modules.Module.exportParams
-   .. automethod:: torch.nn.modules.Module.paramsContext
-   .. automethod:: torch.nn.modules.Module.getParamsVector
-   .. automethod:: torch.nn.modules.Module.preserveDevice
-   .. automethod:: torch.nn.modules.Module.__ror__
+.. automethod:: torch.nn.modules.Module.importParams
+.. automethod:: torch.nn.modules.Module.exportParams
+.. automethod:: torch.nn.modules.Module.paramsContext
+.. automethod:: torch.nn.modules.Module.getParamsVector
+.. automethod:: torch.nn.modules.Module.preserveDevice
+.. automethod:: torch.nn.modules.Module.__ror__
+.. autoattribute:: torch.nn.modules.Module.nParams
 
-.. class:: torch.Tensor
+Class :class:`torch.Tensor`
+----------------------------
 
-   .. automethod:: torch.Tensor.crissCross
-   .. automethod:: torch.Tensor.histBounds
-   .. automethod:: torch.Tensor.histScaled
-   .. automethod:: torch.Tensor.clearNan
-   .. automethod:: torch.Tensor.hasNan
+.. automethod:: torch.Tensor.crissCross
+.. automethod:: torch.Tensor.histBounds
+.. automethod:: torch.Tensor.histScaled
+.. automethod:: torch.Tensor.clearNan
+.. automethod:: torch.Tensor.hasNan
 
-.. class:: graphviz.dot.Digraph
+Class :class:`graphviz.dot.Digraph`
+-------------------------------------
 
-   .. automethod:: graphviz.dot.Digraph.__call__
+.. automethod:: graphviz.dot.Digraph.__call__
 
-.. class:: graphviz.dot.Graph
+Class :class:`graphviz.dot.Graph`
+-------------------------------------
 
-   .. automethod:: graphviz.dot.Graph.__call__
+.. automethod:: graphviz.dot.Graph.__call__

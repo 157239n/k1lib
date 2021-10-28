@@ -89,7 +89,8 @@ you can omit it."""
         return manyToMany(self)
     def __or__(self, it) -> "serial":
         """Joins clis end-to-end"""
-        if isinstance(it, BaseCli): return serial(self, it)
+        if isinstance(it, BaseCli) or hasattr(it, "__ror__"):
+            return serial(self, it)
     def __ror__(self, it):
         # Dereferences every :class:`~k1lib.cli.ctx.Promise`
         # attributes inside this. Intended to be overridden by subclass

@@ -8,12 +8,11 @@ from . import cli
 from ._higher import *
 from ._monkey import *
 
-from . import format
-from . import website;  website  = wrapMod(website)
+from . import fmt;      fmt      = wrapMod(fmt)
 from . import knn;      knn      = wrapMod(knn)
 from . import kdata;    kdata    = wrapMod(kdata)
 from . import selector; selector = wrapMod(selector)
-from .callbacks import Callback, Callbacks
+from .callbacks import Callback, Callbacks, Cbs
 from . import callbacks
 from ._learner import *
 from . import schedule; schedule = wrapMod(schedule)

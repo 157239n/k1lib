@@ -5,7 +5,7 @@ For operations that feel like the termination
 from collections import defaultdict
 from typing import Iterator, Any
 from k1lib.cli.init import BaseCli, Table
-import torch, numbers; from k1lib import cli
+import torch, numbers, numpy as np; from k1lib import cli
 __all__ = ["stdout", "file", "pretty", "display", "headOut", "intercept"]
 class stdout(BaseCli):
     """Prints out all lines. If not iterable, then print out the input raw"""
@@ -15,12 +15,19 @@ class stdout(BaseCli):
             for line in it: print(line)
         except TypeError: print(it)
 class file(BaseCli):
-    def __init__(self, fileName:str):
-        super().__init__(); self.fileName = fileName
+    def __init__(self, fileName:str, text:bool=True):
+        """Opens a new file for writing.
+
+:param text: if True, accepts Iterator[str], and prints out each string on a
+    new line. Else accepts bytes and write in 1 go."""
+        super().__init__(); self.fileName = fileName; self.text = text
     def __ror__(self, it:Iterator[str]) -> None:
         super().__ror__(it)
-        with open(self.fileName, "w") as f:
-            for line in it: f.write(f"{line}\n")
+        if self.text:
+            with open(self.fileName, "w") as f:
+                for line in it: f.write(f"{line}\n")
+        else:
+            with open(self.fileName, "wb") as f: f.write(it)
 class pretty(BaseCli):
     """Pretty prints a table"""
     def __ror__(self, it:Table[Any]) -> Iterator[str]:
@@ -56,7 +63,7 @@ throw exception to stop flow. Example::
         if isinstance(s, (numbers.Number, str, bool)):
             print(s)
         elif isinstance(s, (tuple, list)):
-            print(f"Length: {len(t)}")
+            print(f"Length: {len(s)}")
             for e in s: print(f"- {type(e)}")
         elif isinstance(s, (np.ndarray, torch.Tensor)):
             print(f"Shape: {s.shape}")

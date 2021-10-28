@@ -42,5 +42,5 @@ class origin(cli.BaseCli):
     """Return the origin section of the genbank file"""
     def __ror__(self, it):
         return it | cli.grep("ORIGIN", 0, 1e9) | ~cli.head(1) | cli.strip()\
-        | cli.table(" ") | cli.cut()[1:] | cli.stitch("")\
+        | cli.table(" ") | cli.cut()[1:] | cli.to1Str("").all()\
         | cli.remove("/") | cli.to1Str("")

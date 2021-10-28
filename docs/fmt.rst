@@ -1,8 +1,8 @@
 
-k1lib.format module
+k1lib.fmt module
 -------------------
 
-.. automodule:: k1lib.format
+.. automodule:: k1lib.fmt
    :members:
    :undoc-members:
    :show-inheritance:

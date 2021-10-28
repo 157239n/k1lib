@@ -10,9 +10,7 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-import os
-import sys
-import k1lib
+import os, sys, k1lib
 sys.path.insert(0, os.path.abspath('../k1lib'))
 
 
@@ -21,10 +19,6 @@ sys.path.insert(0, os.path.abspath('../k1lib'))
 project = 'k1lib'
 copyright = '2021, Quang Ho'
 author = 'Quang Ho'
-
-# The full version, including alpha/beta/rc tags
-release = '0.1'
-
 
 # -- General configuration ---------------------------------------------------
 
@@ -62,15 +56,8 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', '**/.ipynb_checkpoints',
 
 # -- Options for HTML output -------------------------------------------------
 
-# The theme to use for HTML and HTML Help pages.  See the documentation for
-# a list of builtin themes.
-#
-#html_theme = 'alabaster'
-html_theme = 'sphinx_rtd_theme'
-
-html_theme_options = {
-    "navigation_depth": 20
-}
+html_theme = 'sphinx_rtd_theme' # 'alabaster'
+html_theme_options = {"navigation_depth": 20}
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
@@ -82,5 +69,7 @@ intersphinx_mapping = {
     'numpy': ('https://numpy.org/doc/stable', None),
     'torch': ('https://pytorch.org/docs/master/', None),
     'matplotlib': ('https://matplotlib.org/stable/', None),
+    'graphviz': ('https://graphviz.readthedocs.io/en/stable/', None),
+    'PIL': ('https://pillow.readthedocs.io/en/stable/', None),
 }
 

@@ -59,12 +59,20 @@ You can also pipe in a :class:`torch.Tensor`, and it will just return its shape:
         return rows, columns
 shape = size
 class item(BaseCli):
-    """Returns the first row.
+    def __init__(self, amt:int=1):
+        """Returns the first row.
 Example::
 
     # returns 0
-    iter(range(5)) | item()"""
+    iter(range(5)) | item()
+    # returns torch.Size([5])
+    torch.randn(3,4,5) | item(2) | shape()
+
+:param amt: how many times do you want to call item() back to back?"""
+        self.amt = amt
     def __ror__(self, it:Iterator[str]):
+        if self.amt != 1:
+            return it | cli.serial(*(item() for _ in range(self.amt)))
         return next(iter(it))
 class identity(BaseCli):
     """Yields whatever the input is. Useful for multiple streams.
@@ -93,8 +101,8 @@ Example::
                 yield [e if i != c else str(e) for i, e in enumerate(row)]
 class to1Str(BaseCli):
     def __init__(self, delim:str=None):
-        r"""Merges all strings into 1, with `delim` in the middle. Basically :meth:`list.join`.
-Example::
+        r"""Merges all strings into 1, with `delim` in the middle. Basically
+:meth:`str.join`. Example::
 
     # returns '2\na'
     [2, "a"] | to1Str("\n")"""
@@ -287,6 +295,7 @@ You can also specify a ``maxDepth``::
         self.maxDepth = maxDepth; self.depth = 0
     def __ror__(self, it:Iterator[T]) -> List[T]:
         super().__ror__(it); answer = []; ignoreTensors = self.ignoreTensors
+        if ignoreTensors and isinstance(it, Tensor): return it
         if self.depth >= self.maxDepth: return it
         self.depth += 1
         for e in it:
@@ -296,7 +305,7 @@ You can also specify a ``maxDepth``::
             elif isinstance(e, Tensor):
                 if not ignoreTensors and len(e.shape) == 0:
                     answer.append(e.item())
-                else: answer.append(e)
+                else: answer.append(e | self)
             else:
                 try: answer.append(e | self)
                 except: answer.append(e)

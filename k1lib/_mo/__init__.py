@@ -1,3 +1,13 @@
+"""
+This module is for everything related to molecules. You can construct, explore and
+simulate molecules quite easily. Check out the tutorials section for a walkthrough.
+This is exposed automatically with::
+
+   from k1lib.imports import *
+   mo.C # exposed
+"""
+
+
 from .atom import *
 from .atom import _a
 from .substance import *

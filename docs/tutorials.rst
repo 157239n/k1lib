@@ -10,6 +10,7 @@ Not a lot at the moment:
 - `osic <tutorials/osic.html>`_: Analyze dicom images
 - `mp <tutorials/mp.html>`_: Supplementary for osic
 - `schedule <tutorials/schedule.html>`_: Scheduling network parameters
+- `selector <tutorials/selector.html>`_: Selecting subnetwork
 - `mo <tutorials/mo.html>`_: Molecular dynamics
 
 Also note that all tutorials are versioned, and they will change if features in

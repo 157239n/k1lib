@@ -1,6 +1,6 @@
 .. module:: k1lib.cli
 
-k1lib.cli package
+k1lib.cli module
 =========================
 
 The main idea of this package is to emulate the terminal, but doing all of that inside Python itself. So this bash statement:
@@ -51,11 +51,13 @@ check over this:
 
    streams
 
-Submodules
-^^^^^^^^^^
+Core clis include :class:`~modifier.apply`, :class:`~modifier.applyS` (its
+multiprocessing cousins :class:`~modifier.applyMp` and :class:`~modifier.applyMpBatched`
+are great too) and :class:`~utils.deref`, so start reading there first. Then, skim
+over everything to know what you can do with these collection of tools.
 
 bio module
-----------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: k1lib.cli.bio
    :members:
@@ -64,7 +66,7 @@ bio module
 
 ..
    ctx module
-   ----------------------------
+   ^^^^^^^^^^^^^^^^^^^^^^^^^
 
    .. toctree::
       :maxdepth: 1
@@ -78,7 +80,7 @@ bio module
       :show-inheritance:
 
 entrez module
--------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: k1lib.cli.entrez
    :members:
@@ -86,7 +88,7 @@ entrez module
    :show-inheritance:
 
 mgi module
--------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: k1lib.cli.mgi
    :members:
@@ -94,7 +96,7 @@ mgi module
    :show-inheritance:
 
 filt module
------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: k1lib.cli.filt
    :members:
@@ -102,7 +104,7 @@ filt module
    :show-inheritance:
 
 gb module
------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: k1lib.cli.gb
    :members:
@@ -110,7 +112,7 @@ gb module
    :show-inheritance:
 
 grep module
------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: k1lib.cli.grep
    :members:
@@ -118,7 +120,7 @@ grep module
    :show-inheritance:
 
 init module
------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autoattribute:: k1lib.cli.cliSettings
 
@@ -153,7 +155,7 @@ init module
    :show-inheritance:
 
 inp module
-------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: k1lib.cli.inp
    :members:
@@ -161,7 +163,7 @@ inp module
    :show-inheritance:
 
 kcsv module
------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: k1lib.cli.kcsv
    :members:
@@ -169,7 +171,7 @@ kcsv module
    :show-inheritance:
 
 kxml module
------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: k1lib.cli.kxml
    :members:
@@ -177,7 +179,7 @@ kxml module
    :show-inheritance:
 
 modifier module
----------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: k1lib.cli.modifier
    :members:
@@ -185,7 +187,7 @@ modifier module
    :show-inheritance:
 
 output module
--------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: k1lib.cli.output
    :members:
@@ -193,7 +195,7 @@ output module
    :show-inheritance:
 
 sam module
-----------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: k1lib.cli.sam
    :members:
@@ -201,7 +203,7 @@ sam module
    :show-inheritance:
 
 structural module
------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. currentmodule:: k1lib.cli.structural
 
@@ -219,7 +221,7 @@ structural module
       :members:
 
 utils module
-------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: k1lib.cli.utils
    :members:
@@ -227,7 +229,7 @@ utils module
    :show-inheritance:
 
 others module
--------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: k1lib.cli.others
    :members:
@@ -235,11 +237,11 @@ others module
    :show-inheritance:
 
 Elsewhere in the library
---------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
-There might be cli tools scattered around the library. These are pretty rare, quite
-dynamic and most likely a cool extra feature, not a core functionality, so not worth
-mentioning here. Anyway, execute this::
+There might still be more cli tools scattered around the library. These are pretty
+rare, quite dynamic and most likely a cool extra feature, not a core functionality,
+so not worth it/can't mention it here. Anyway, execute this::
 
    cli.scatteredClis()
 

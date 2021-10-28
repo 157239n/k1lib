@@ -5,15 +5,22 @@ import urllib, subprocess, warnings, os
 from k1lib.cli import BaseCli
 import k1lib.cli as cli
 __all__ = ["cat", "cats", "curl", "wget", "ls", "cmd", "requireCli", "toPIL"]
-def _catSimple(fileName:str=None) -> Iterator[str]:
-    with open(fileName) as f:
-        for line in f.readlines():
-            if line[-1] == "\n": yield line[:-1]
-            else: yield line
+def _catSimple(fileName:str=None, text:bool=True) -> Iterator[Union[str, bytes]]:
+    if text:
+        with open(fileName) as f:
+            for line in f.readlines():
+                if line[-1] == "\n": yield line[:-1]
+                else: yield line
+    else:
+        with open(fileName, "rb") as f: yield f.read()
+def _catWrapper(fileName:str, text:bool):
+    res = _catSimple(fileName, text)
+    return res if text else next(res)
 class _cat(BaseCli):
-    def __ror__(self, fileName:str) -> Iterator[str]:
-        return _catSimple(fileName)
-def cat(fileName:str=None):
+    def __init__(self, text): self.text = text
+    def __ror__(self, fileName:str) -> Union[Iterator[str], bytes]:
+        return _catWrapper(fileName, self.text)
+def cat(fileName:str=None, text:bool=True):
     """Reads a file line by line.
 Example::
 
@@ -21,11 +28,15 @@ Example::
     cat("file.txt") | headOut()
     # piping in also works
     "file.txt" | cat() | headOut()
+    
+    # rename file
+    cat("img.png", False) | file("img2.png", False)
 
 :param fileName: if None, then return a :class:`~k1lib.cli.init.BaseCli`
-    that accepts a file name and outputs Iterator[str]"""
-    if fileName is None: return _cat()
-    else: return _catSimple(fileName)
+    that accepts a file name and outputs Iterator[str]
+:param text: if True, read text file, else read binary file"""
+    if fileName is None: return _cat(text)
+    else: return _catWrapper(fileName, text)
 class cats(BaseCli):
     """Like :meth:`cat`, but opens multiple files at once, returning
 streams. Looks something like this::
@@ -122,5 +133,5 @@ Example::
 
     ls(".") | toPIL().all() | item() # get first image"""
         import PIL; self.PIL = PIL
-    def __ror__(self, path):
+    def __ror__(self, path) -> "PIL.Image.Image":
         return self.PIL.Image.open(path)

@@ -4,8 +4,8 @@ from k1lib import isNumeric
 import random, math, numpy as np
 __all__ = ["Object", "Range", "Domain", "AutoIncrement", "Wrapper", "Every"]
 class Object:
-    """Convenience class that acts like ``defaultdict``. You can use
-it like a normal object::
+    """Convenience class that acts like :class:`~collections.defaultdict`. You
+can use it like a normal object::
 
     a = Object()
     a.b = 3
@@ -368,8 +368,16 @@ is :math:`(-\inf, a)`, then starts at the specified integer"""
 - d1 - d2: same as d1 + (-d2)"""
 class AutoIncrement:
     def __init__(self, initialValue:int=0):
-        """Creates a new AutoIncrement object. Every time :attr:`value` is
-read, it gets incremented by 1 automatically."""
+        """Creates a new AutoIncrement object. Every time the object is called
+it gets incremented by 1 automatically. Example::
+
+    a = k1lib.AutoIncrement()
+    a() # returns 1
+    a() # returns 2
+    a() # returns 3
+    a.value # returns 3
+    a.value # returns 3
+    a() # returns 4"""
         self.value = initialValue
     @staticmethod
     def random() -> "AutoIncrement":
@@ -386,9 +394,15 @@ read, it gets incremented by 1 automatically."""
         self._value += 1; return self._value
 class Wrapper:
     def __init__(self, value):
-        """Creates a wrapper for some value. Get that value using
-:meth:`__call__`. This exists just so that Jupyter Lab's contextual
-help won't automatically display the (possibly humongous) value."""
+        """Creates a wrapper for some value and get it by calling it.
+Example::
+
+    a = k1lib.Wrapper(list(range(int(1e7))))
+    # returns [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+    a()[:10]
+
+This exists just so that Jupyter Lab's contextual help won't automatically
+display the (possibly humongous) value."""
         self.value = value
     def __call__(self): return self.value
 class Every:

@@ -2,6 +2,38 @@
 Changelogs
 ==========
 
+`0.5 </0.5>`_
+-------------
+
+.. currentmodule:: k1lib.callbacks
+
+DL:
+
+- Renamed :mod:`k1lib.format` to :mod:`k1lib.fmt`, and exposed it automatically.
+- Renamed :mod:`~k1lib.fmt.computation` to :mod:`~k1lib.fmt.comp`,
+  :mod:`~k1lib.fmt.computationRate` to :mod:`~k1lib.fmt.compRate`.
+- Added :meth:`~k1lib.fmt.sizeOf`
+- Exposed :mod:`~k1lib.selector` automatically.
+- Deleted :mod:`k1lib.website`
+- Fixed infinity elements in :class:`landscape.Landscape`'s plots.
+- Split :class:`~loss_accuracy.Accuracy`'s accuracy calculating part into
+  :class:`~lossFunctions.accuracy.AccF`.
+
+.. currentmodule:: k1lib.cli
+
+Cli:
+
+- Added chained mode to :class:`~utils.item`
+- Fixed ignoreTensor mechanic in :class:`~utils.deref`
+- Added prefetch mode in :class:`~modifier.applyMp`
+- Added :class:`~modifier.applyMpBatched` that executes lots of transformations in
+  a single job.
+- Added :meth:`~modifier.applyMp.clearPools` and :meth:`~modifier.applyMp.pools`.
+- Added bytes reading and writing to :class:`~inp.cat` :class:`~output.file`.
+- Added :class:`~structural.activeSamples`.
+- Removed aliases :class:`~structural.splitColumns` and :class:`~structural.joinColumns`.
+- Removed :class:`~structural.stitch`, as ``to1Str().all()`` does the same thing.
+
 `0.4 </0.4>`_
 -------------
 

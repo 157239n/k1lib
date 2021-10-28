@@ -26,7 +26,7 @@ class IOProfiler(Callback):
         if not hasattr(self, "selector"): # if no selectors found
             self.selector = self.l.selector.copy().clearProps()
         for m in self.selector.modules(): m.data = IOData(self, m)
-        self.selector.displayF = lambda m: (k1lib.format.red if m.selected("_ioProf_") else k1lib.format.identity)(m.data)
+        self.selector.displayF = lambda m: (k1lib.fmt.txt.red if m.selected("_ioProf_") else k1lib.fmt.txt.identity)(m.data)
     def startStep(self): return True
     def run(self):
         """Runs everything"""

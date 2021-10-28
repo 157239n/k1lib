@@ -49,7 +49,7 @@ single line."""
 import k1lib, time, os, logging, numpy as np, matplotlib.pyplot as plt
 from typing import Set, List, Union, Callable, ContextManager, Iterator
 from collections import OrderedDict
-__all__ = ["Callback", "Callbacks"]
+__all__ = ["Callback", "Callbacks", "Cbs"]
 class Callback:
     r"""Represents a callback. Define specific functions
 inside to intercept certain parts of the training
@@ -66,8 +66,8 @@ want to create a throwaway callback, then do this::
 
     Callback().withCheckpoint("startRun", lambda: print("start running"))
 
-You can use `.cls` for a list of default Callback
-classes, for any particular needs.
+You can use :attr:`~k1lib.callbacks.callbacks.Cbs` (automatically exposed) for
+a list of default Callback classes, for any particular needs.
 
 **order**
 
@@ -157,12 +157,8 @@ for more."""
     def detach(self):
         """Detaches from the parent :class:`Callbacks`"""
         self.cbs.remove(self.name); return self
-Callback.cls = k1lib.Object()
+Cbs = k1lib.Object()
 Callback.lossCls = k1lib.Object()
-class PauseContext:
-    def __init__(self, cb): self.cb = cb
-    def __enter__(self): self.oldValue = self.cb.paused; self.cb.paused = True
-    def __exit__(self, *ignored): self.cb.paused = self.oldValue
 @k1lib.patch(Callback)
 def pause(self):
     """Pauses the callback's main functionality for a while. This is a bit different
@@ -173,7 +169,9 @@ choose to turn off some checkpoints if deemed appropriate.
 
 This is kinda a niche functionality, and very few built-in :class:`Callback` s actually
 use this."""
-    return PauseContext(self)
+    oldValue = self.paused; self.paused = True
+    try: yield
+    finally: self.paused = oldValue
 class Timings:
     """List of checkpoint timings. Not intended to be instantiated by the end user.
 Used within :class:`~k1lib.callbacks.callbacks.Callbacks`, accessible via
@@ -230,7 +228,9 @@ you set :attr:`k1lib.Learner.cbs` to this :class:`Callbacks`"""
         self._l = learner
         for cb in self.cbs: cb.l = learner
     @property
-    def cbs(self) -> List[Callback]: return [*self.cbsDict.values()] # convenience method for looping over stuff
+    def cbs(self) -> List[Callback]:
+        """List of :class:`Callback`"""
+        return [*self.cbsDict.values()] # convenience method for looping over stuff
     def _sort(self) -> "Callbacks":
         self.cbsDict = OrderedDict(sorted(self.cbsDict.items())); return self
     def append(self, cb:Callback, name:str=None):
@@ -294,13 +294,13 @@ Use...
 - cbs.checkpointGraph(): to graph checkpoint calling orders
 - cbs.context(): context manager that will detach all Callbacks attached inside the context
 - cbs.suspend("Loss", "Cuda"): context manager to temporarily prevent triggering checkpoints
-- cbs.withs: to get list of with- functions. Corresponding classes are in k1lib.Callback.cls
+- cbs.withs: to get list of with- functions. Corresponding classes are in k1lib.Cbs
 """
     def withBasics(self):
         """Adds a bunch of very basic Callbacks that's needed for everything. Also
 includes Callbacks that are not necessary, but don't slow things down"""
         self.withCoreNormal().withProfiler().withRecorder()
-        self.withProgressBar().withLoss().withDontTrainValid()
+        self.withProgressBar().withLoss().withAccuracy().withDontTrainValid()
         return self.withCancelOnExplosion().withParamFinder()
     def withQOL(self):
         """Adds quality of life Callbacks."""
@@ -377,7 +377,8 @@ used for evaluation callbacks. Just convenience method really. Currently include
 class AppendContext:
     def __init__(self, cbs:Callbacks): self.cbs = cbs
     def __enter__(self): self.cbs.contexts.append([])
-    def __exit__(self, *ignored): [cb.detach() for cb in self.cbs.contexts.pop()]
+    def __exit__(self, *ignored):
+        [cb.detach() for cb in self.cbs.contexts.pop()]
 @k1lib.patch(Callbacks)
 def _appendContext_append(self, cb):
     if "contexts" not in self.__dict__: self.contexts = [[]]
@@ -450,13 +451,13 @@ and `short docs` fields"""
     print("function name".ljust(lname) + "order".ljust(lorder) + "short docs")
     for w in ws:
         docs = ""; print(w.ljust(lname), end="")
-        if w[4:] in Callback.cls:
+        if w[4:] in Cbs:
             try:
                 from inspect import signature
-                cl = Callback.cls[w[4:]]; docs = docs or cl.__doc__
+                cl = Cbs[w[4:]]; docs = docs or cl.__doc__
                 params = [None] * (len(signature(cl.__init__).parameters) - 1)
                 orderI = cl(*params).order; order = f"{orderI}".ljust(lorder)
-                print((k1lib.format.grey if orderI == 10 else k1lib.format.identity)(order), end="")
+                print((k1lib.fmt.txt.grey if orderI == 10 else k1lib.fmt.txt.identity)(order), end="")
             except Exception: print(" "*lorder, end="")
         else: print(" "*lorder, end="")
         print(k1lib.limitChars(docs or getattr(self, w).__doc__, ldocs))

@@ -4,18 +4,19 @@ This is for functions that sort of changes the table
 structure in a dramatic way. They're the core transformations
 """
 from typing import List, Union, Iterator, Callable, Any, Tuple, Dict
-from collections import defaultdict, Counter
+from collections import defaultdict, Counter, deque
 from k1lib.cli.init import patchDefaultDelim, BaseCli, oneToMany, T, Table
 import k1lib.cli as cli
 import itertools, numpy as np, torch, k1lib
-__all__ = ["joinColumns", "transpose", "splitColumns", "joinList", "splitList",
-           "joinStreams", "yieldSentinel", "joinStreamsRandom", "batched", "collate",
+__all__ = ["transpose", "joinList", "splitList",
+           "joinStreams", "yieldSentinel", "joinStreamsRandom", "activeSamples",
+           "batched", "collate",
            "insertRow", "insertColumn", "insertIdColumn",
-           "toDict", "toDictF", "split", "expandE", "table", "stitch",
+           "toDict", "toDictF", "split", "expandE", "table",
            "listToTable", "tableFromList",
            "count", "permute", "accumulate", "AA_", "peek", "peekF",
            "repeat", "repeatF", "repeatFrom"]
-class joinColumns(BaseCli):
+class transpose(BaseCli):
     def __init__(self, fillValue=None):
         """Join multiple columns and loop through all rows. Aka transpose.
 
@@ -24,15 +25,14 @@ class joinColumns(BaseCli):
 Example::
 
     # returns [[1, 4], [2, 5], [3, 6]]
-    [[1, 2, 3], [4, 5, 6]] | joinColumns() | deref()
+    [[1, 2, 3], [4, 5, 6]] | transpose() | deref()
     # returns [[1, 4], [2, 5], [3, 6], [0, 7]]
-    [[1, 2, 3], [4, 5, 6, 7]] | joinColumns(0) | deref()"""
+    [[1, 2, 3], [4, 5, 6, 7]] | transpose(0) | deref()"""
         super().__init__(); self.fillValue = fillValue
     def __ror__(self, it:Iterator[Iterator[T]]) -> Table[T]:
         super().__ror__(it)
         if self.fillValue is None: yield from zip(*it)
         else: yield from itertools.zip_longest(*it, fillvalue=self.fillValue)
-splitColumns = transpose = joinColumns
 class joinList(BaseCli):
     def __init__(self, element=None, begin=True):
         """Join element into list.
@@ -103,6 +103,37 @@ continue. Could be useful in active learning. Example::
                 o = next(streams[streamIdx])
                 if o != yieldSentinel: yield o
         except StopIteration: pass
+class activeSamples(BaseCli):
+    def __init__(self, limit:int=float("inf")):
+        """Yields active learning samples.
+Example::
+
+    o = activeSamples()
+    ds = range(10) # normal dataset
+    ds = [o, ds] | joinStreamsRandom() # dataset with active learning capability
+    next(ds) # returns 0
+    next(ds) # returns 1
+    next(ds) # returns 2
+    o.append(20)
+    next(ds) # can return     3     or 20
+    next(ds) # can return (4 or 20) or 4
+
+So the point of this is to be a generator of samples. You can define your dataset
+as a mix of active learning samples and standard samples. Whenever there's a data
+point that you want to focus on, you can add it to ``o`` and it will eventially yield
+it.
+
+:param limit: max number of active samples. Discards samples if number of samples
+    is over this."""
+        super().__init__(); self.samples = deque(); self.limit = limit
+    def append(self, item): self.samples.append(item)
+    def __iter__(self):
+        samples = self.samples; limit = self.limit
+        while True:
+            if len(samples) > limit:
+                [samples.popleft() for i in range(len(samples) - limit)]
+            if len(samples) == 0: yield yieldSentinel
+            else: yield samples.popleft()
 class batched(BaseCli):
     def __init__(self, bs=32, includeLast=False):
         """Batches the input stream.
@@ -234,19 +265,6 @@ Example::
     def __ror__(self, it:Iterator[str]) -> Table[str]:
         super().__ror__(it)
         return (line.split(self.delim) for line in it)
-class stitch(BaseCli):
-    def __init__(self, delim:str=None):
-        """Stitches elements in a row together, so they become a simple string.
-See also: :class:`~k1lib.cli.output.pretty`. Preferable to
-:class:`~k1lib.cli.utils.to1Str` ``.all()``, as there's a lot of overhead in
-splitting streams. Example::
-
-    # returns ['1|2', '3|4', '5|6']
-    [[1, 2], [3, 4], [5, 6]] | stitch("|") | deref()"""
-        super().__init__(); self.delim = patchDefaultDelim(delim)
-    def __ror__(self, it:Table[str]) -> Iterator[str]:
-        super().__ror__(it); d = self.delim
-        for row in it: yield d.join([str(e) for e in row])
 def listToTable():
     """Turns Iterator[T] into Table[T]"""
     return cli.wrapList() | transpose()

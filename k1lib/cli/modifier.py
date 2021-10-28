@@ -2,15 +2,14 @@
 """
 This is for quick modifiers, think of them as changing formats
 """
-__all__ = ["apply", "applyMp", "applyS",
+__all__ = ["apply", "applyMp", "applyMpBatched", "applyS",
            "lstrip", "rstrip", "strip",
            "upper", "lower", "replace", "remove", "toFloat", "toInt",
            "sort", "sortF", "consume", "randomize", "stagger"]
 from typing import Callable, Iterator, Any, Union, List
 from k1lib.cli.init import patchDefaultDelim, BaseCli, settings, T
 import k1lib.cli as cli, numpy as np, torch
-import concurrent.futures as futures
-import multiprocessing as mp
+import multiprocessing as mp; from collections import deque
 from functools import partial, update_wrapper
 import dill, pickle, k1lib, warnings
 def executeFunc(common, line):
@@ -18,7 +17,8 @@ def executeFunc(common, line):
     f, args, kwargs = dill.loads(common)
     return f(dill.loads(line), *args, **kwargs)
 class applyMp(BaseCli):
-    def __init__(self, f:Callable[[T], T], *args, **kwargs):
+    _pools = set()
+    def __init__(self, f:Callable[[T], T], prefetch:int=None, timeout:float=2, *args, **kwargs):
         """Like :class:`apply`, but execute ``f(row)`` of each row in
 multiple processes. Example::
 
@@ -40,6 +40,22 @@ have to think about that. On windows and macos, the default start method is
 to pass in all required variables and reimport every dependencies. Read more at
 https://docs.python.org/3/library/multiprocessing.html#contexts-and-start-methods
 
+If you don't wish to schedule all jobs at once, you can specify a ``prefetch``
+amount, and it will only schedule that much jobs ahead of time. Example::
+
+    range(10000) | applyMp(lambda x: x**2)    | head() | deref() # 700ms
+    range(10000) | applyMp(lambda x: x**2, 5) | head() | deref() # 300ms
+
+    # demonstrating there're no huge penalties even if we want all results at the same time
+    range(10000) | applyMp(lambda x: x**2)    | deref() # 900ms
+    range(10000) | applyMp(lambda x: x**2, 5) | deref() # 1000ms
+
+The first line will schedule all jobs at once, and thus will require more RAM and
+compute power, even though we discard most of the results anyway (the
+:class:`~k1lib.cli.filt.head` cli). The second line only schedules 5 jobs ahead of
+time, and thus will be extremely more efficient if you don't need all results right
+away.
+
 .. note::
 
     Remember that every :class:`~k1lib.cli.init.BaseCli` is also a
@@ -51,14 +67,44 @@ https://docs.python.org/3/library/multiprocessing.html#contexts-and-start-method
     Also remember that the return result of ``f`` should not be a generator.
     That's why in the example above, there's a ``deref()`` inside f.
 
+One last thing. Remember to close all pools (using :meth:`clearPools`) so that
+all child processes are terminated, and that resources are freed. Let's say if
+you use CUDA tensors, but have not close all pools yet, then it is possible
+that CUDA memory is not freed. I learned this the hard way.
+
+:param prefetch: if not specified, schedules all jobs at the same time. If
+    specified, schedules jobs so that there'll only be a specified amount of
+    jobs, and will only schedule more if results are actually being used.
+:param timeout: seconds to wait for job before raising an error
 :param args: extra arguments to be passed to the function. ``kwargs`` too"""
-        super().__init__(); self.f = f; self.args = args; self.kwargs = kwargs
+        super().__init__(); self.f = f; self.prefetch = prefetch or 1_000_000
+        self.timeout = timeout; self.args = args; self.kwargs = kwargs
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
-        super().__ror__(it)
-        p = mp.Pool(mp.cpu_count()*4//5)
+        super().__ror__(it); it = iter(it) # really make sure it's an iterator, for prefetch
+        self.p = p = mp.Pool(mp.cpu_count()*4//5)
+        applyMp._pools.add(p); timeout = self.timeout
         common = dill.dumps([self.f, self.args, self.kwargs])
-        fs = [p.apply_async(executeFunc, [common, dill.dumps(line)]) for line in it]
-        return (r.get() for r in fs)
+        def gen():
+            fs = deque()
+            for i, line in zip(range(self.prefetch), it):
+                fs.append(p.apply_async(executeFunc, [common, dill.dumps(line)]))
+            for line in it:
+                yield fs.popleft().get(timeout)
+                fs.append(p.apply_async(executeFunc, [common, dill.dumps(line)]))
+            for f in fs: yield f.get(timeout)
+        return gen()
+    @staticmethod
+    def clearPools():
+        """Terminate all existing pools. Do this before restarting/quitting the
+script/notebook to make sure all resources (like GPU) are freed."""
+        for p in applyMp._pools:
+            try: p.terminate()
+            except: pass
+        applyMp._pools = set()
+    @staticmethod
+    def pools():
+        """Get set of all pools. Meant for debugging purposes only."""
+        return applyMp._pools
 class applyS(BaseCli):
     def __init__(self, f:Callable[[T], T]):
         """Like :class:`apply`, but much simpler, just operating on the entire input
@@ -111,6 +157,13 @@ You can also use this as a decorator, like this::
         if c is None: return (f(line) for line in it)
         else: return ([(e if i != c else f(e)) 
                        for i, e in enumerate(row)] for row in it)
+def applyMpBatched(f, bs=32, prefetch=2, timeout=5):
+    """Pretty much the same as :class:`applyMp` and has the same feel to it
+too. Iterator[A] goes in, Iterator[B] goes out, and you specify `f(A) -> B`.
+However, this will launch jobs that will execute multiple f(), instead of
+1 job per execution. All examples from :class:`applyMp` should work perfectly
+here."""
+    return cli.batched(bs) | applyMp(apply(f) | cli.deref(True), prefetch, timeout) | cli.joinStreams()
 def lstrip(column:int=None, char:str=None):
     """Strips left of every line.
 Example::
@@ -309,7 +362,7 @@ The above code will print 6 lines. 4 of them is "0" (because we stagger every 4
 batches), and xb's shape' will be (3,) (because we batched every 3 samples).
 
 You should also keep in mind that this doesn't really change the property of the
-stream itself. Essentially, treat these pairs of statement as the same thing::
+stream itself. Essentially, treat these pairs of statement as being the same thing::
 
     o = range(11, 100)
     
