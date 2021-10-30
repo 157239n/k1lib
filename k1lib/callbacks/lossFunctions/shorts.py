@@ -3,11 +3,11 @@
 from ..callbacks import Callback, Callbacks, Cbs
 from typing import Callable, Tuple
 import torch, k1lib, math, torch.nn.functional as F
-__all__ = ["LossLambda", "LossNLLCross"]
+__all__ = ["LossF", "LossNLLCross"]
 LossFSig = Callable[[Tuple[torch.Tensor, torch.Tensor]], float]
 @k1lib.patch(Cbs)
 @k1lib.patch(Callback.lossCls)
-class LossLambda(Callback):
+class LossF(Callback):
     " "
     def __init__(self, lossF:LossFSig):
         """Creates a generic loss function that takes in ``y`` and
@@ -17,9 +17,9 @@ correct y ``yb`` and return a single loss float (still attached to graph)."""
     def inLoss(self):
         self.l.lossG = self.lossF(self.l.y, self.l.yb)
         self.l.loss = self.l.lossG.detach().item()
-@k1lib.patch(Callbacks, docs=LossLambda.__init__)
-def withLossLambda(self, lossF:LossFSig, name:str=None):
-    return self.append(LossLambda(lossF), name=name)
+@k1lib.patch(Callbacks, docs=LossF.__init__)
+def withLossF(self, lossF:LossFSig, name:str=None):
+    return self.append(LossF(lossF), name=name)
 @k1lib.patch(Cbs)
 @k1lib.patch(Callback.lossCls)
 class LossNLLCross(Callback):

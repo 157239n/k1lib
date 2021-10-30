@@ -3,6 +3,12 @@ import torch, k1lib, numpy as np
 from torch import nn; from k1lib import cli
 from typing import List, Tuple, ContextManager
 from contextlib import contextmanager
+__all__ = ["dummy"]
+def dummy():
+    """Does nothing. Only here so that you can read source code of this file and
+see what’s up."""
+    pass
+torch.stack = cli.applyS(torch.stack)
 @k1lib.patch(nn.Module)
 def importParams(self:nn.Module, params:List[nn.Parameter]):
     """Given a list of :class:`torch.nn.parameter.Parameter`/:class:`torch.Tensor`,
@@ -44,26 +50,61 @@ with the same standard deviation as the original parameter"""
         b = param.std() if param.numel() > 1 else 1
         answer.append(a * b)
     return answer
-class _NnModuleDeviceContext:
-    def __init__(self, nnModule):
-        self.nnModule = nnModule
-    def __enter__(self):
-        self.devices = [p.device for p in self.nnModule.parameters()]
-    def __exit__(self, *ignored):
-        for p, device in zip(self.nnModule.parameters(), self.devices):
-            p.data = p.to(device=device)
+from k1lib.cli import apply, deref
 @k1lib.patch(nn.Module)
-def preserveDevice(self:nn.Module) -> ContextManager:
-    """Preserves the device of whatever operation is inside this. Example::
+@contextmanager
+def deviceContext(self:nn.Module, buffers:bool=True) -> ContextManager:
+    """Preserves the device of whatever operation is inside this.
+Example::
 
     import torch.nn as nn
     m = nn.Linear(3, 4)
-    with m.preserveDevice():
+    with m.deviceContext():
         m.cuda() # moves whole model to cuda
     # automatically moves model to cpu
 
-This will work even if the model has many tensors that live on 10 different devices."""
-    return _NnModuleDeviceContext(self)
+This is capable of preserving buffers' devices too. But it might be unstable.
+:class:`~torch.nn.parameter.Parameter` are often updated inline, and they keep
+their old identity, which makes it easy to keep track of which device the parameters
+are on. However, buffers are rarely updated inline, so their identities change all
+the time. To deal with this, this does something like this::
+
+    devices = [buf.device for buf in self.buffers()]
+    yield # entering context manager
+    for buffer, device in zip(self.buffers(), devices):
+        buffer.data = buffer.data.to(device=device)
+
+This means that while inside the context, if you add a buffer anywhere to the
+network, buffer-device alignment will be shifted and wrong. So, register all
+your buffers (aka Tensors attached to :class:`~torch.nn.Module`) outside this context
+to avoid headaches, or set ``buffers`` option to False.
+
+If you don't know what I'm talking about, don't worry and just leave as default.
+
+:param buffers: whether to preserve device of buffers (regular Tensors attached
+    to :class:`~torch.nn.Module`) or not."""
+    pDevs = self.parameters() | apply(lambda t: (t, t.device)) | deref(True)
+    if buffers: bDevs = self.buffers() | apply(lambda t: t.device) | deref(True)
+    try: yield
+    finally:
+        for p, dev in pDevs: p.data = p.data.to(device=dev)
+        if buffers:
+            for buf, dev in zip(self.buffers(), bDevs): buf.data = buf.data.to(device=dev)
+@k1lib.patch(nn.Module)
+@contextmanager
+def gradContext(self):
+    """Preserves the requires_grad attribute.
+Example::
+
+    m = nn.Linear(2, 3)
+    with m.gradContext():
+        m.weight.requires_grad = False
+    # returns True
+    m.weight.requires_grad"""
+    grads = [(p, p.requires_grad) for p in self.parameters()]
+    try: yield
+    finally:
+        for p, grad in grads: p.requires_grad_(grad)
 @k1lib.patch(nn.Module)
 def __ror__(self, x):
     """Allows piping input to :class:`torch.nn.Module`, to match same style as

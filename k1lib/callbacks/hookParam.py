@@ -48,7 +48,7 @@ class HookParam(Callback):
         try:
             mS = self.l.selector
             for split in splits[:-1]: mS = mS[split]
-            return mS.selected("HookParam") and hasattr(mS, splits[-1])
+            return "HookParam" in mS and hasattr(mS, splits[-1])
         except KeyError: return False
     def startRun(self):
         if len(self) == 0: # set things up first time only

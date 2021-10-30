@@ -11,7 +11,7 @@ class IOData:
         def hk(m, i, o):
             self.iS = list(k1lib.squeeze(i, True).shape)
             self.oS = list(k1lib.squeeze(o, True).shape)
-        self.handle = self.mS.nnModule.register_forward_hook(hk)
+        self.handle = self.mS.nn.register_forward_hook(hk)
     def unhook(self): self.handle.remove()
     def __getstate__(self):
         answer = dict(self.__dict__)
@@ -24,9 +24,9 @@ class IOProfiler(Callback):
     """Gets input and output shapes of each layer"""
     def startRun(self):
         if not hasattr(self, "selector"): # if no selectors found
-            self.selector = self.l.selector.copy().clearProps()
+            self.selector = self.l.model.select("")
         for m in self.selector.modules(): m.data = IOData(self, m)
-        self.selector.displayF = lambda m: (k1lib.fmt.txt.red if m.selected("_ioProf_") else k1lib.fmt.txt.identity)(m.data)
+        self.selector.displayF = lambda m: (k1lib.fmt.txt.red if "_ioProf_" in m else k1lib.fmt.txt.identity)(m.data)
     def startStep(self): return True
     def run(self):
         """Runs everything"""
@@ -34,7 +34,7 @@ class IOProfiler(Callback):
         for m in self.selector.modules(): m.data.unhook()
     def css(self, css:str):
         """Selects a small part of the network to highlight"""
-        self.selector.parse(k1lib.selector.filter(css, "_ioProf_"))
+        self.selector.parse(k1lib.selector.preprocess(css, "_ioProf_"))
         print(self.__repr__()); self.selector.clearProps()
     def __repr__(self):
         header = "input shape".ljust(_li) + "output shape".ljust(_li)

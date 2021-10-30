@@ -16,7 +16,7 @@ class ComputationData:
                 self.flop += m.out_channels * i.shape.numel() * np.prod(m.kernel_size)
             elif isinstance(m, (nn.LeakyReLU, nn.ReLU, nn.Sigmoid)):
                 self.flop += i.numel()
-        self.handle = self.mS.nnModule.register_forward_hook(hk)
+        self.handle = self.mS.nn.register_forward_hook(hk)
     def unhook(self):
         self.cProfiler.totalFlop += self.flop; self.handle.remove()
     def __getstate__(self):
@@ -33,7 +33,7 @@ class ComputationData:
             c = _spacing(f"{k1lib.fmt.compRate(self.flops)}".ljust(_lp2))
         d = ""
         if self.cProfiler.selected:
-            if self.mS.selected("_compProf_"):
+            if "_compProf_" in self.mS:
                 d = f"{round(100 * self.flop / self.cProfiler.selectedTotalFlop)}%"
             d = _spacing(d.rjust(_lp3))
         return f"{a}{b}{c}{d}"
@@ -44,9 +44,9 @@ layers only, and thus can't really be universal"""
         super().__init__(); self.profiler = profiler
     def startRun(self):
         if not hasattr(self, "selector"): # if no selectors found
-            self.selector = self.l.selector.copy().clearProps()
+            self.selector = self.l.model.select("")
         for m in self.selector.modules(): m.data = ComputationData(self, m)
-        self.selector.displayF = lambda m: (k1lib.fmt.txt.red if m.selected("_compProf_") else k1lib.fmt.txt.identity)(m.data)
+        self.selector.displayF = lambda m: (k1lib.fmt.txt.red if "_compProf_" in m else k1lib.fmt.txt.identity)(m.data)
         self.totalFlop = 0; self.selectedTotalFlop = None
     @property
     def selected(self): return self.selectedTotalFlop != None
@@ -67,10 +67,10 @@ layers only, and thus can't really be universal"""
                 cS.data.tS = tS # injecting dependency
     def css(self, css:str):
         """Selects a small part of the network to highlight"""
-        self.selector.parse(k1lib.selector.filter(css, "_compProf_"))
+        self.selector.parse(k1lib.selector.preprocess(css, "_compProf_"))
         self.selectedTotalFlop = 0
         for m in self.selector.modules():
-            if m.selected("_compProf_"):
+            if "_compProf_" in m:
                 self.selectedTotalFlop += m.data.flop
         print(self.__repr__())
         self.selector.clearProps(); self.selectedTotalFlop = None

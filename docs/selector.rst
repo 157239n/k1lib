@@ -6,3 +6,4 @@ k1lib.selector module
    :members:
    :undoc-members:
    :show-inheritance:
+   :special-members: __call__, __contains__

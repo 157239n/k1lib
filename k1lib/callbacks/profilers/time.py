@@ -13,8 +13,8 @@ class TimeData:
         def fHk(m, i, o):
             if self.tProfiler.is_cuda: torch.cuda.synchronize()
             self.time += time.time() - self.startTime
-        self.fpH = self.mS.nnModule.register_forward_pre_hook(fpHk)
-        self.fH = self.mS.nnModule.register_forward_hook(fHk)
+        self.fpH = self.mS.nn.register_forward_pre_hook(fpHk)
+        self.fH = self.mS.nn.register_forward_hook(fHk)
     def unhook(self):
         self.tProfiler.totalTime = max(self.tProfiler.totalTime, self.time)
         self.fpH.remove(); self.fH.remove()
@@ -26,16 +26,16 @@ class TimeData:
         if self.time <= 1e-20: return ""
         a = f"{fmt.time(self.time)}".ljust(_ltime)
         b = f"{round(100 * self.time / self.tProfiler.totalTime)}%".rjust(_lt1)
-        c = f"{round(100 * self.time / self.tProfiler.selectedMaxTime)}%".rjust(_lt2) if self.tProfiler.selectedMaxTime != None and self.mS.selected("_timeProf_") else ""
+        c = f"{round(100 * self.time / self.tProfiler.selectedMaxTime)}%".rjust(_lt2) if self.tProfiler.selectedMaxTime != None and "_timeProf_" in self.mS else ""
         return f"{a}{b}{c}"
 class TimeProfiler(Callback):
     """Profiles execution time. Only measures forward times, as
 backward times can't really be measured"""
     def startRun(self):
         if not hasattr(self, "selector"): # if no selectors found
-            self.selector = self.l.selector.copy().clearProps()
+            self.selector = self.l.model.select("")
         for m in self.selector.modules(): m.data = TimeData(self, m)
-        self.selector.displayF = lambda m: (fmt.txt.red if m.selected("_timeProf_") else fmt.txt.identity)(m.data)
+        self.selector.displayF = lambda m: (fmt.txt.red if "_timeProf_" in m else fmt.txt.identity)(m.data)
         self.totalTime = 0; self.selectedMaxTime = None
     def startStep(self): return True
     def run(self):
@@ -48,10 +48,10 @@ backward times can't really be measured"""
         for m in self.selector.modules(): m.data.unhook()
     def css(self, css:str):
         """Selects a small part of the network to highlight"""
-        self.selector.parse(k1lib.selector.filter(css, "_timeProf_"))
+        self.selector.parse(k1lib.selector.preprocess(css, "_timeProf_"))
         self.selectedMaxTime = 0
         for m in self.selector.modules():
-            if m.selected("_timeProf_"):
+            if "_timeProf_" in m:
                 self.selectedMaxTime = max(self.selectedMaxTime, m.data.time)
         print(self.__repr__())
         self.selector.clearProps(); self.selectedMaxTime = None

@@ -113,9 +113,17 @@ you can omit it."""
     def __lt__(self, it):
         """Default backup join symbol `>`, in case `it` implements __ror__()"""
         return self.__ror__(it)
-    def __call__(self, it):
-        """Another way to do ``it | cli``"""
-        return self.__ror__(it)
+    def __call__(self, it, *args):
+        """Another way to do ``it | cli``. If multiple arguments are fed, then the
+argument list is passed to cli instead of just the first element. Example::
+
+    @applyS
+    def f(it):
+        return it
+    f(2) # returns 2
+    f(2, 3) # returns [2, 3]"""
+        if len(args) == 0: return self.__ror__(it)
+        else: return self.__ror__([it, *args])
 class serial(BaseCli):
     def __init__(self, *clis:List[BaseCli]):
         """Merges clis into 1, feeding end to end. Used in chaining clis

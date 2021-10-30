@@ -17,9 +17,9 @@ class MemoryData: # handles hooks of 1 nn.Module
                 mP.stepData.append([value, 0, mS.idx])
                 # for the dashed line separating forward and backward
                 if v == "b" and mP.startBackwardPoint is None: mP.startBackwardPoint = len(mP.stepData)
-        self.handles.fp = mS.nnModule.register_forward_pre_hook  (partial(hk, "fp"))
-        self.handles.f  = mS.nnModule.register_forward_hook      (partial(hk, "f"))
-        self.handles.b  = mS.nnModule.register_full_backward_hook(partial(hk, "b"))
+        self.handles.fp = mS.nn.register_forward_pre_hook  (partial(hk, "fp"))
+        self.handles.f  = mS.nn.register_forward_hook      (partial(hk, "f"))
+        self.handles.b  = mS.nn.register_full_backward_hook(partial(hk, "b"))
     def unhook(self):
         self.handles.fp.remove(); self.handles.f.remove(); self.handles.b.remove()
     def __getstate__(self):
@@ -34,12 +34,19 @@ class MemoryData: # handles hooks of 1 nn.Module
         return f"{b} {delta} {fp} {f}"
 class MemoryProfiler(Callback):
     """Expected to be run only once only. If a new report for a new network
-architecture is required, then create a new one"""
+architecture is required, then create a new one. Example::
+
+    l = k1lib.Learner.sample()
+    l.cbs.withProfiler()
+    # views graph and table
+    l.Profiler.memory
+    # views graph and table with selected modules highlighted
+    l.Profiler.memory.css("Linear")"""
     def startRun(self):
         if not hasattr(self, "selector"):
-            self.selector = self.l.selector.copy().clearProps()
-        for m in self.selector.modules(): m.data = MemoryData(self, m)
-        self.selector.displayF = lambda m: (fmt.txt.red if m.selected("_memProf_") else fmt.txt.identity)(m.data)
+            self.selector = self.l.model.select("")
+        for mS in self.selector.modules(): mS.data = MemoryData(self, mS)
+        self.selector.displayF = lambda mS: (fmt.txt.red if "_memProf_" in mS else fmt.txt.identity)(mS.data)
         self.startMemory = allocated()
         self.stepData:List[Tuple[int, bool, int]] = [] # (bytes, css selected, mS.idx)
         self.startBackwardPoint = None
@@ -47,19 +54,18 @@ architecture is required, then create a new one"""
     def endRun(self): self._updateLinState()
     def run(self):
         """Runs everything"""
-        with self.cbs.context(), self.cbs.suspendEval(), self.l.model.preserveDevice():
+        with self.cbs.context(), self.cbs.suspendEval(), self.l.model.deviceContext():
             self.cbs.withCuda(); self.l.run(1, 1)
         for m in self.selector.modules(): m.data.unhook()
     def _updateLinState(self):
         """Change linState, which is the graph's highlight"""
+        @self.selector.apply
         def applyF(mS):
-            for i in range(len(self.stepData)):
-                if self.stepData[i][2] == mS.idx:
-                    self.stepData[i][1] = mS.selected("_memProf_")
-        self.selector.apply(applyF)
+            for step in self.stepData:
+                if step[2] == mS.idx: step[1] = "_memProf_" in mS
     def css(self, css:str):
         """Selects a small part of the network to highlight"""
-        self.selector.parse(k1lib.selector.filter(css, "_memProf_"))
+        self.selector.parse(k1lib.selector.preprocess(css, "_memProf_"))
         self._updateLinState(); print(self.__repr__())
         self.selector.clearProps(); self._updateLinState()
 @k1lib.patch(MemoryProfiler)

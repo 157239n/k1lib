@@ -43,19 +43,19 @@ class Function:
 def hook(fns:List[Function], *args): [fn(*args) for fn in fns]
 class Module:
     def __init__(self, module:nn.Module):
-        self.nnModule = module
+        self.nn = module
         self.handles = Handles()
         self.data = ModuleData()
         self.name = module.__class__.__name__
     def registerHooks(self, forwardFns:List[Function], backwardFns:List[Function]):
-        self.handles.forward = self.nnModule.register_forward_hook(partial(hook, forwardFns, self.data.forward))
-        self.handles.backward = self.nnModule.register_full_backward_hook(partial(hook, backwardFns, self.data.backward))
+        self.handles.forward = self.nn.register_forward_hook(partial(hook, forwardFns, self.data.forward))
+        self.handles.backward = self.nn.register_full_backward_hook(partial(hook, backwardFns, self.data.backward))
         return self
     def unregisterHooks(self): self.handles.remove()
     def __repr__(self):
         return f"""Module `{self.name}`. Use...
 - m.data: to get data stored
-- m.nnModule: to get actual nn.Module object
+- m.nn: to get actual nn.Module object
 - m.plot("means", "stds"): to plot simple statistics"""
 @k1lib.patch(Cbs)
 class HookModule(Callback):
@@ -121,8 +121,8 @@ Built-in `with-` functions:\n{withs}"""
 @k1lib.patch(HookModule)
 def _start(self):
     self.modules = []
-    for nnModule, sel in zip(self.l.model.modules(), self.l.selector.modules()):
-        if sel.selected("HookModule"): self.modules.append(Module(nnModule))
+    for nn, sel in zip(self.l.model.modules(), self.l.selector.modules()):
+        if "HookModule" in sel: self.modules.append(Module(nn))
     self._registerHooks()
 @k1lib.patch(HookModule)
 def _end(self):
@@ -197,10 +197,10 @@ def withMaxRecorder(self):
 def css(self, css:str):
     answer = HookModule()
     selector = k1lib.selector.select(self.l.model, css)
-    d = {m.nnModule: m for m in self.modules}
-    for nnModule, sel in zip(self.l.model.modules(), selector.modules()):
-        if sel.selected("HookModule") and sel.nnModule in d:
-            answer.modules.append(d[sel.nnModule])
+    d = {m.nn: m for m in self.modules}
+    for sel in selector.modules():
+        if "HookModule" in sel and sel.nn in d:
+            answer.modules.append(d[sel.nn])
     return answer
 def plotF(modules:HookModule, fields:List[str], rangeSlice:slice):
     fig, axes = plt.subplots(len(fields), 2, figsize=(10, 3*len(fields)), dpi=100)

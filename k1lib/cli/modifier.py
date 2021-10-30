@@ -5,7 +5,7 @@ This is for quick modifiers, think of them as changing formats
 __all__ = ["apply", "applyMp", "applyMpBatched", "applyS",
            "lstrip", "rstrip", "strip",
            "upper", "lower", "replace", "remove", "toFloat", "toInt",
-           "sort", "sortF", "consume", "randomize", "stagger"]
+           "sort", "sortF", "consume", "randomize", "stagger", "op"]
 from typing import Callable, Iterator, Any, Union, List
 from k1lib.cli.init import patchDefaultDelim, BaseCli, settings, T
 import k1lib.cli as cli, numpy as np, torch
@@ -388,3 +388,39 @@ mention this in case it's not clear to you."""
         self.every = int(every)
     def __ror__(self, it:Iterator[T]) -> StaggeredStream:
         return StaggeredStream(iter(it), self.every)
+class op(k1lib.Absorber, BaseCli):
+    """Absorbs operations done on it and applies it on the stream. Based
+on :class:`~k1lib.Absorber`. Example::
+
+    t = torch.tensor([[1, 2, 3], [4, 5, 6.0]])
+    # returns [torch.tensor([[4., 5., 6., 7., 8., 9.]])]
+    [t] | (op() + 3).view(1, -1).all() | deref(True)
+
+Basically, you can treat ``op()`` as the input tensor. Tbh, you
+can do the same thing with this::
+
+    [t] | applyS(lambda t: (t+3).view(-1, 1)).all() | deref(True)
+
+But that's kinda long and may not be obvious. This can be surprisingly resilient, as
+you can still combine with other cli tools as usual, for example::
+
+    # returns [2, 3], demonstrating "&" operator
+    torch.randn(2, 3) | (op().shape & identity()) | deref(True) | item()
+
+    a = torch.tensor([[1, 2, 3], [7, 8, 9]])
+    # returns torch.tensor([4, 5, 6]), demonstrating "+" operator for clis and not clis
+    (a | op() + 3 + identity() | item() == torch.tensor([4, 5, 6])).all()
+
+    # returns [[3], [3]], demonstrating .all() and "|" serial chaining
+    torch.randn(2, 3) | (op().shape.all() | deref())"""
+    def __ror__(self, it):
+        return self.ab_operate(it)
+    def __or__(self, o):
+        if isinstance(o, BaseCli): return super(k1lib.Absorber, self).__or__(o)
+        return super().__add__(o)
+    def __add__(self, o):
+        if isinstance(o, BaseCli): return super(k1lib.Absorber, self).__add__(o)
+        return super().__add__(o)
+    def __and__(self, o):
+        if isinstance(o, BaseCli): return super(k1lib.Absorber, self).__and__(o)
+        return super().__and__(o)

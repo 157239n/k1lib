@@ -91,12 +91,18 @@ methods like this::
         _function.__doc__ = _docs; setattr(_class, _name, _function); return _function
     return inner
 class wrapMod:
-    def __init__(self, m):
+    def __init__(self, m, moduleName=None):
         """Wraps around a module, and only suggest symbols in __all__ list
 defined inside the module. Example::
 
     from . import randomModule
-    randomModule = wrapMod(randomModule)"""
+    randomModule = wrapMod(randomModule)
+
+:param m: the imported module
+:param moduleName: optional new module name for elements (their __module__ attr)"""
+        if moduleName is not None:
+            for v in m.__dict__.values():
+                v.__module__ = moduleName
         self._wrapMod_m = m
         self.__dict__.update(m.__dict__)
         self._wrapMod_extraDirs = []

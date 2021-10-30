@@ -2,6 +2,48 @@
 Changelogs
 ==========
 
+`0.6 </0.6>`_
+-------------
+
+DL:
+
+- Added :class:`~k1lib.knn.LinBlock`, :class:`~k1lib.Absorber`.
+- Added __module__ impersonation for :class:`~k1lib.wrapMod`.
+- Renamed :class:`~k1lib.callbacks.lossFunctions.shorts.LossLambda` to :class:`~k1lib.callbacks.lossFunctions.shorts.LossF`
+- Renamed :meth:`torch.nn.Module.preserveDevice` to :meth:`torch.nn.Module.deviceContext`
+  and add preserve buffers capability.
+- Added :meth:`torch.nn.Module.gradContext`.
+
+.. currentmodule:: k1lib.selector
+
+:class:`k1lib.selector.ModuleSelector`:
+
+- Renamed :meth:`filter` to :meth:`preprocess`.
+- Added :meth:`~ModuleSelector.hookFp`, :meth:`~ModuleSelector.hookF`, and
+  :meth:`~ModuleSelector.hookB`.
+- Removed :meth:`~ModuleSelector.selected`, as :meth:`~ModuleSelector.__call__`
+  does the same thing and is more intuitive
+- Added ``prop`` option to :meth:`~ModuleSelector.named_children`
+  and :meth:`~ModuleSelector.children`.
+- Removed callback :class:`~k1lib.callbacks.frozen.Frozen` as
+  :meth:`~ModuleSelector.freeze` and :meth:`~ModuleSelector.unfreeze` does the job
+  and is much more robust.
+- Added :meth:`~ModuleSelector.freeze` and :meth:`~ModuleSelector.unfreeze`
+- Removed :meth:`~ModuleSelector.copy`, as you can just grab another selector
+  straight from the model real quick.
+- Removed :meth:`~ModuleSelector.parameters`, as you can always access the
+  associated :class:`torch.nn.Module` inside and get params from there.
+
+.. currentmodule:: k1lib.cli
+
+Cli:
+
+- Added ``raiseError`` option in :class:`~output.intercept`.
+- Added multi argument capabilities to :meth:`~init.BaseCli.__call__`.
+- Added :class:`~modifier.op`.
+- Changed default param ``ignoreTensors`` of :class:`~utils.deref` to True.
+- Ignores :class:`~torch.nn.Module` by default in :class:`~utils.deref`.
+
 `0.5 </0.5>`_
 -------------
 

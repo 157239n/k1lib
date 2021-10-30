@@ -247,6 +247,7 @@ Example::
     ctx["header"]()"""
     return item() | cli.ctx.consume("header") | cli.tableFromList() | cli.insertIdColumn(True)
 Number = numbers.Number; Tensor = torch.Tensor; NpNumber = np.number
+Module = torch.nn.Module
 class inv_dereference(BaseCli):
     def __init__(self, ignoreTensors=False):
         """Kinda the inverse to :class:`dereference`"""
@@ -263,9 +264,9 @@ class inv_dereference(BaseCli):
                 try: yield e | self
                 except: yield e
 class deref(BaseCli):
-    def __init__(self, ignoreTensors=False, maxDepth=float("inf")):
+    def __init__(self, ignoreTensors=True, maxDepth=float("inf")):
         """Recursively converts any iterator into a list. Only :class:`str`,
-:class:`numbers.Number` are not converted. Example::
+:class:`numbers.Number` and :class:`~torch.nn.Module` are not converted. Example::
 
     # returns something like "<range_iterator at 0x7fa8c52ca870>"
     iter(range(5))
@@ -300,7 +301,7 @@ You can also specify a ``maxDepth``::
         self.depth += 1
         for e in it:
             if isinstance(e, cli.ctx.Promise): e = e()
-            if e is None or isinstance(e, (Number, NpNumber, str)):
+            if e is None or isinstance(e, (Number, NpNumber, str, Module)):
                 answer.append(e)
             elif isinstance(e, Tensor):
                 if not ignoreTensors and len(e.shape) == 0:

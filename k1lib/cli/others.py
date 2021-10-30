@@ -13,3 +13,5 @@ Example::
     # returns another Tensor
     [torch.randn(3, 3), torch.randn(3)] | crissCross()"""
     return cli.applyS(lambda x: torch.crissCross(*x))
+torch.stack = cli.applyS(torch.stack)
+torch.stack.__doc__ = "Stacks tensors together"

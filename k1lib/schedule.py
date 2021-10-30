@@ -151,11 +151,11 @@ def _startRun(self):
         pss = sorted(pss, key=lambda ps: -ps._depth)
         # clear and add param groups
         self.l.opt.param_groups = []
-        allParams = set(self.l.selector.parameters())
+        allParams = set(self.l.selector.nn.parameters())
         for ps in pss:
             params = set()
             for m in ps.selector.modules(ps.prop):
-                for p in m.parameters():
+                for p in m.nn.parameters():
                     if p in allParams:
                         params.add(p); allParams.remove(p)
             if len(params) > 0:

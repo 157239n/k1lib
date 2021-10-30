@@ -1,7 +1,6 @@
 from .callbacks import *
 from .confusionMatrix import *
 from .core import *
-from .frozen import *
 from .hookModule import *
 from .hookParam import *
 from .limits import *

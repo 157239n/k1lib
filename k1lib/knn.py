@@ -8,7 +8,7 @@ with::
 """
 from torch import nn
 from typing import Callable, Any
-__all__ = ["Lambda", "Identity"]
+__all__ = ["Lambda", "Identity", "LinBlock"]
 class Lambda(nn.Module):
     def __init__(self, f:Callable[[Any], Any]):
         """Creates a simple module with a specified :meth:`forward`
@@ -18,3 +18,9 @@ function."""
 class Identity(Lambda):
     """Creates a module that returns the input in :meth:`forward`"""
     def __init__(self): super().__init__(lambda x: x)
+class LinBlock(nn.Module):
+    def __init__(self, inC, outC):
+        """Linear layer with relu behind it"""
+        super().__init__(); self.lin = nn.Linear(inC, outC); self.relu = nn.ReLU()
+    def forward(self, x):
+        return x | self.lin | self.relu

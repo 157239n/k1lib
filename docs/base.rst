@@ -11,6 +11,7 @@ Classes
 - :class:`k1lib.AutoIncrement`
 - :class:`k1lib.Wrapper`
 - :class:`k1lib.Every`
+- :class:`k1lib.Absorber`
 - :class:`k1lib.CaptureStdout`
 - :class:`k1lib.ignoreWarnings`
 
@@ -54,12 +55,22 @@ Classes
    :special-members: __call__
    :show-inheritance:
 
+.. autoclass:: k1lib.Absorber
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 .. autoclass:: k1lib.CaptureStdout
    :members:
    :undoc-members:
    :show-inheritance:
 
 .. autoclass:: k1lib.ignoreWarnings
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. autoclass:: k1lib.wrapMod
    :members:
    :undoc-members:
    :show-inheritance:

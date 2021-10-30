@@ -23,7 +23,7 @@ from k1lib.imports import *
 - Repo: https://github.com/157239n/k1lib/
 - Docs: https://k1lib.github.io
 
-Read over some tutorials in the docs to get the feel of how things work.
+Read over some tutorials in the docs to get a feel of how things work.
 
 ## Contacts?
 

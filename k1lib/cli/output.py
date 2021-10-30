@@ -5,7 +5,7 @@ For operations that feel like the termination
 from collections import defaultdict
 from typing import Iterator, Any
 from k1lib.cli.init import BaseCli, Table
-import torch, numbers, numpy as np; from k1lib import cli
+import torch, numbers, numpy as np, k1lib; from k1lib import cli
 __all__ = ["stdout", "file", "pretty", "display", "headOut", "intercept"]
 class stdout(BaseCli):
     """Prints out all lines. If not iterable, then print out the input raw"""
@@ -53,18 +53,24 @@ def headOut(lines:int=10):
     if lines is None: return stdout()
     else: return cli.head(lines) | stdout()
 class intercept(BaseCli):
-    """Intercept flow at a particular point, analyze the object piped in, and
-throw exception to stop flow. Example::
+    def __init__(self, raiseError:bool=True):
+        """Intercept flow at a particular point, analyze the object piped in, and
+raises error to stop flow. Example::
 
     3 | intercept()
-"""
+
+:param raiseError: whether to raise error when executed or not."""
+        self.raiseError = raiseError
     def __ror__(self, s):
         print(type(s))
         if isinstance(s, (numbers.Number, str, bool)):
-            print(s)
+            print(k1lib.tab(f"{s}"))
         elif isinstance(s, (tuple, list)):
-            print(f"Length: {len(s)}")
-            for e in s: print(f"- {type(e)}")
+            print(k1lib.tab(f"Length: {len(s)}"))
+            for e in s: print(k1lib.tab(f"- {type(e)}"))
         elif isinstance(s, (np.ndarray, torch.Tensor)):
-            print(f"Shape: {s.shape}")
-        raise RuntimeError("intercepted")
+            print(k1lib.tab(f"Shape: {s.shape}"))
+            if s.numel() < 1000:
+                print(k1lib.tab(f"{s}"))
+        if self.raiseError: raise RuntimeError("intercepted")
+        return s

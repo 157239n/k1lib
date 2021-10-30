@@ -236,6 +236,10 @@ others module
    :undoc-members:
    :show-inheritance:
 
+There are a couple monkey-patched clis:
+
+.. automethod:: torch.stack
+
 Elsewhere in the library
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 

@@ -52,13 +52,6 @@ core module
    :members:
    :show-inheritance:
 
-frozen module
-^^^^^^^^^^^^^^^^^^^^^^^^^
-
-.. automodule:: k1lib.callbacks.frozen
-   :members:
-   :show-inheritance:
-
 hookModule module
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
