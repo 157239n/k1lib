@@ -370,18 +370,26 @@ is :math:`(-\inf, a)`, then starts at the specified integer"""
 - -d: excludes the domain from R
 - d1 - d2: same as d1 + (-d2)"""
 class AutoIncrement:
-    def __init__(self, initialValue:int=0):
+    def __init__(self, initialValue:int=-1, n:int=float("inf")):
         """Creates a new AutoIncrement object. Every time the object is called
 it gets incremented by 1 automatically. Example::
 
     a = k1lib.AutoIncrement()
+    a() # returns 0
     a() # returns 1
     a() # returns 2
+    a.value # returns 2
+    a.value # returns 2
     a() # returns 3
-    a.value # returns 3
-    a.value # returns 3
-    a() # returns 4"""
-        self.value = initialValue
+
+    a = AutoIncrement(n=3)
+    a() # returns 0
+    a() # returns 1
+    a() # returns 2
+    a() # returns 0
+
+:param n: if specified, then will wrap around to 0 when hit this number."""
+        self.value = initialValue; self.n = n
     @staticmethod
     def random() -> "AutoIncrement":
         """Creates a new AutoIncrement object that has a random integer initial value"""
@@ -394,7 +402,9 @@ it gets incremented by 1 automatically. Example::
     def value(self, value): self._value = value
     def __call__(self):
         """Increments internal counter, and return it."""
-        self._value += 1; return self._value
+        self._value += 1
+        if self._value >= self.n: self._value = 0
+        return self._value
 class Wrapper:
     def __init__(self, value):
         """Creates a wrapper for some value and get it by calling it.
@@ -422,7 +432,9 @@ Example::
         self.n = n; self.i = -1
     def __call__(self) -> bool:
         """Returns True or False based on internal count."""
-        self.i += 1
+        self.i += 1; return self.value
+    @property
+    def value(self) -> bool:
         if self.i % self.n: return False
         else: return True
 sen = "_ab_sentinel"
@@ -452,17 +464,25 @@ notebook environment like Jupyter, it might poke at variables.
 
 For extended code example that utilizes this, check over :class:`k1lib.cli.modifier.op`
 source code."""
-    def __init__(self):
+    def __init__(self, initDict:dict=dict()):
+        """Creates a new Absorber.
+
+:param initDict: initial variables to set, as setattr operation is normally absorbed"""
         self._ab_sentinel = True
         self._ab_steps = []
+        for k, v in initDict.items(): setattr(self, k, v)
         self._ab_sentinel = False
     def ab_operate(self, x):
+        """Special method to actually operate on an object and get the result. Not
+absorbed."""
         for desc, step in self._ab_steps: x = step(x)
         return x
     def __getattr__(self, idx):
         if isinstance(idx, str) and idx.startswith("_"): raise AttributeError()
         self._ab_steps.append([["__getattr__", idx], lambda x: getattr(x, idx)]); return self
     def __setattr__(self, k, v):
+        """Only allows legit variable setting when '_ab_sentinel' is True. Absorbs
+operations if it's False."""
         if k == sen: self.__dict__[k] = v
         else:
             if self.__dict__[sen]: self.__dict__[k] = v
@@ -514,8 +534,17 @@ source code."""
     def __pos__(self):    self._ab_steps.append([["__pos__"],    lambda x: +x      ]); return self
     def __abs__(self):    self._ab_steps.append([["__abs__"],    lambda x: abs(x)  ]); return self
     def __invert__(self): self._ab_steps.append([["__invert__"], lambda x: ~x      ]); return self
-    def __int__(self):    self._ab_steps.append([["__int__"],    lambda x: int(x)  ]); return self
-    def __float__(self):  self._ab_steps.append([["__float__"],  lambda x: float(x)]); return self
-    def getdoc(self):
-        """Here so that JupyterLab's contextual help won't go in and mess things up."""
-        raise AttributeError()
+    def int(self):
+        """Replacement for ``int(ab)``, as that requires returning an actual :class:`int`."""
+        self._ab_steps.append([["__int__"],    lambda x: int(x)  ]); return self
+    def __int__(self):    return self.int()
+    def float(self):
+        """Replacement for ``float(ab)``, as that requires returning an actual :class:`float`."""
+        self._ab_steps.append([["__float__"],  lambda x: float(x)]); return self
+    def __float__(self):  return self.float()
+    def str(self):
+        """Replacement for ``str(ab)``, as that requires returning an actual :class:`str`."""
+        self._ab_steps.append([["__str__"],    lambda x: str(x)  ]); return self
+    def len(self):
+        """Replacement for ``len(ab)``, as that requires returning an actual :class:`int`."""
+        self._ab_steps.append([["__len__"],    lambda x: len(x)  ]); return self

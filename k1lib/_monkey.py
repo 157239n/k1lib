@@ -8,7 +8,6 @@ def dummy():
     """Does nothing. Only here so that you can read source code of this file and
 see what’s up."""
     pass
-torch.stack = cli.applyS(torch.stack)
 @k1lib.patch(nn.Module)
 def importParams(self:nn.Module, params:List[nn.Parameter]):
     """Given a list of :class:`torch.nn.parameter.Parameter`/:class:`torch.Tensor`,
@@ -50,7 +49,7 @@ with the same standard deviation as the original parameter"""
         b = param.std() if param.numel() > 1 else 1
         answer.append(a * b)
     return answer
-from k1lib.cli import apply, deref
+from k1lib.cli import apply, deref, op, identity, item
 @k1lib.patch(nn.Module)
 @contextmanager
 def deviceContext(self:nn.Module, buffers:bool=True) -> ContextManager:
@@ -83,13 +82,16 @@ If you don't know what I'm talking about, don't worry and just leave as default.
 
 :param buffers: whether to preserve device of buffers (regular Tensors attached
     to :class:`~torch.nn.Module`) or not."""
-    pDevs = self.parameters() | apply(lambda t: (t, t.device)) | deref(True)
-    if buffers: bDevs = self.buffers() | apply(lambda t: t.device) | deref(True)
+    pDevs = self.parameters() | apply(lambda t: (t, t.device)) | deref()
+    if buffers: pbDevs = pbDevs = self.modules() |\
+        apply(lambda m: (m, m | op().buffers(recurse=False) | op().device.all() | deref())) | deref(maxDepth=1)
     try: yield
     finally:
         for p, dev in pDevs: p.data = p.data.to(device=dev)
         if buffers:
-            for buf, dev in zip(self.buffers(), bDevs): buf.data = buf.data.to(device=dev)
+            for m, bDevs in pbDevs:
+                for buf, dev in zip(m.buffers(recurse=False), bDevs):
+                    buf.data = buf.data.to(device=dev)
 @k1lib.patch(nn.Module)
 @contextmanager
 def gradContext(self):
@@ -100,7 +102,10 @@ Example::
     with m.gradContext():
         m.weight.requires_grad = False
     # returns True
-    m.weight.requires_grad"""
+    m.weight.requires_grad
+
+It's worth mentioning that this does not work with buffers (Tensors attached to
+:class:`torch.nn.Module`), as buffers are not meant to track gradients!"""
     grads = [(p, p.requires_grad) for p in self.parameters()]
     try: yield
     finally:
@@ -206,6 +211,14 @@ Example::
 def hasNan(self) -> bool:
     """Returns whether this Tensor has any nan values at all."""
     return (self != self).sum() > 0
+@k1lib.patch(torch.Tensor)
+def stats(self) -> Tuple[float, float]:
+    return self.mean(), self.std()
+inf = float("inf")
+@k1lib.patch(torch.Tensor)
+def hasInfs(self):
+    """Whether this Tensor has negative or positive infinities."""
+    return (self == inf).any() or (self == -inf).any()
 try:
     import graphviz
     @k1lib.patch(graphviz.Digraph, "__call__")

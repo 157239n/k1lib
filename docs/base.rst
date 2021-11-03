@@ -90,7 +90,6 @@ Functions
 .. autofunction:: k1lib.tab
 .. autofunction:: k1lib.isNumeric
 .. autofunction:: k1lib.close
-.. autofunction:: k1lib.stats
 .. autofunction:: k1lib.patch
 .. autofunction:: k1lib.wraps
 .. autofunction:: k1lib.squeeze

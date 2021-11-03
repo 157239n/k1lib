@@ -12,8 +12,7 @@ __all__ = ["transpose", "joinList", "splitList",
            "joinStreams", "yieldSentinel", "joinStreamsRandom", "activeSamples",
            "batched", "collate",
            "insertRow", "insertColumn", "insertIdColumn",
-           "toDict", "toDictF", "split", "expandE", "table",
-           "listToTable", "tableFromList",
+           "toDict", "toDictF", "expandE", "unsqueeze",
            "count", "permute", "accumulate", "AA_", "peek", "peekF",
            "repeat", "repeatF", "repeatFrom"]
 class transpose(BaseCli):
@@ -210,33 +209,11 @@ values. Example::
     names | toDictF(valueF=lambda s: len(s)) # will return {"wanda": 5, "vision": 6, ...}
     names | toDictF(lambda s: s.title(), lambda s: len(s)) # will return {"Wanda": 5, "Vision": 6, ...}
 """
-        super().__init__(); self.keyF = keyF or (lambda s: s)
+        super().__init__(fs=[keyF, valueF]); self.keyF = keyF or (lambda s: s)
         self.valueF = valueF or (lambda s: s)
     def __ror__(self, keys:Iterator[Any]) -> Dict[Any, Any]:
         super().__ror__(keys); keyF = self.keyF; valueF = self.valueF
         return {keyF(key):valueF(key) for key in keys}
-class split(BaseCli):
-    def __init__(self, delim:str=None, idx:int=None):
-        """Splits each line using a delimiter, and outputs the
-parts as a separate line. Example::
-
-    # returns ["a", "b", "d", "e"]
-    ["a,b", "d,e"] | split(",") | deref()
-    # returns ['b', 'e']
-    ["a,b", "d,e"] | split(",", 1) | deref()
-
-:param idx: if available, only outputs the element at that index"""
-        super().__init__()
-        self.delim = patchDefaultDelim(delim); self.idx = idx
-    def __ror__(self, it:Iterator[str]):
-        super().__ror__(it)
-        if self.idx == None:
-            for line in it:
-                for elem in line.split(self.delim): yield elem
-        else:
-            for line in it:
-                elems = line.split(self.delim)
-                yield elems[self.idx] if self.idx < len(elems) else None
 class expandE(BaseCli):
     def __init__(self, f:Callable[[T], List[T]], column:int):
         """Expands table element to multiple columns.
@@ -246,7 +223,7 @@ Example::
     [["abc", -2], ["de", -5]] | expandE(lambda e: (e, len(e)), 0) | deref()
 
 :param f: Function that transforms 1 row element to multiple elements"""
-        self.f = f; self.column = column
+        super().__init__(fs=[f]); self.f = f; self.column = column
     def __ror__(self, it):
         f = self.f; c = self.column
         def gen(row):
@@ -254,21 +231,22 @@ Example::
                 if i == c: yield from f(e)
                 else: yield e
         return (gen(row) for row in it)
-class table(BaseCli):
-    def __init__(self, delim:str=None):
-        """Splits lines to rows (List[str]) using a delimiter.
+def unsqueeze(dim:int=0):
+    """Unsqueeze input iterator.
 Example::
 
-    # returns [['a', 'bd'], ['1', '2', '3']]
-    ["a|bd", "1|2|3"] | table("|") | deref()"""
-        super().__init__(); self.delim = patchDefaultDelim(delim)
-    def __ror__(self, it:Iterator[str]) -> Table[str]:
-        super().__ror__(it)
-        return (line.split(self.delim) for line in it)
-def listToTable():
-    """Turns Iterator[T] into Table[T]"""
-    return cli.wrapList() | transpose()
-tableFromList = listToTable
+    t = [[1, 2], [3, 4], [5, 6]]
+    # returns torch.Size([3, 2])
+    torch.tensor(t).shape
+    # returns torch.Size([1, 3, 2])
+    torch.tensor(t | unsqueeze(0) | deref()).shape
+    # returns torch.Size([3, 1, 2])
+    torch.tensor(t | unsqueeze(1) | deref()).shape
+    # returns torch.Size([3, 2, 1])
+    torch.tensor(t | unsqueeze(2) | deref()).shape"""
+    a = cli.wrapList()
+    for i in range(dim): a = a.all()
+    return a
 class count(BaseCli):
     """Finds unique elements and returns a table with [frequency, value, percent]
 columns. Example::
@@ -387,7 +365,7 @@ return the input Iterator, which is not tampered. Example::
     it() | peekF(lambda x: print(x)) | deref()
     # prints "1\n2\n3"
     it() | peekF(headOut()) | deref()"""
-        super().__init__(); self.f = f
+        super().__init__(fs=[f]); self.f = f
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
         super().__ror__(it); it = iter(it)
         sentinel = object(); row = next(it, sentinel)
@@ -423,6 +401,7 @@ Example::
 :param limit: if None, then repeats indefinitely
 
 See also: :class:`repeatFrom`"""
+    if isinstance(f, cli.op): f.op_solidify()
     if limit is None:
         while True: yield f()
     else:

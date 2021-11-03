@@ -4,7 +4,7 @@ from typing import Iterator, Union
 import urllib, subprocess, warnings, os
 from k1lib.cli import BaseCli
 import k1lib.cli as cli
-__all__ = ["cat", "cats", "curl", "wget", "ls", "cmd", "requireCli", "toPIL"]
+__all__ = ["cat", "curl", "wget", "ls", "cmd", "requireCli", "toPIL"]
 def _catSimple(fileName:str=None, text:bool=True) -> Iterator[Union[str, bytes]]:
     if text:
         with open(fileName) as f:
@@ -37,19 +37,6 @@ Example::
 :param text: if True, read text file, else read binary file"""
     if fileName is None: return _cat(text)
     else: return _catWrapper(fileName, text)
-class cats(BaseCli):
-    """Like :meth:`cat`, but opens multiple files at once, returning
-streams. Looks something like this::
-
-    apply(lambda s: cat(s))
-
-Example::
-
-    # prints out first 10 lines of 2 files
-    ["file1.txt", "file2.txt"] | cats() | headOut().all() | ignore()"""
-    def __ror__(self, fileNames:Iterator[str]) -> Iterator[Iterator[str]]:
-        for fileName in fileNames:
-            yield _catSimple(fileName)
 def curl(url:str) -> Iterator[str]:
     """Gets file from url. File can't be a binary blob.
 Example::
@@ -113,7 +100,7 @@ Example::
         """Pipes in lines of input, or if there's nothing to
 pass, then pass None"""
         super().__ror__(it)
-        out, err = executeCmd(self.cmd) if it is None else executeCmd(self.cmd, it | cli.to1Str("\n") | cli.item())
+        out, err = executeCmd(self.cmd) if it is None else executeCmd(self.cmd, it | cli.join("\n") | cli.item())
         if err: warnings.warn(f"Error encountered:\n\n{err.decode()}")
         self._err = err; return out
     def __repr__(self):

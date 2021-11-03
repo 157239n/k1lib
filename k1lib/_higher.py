@@ -29,9 +29,9 @@ def optimize(f:Func, v:float=1, threshold:float=1e-6) -> float:
 `v`. Example::
 
     f = lambda x: x**2-2
-    # returns sqrt(2)
+    # returns 1.4142 (root 2)
     k1lib.optimize(f)
-    # returns -sqrt(2)
+    # returns -1.4142 (negative root 2)
     k1lib.optimize(f, -1)
 
 Interestingly, for some reason, result of this is more accurate than :meth:`derivative`.

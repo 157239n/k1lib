@@ -27,7 +27,9 @@ class Param:
         self.name = name
         self.torchParam = torchParam
         self.data = ParamData()
-    def update(self): self.data.update(self.torchParam.detach())
+        self.every = k1lib.Every(3)
+    def update(self):
+        if self.every(): self.data.update(self.torchParam.detach())
     def __repr__(self):
         return f"""Param `{self.name}`. Use...
 - p.torchParam: to get actual underlying parameter

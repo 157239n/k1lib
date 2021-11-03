@@ -4,7 +4,7 @@ import numpy as np, matplotlib.pyplot as plt, matplotlib as mpl
 from typing import Any, List, Union, Tuple
 from functools import partial
 __all__ = ["_docsUrl", "CaptureStdout",
-           "textToHtml", "clearLine", "tab", "isNumeric", "close", "stats",
+           "textToHtml", "clearLine", "tab", "isNumeric", "close",
            "patch", "wrapMod", "wraps", "squeeze", "raiseEx", "smooth",
            "numDigits", "limitLines",
            "limitChars", "showLog", "cleanDiv", "graph", "digraph",
@@ -30,9 +30,6 @@ def close(a, b):
     """Returns whether 2 values are really close to each other"""
     if isNumeric(a) and isNumeric(b): return abs(a - b) < 1e-6
     return torch.allclose(torch.tensor(a), torch.tensor(b))
-def stats(x) -> Tuple[float, float]:
-    """Returns the mean and standard deviation of the input"""
-    return x.mean(), x.std()
 def patch(_class:type, name:str=None, docs:Union[str, Any]=None, static=False):
     """Patches a function to a class/object.
 
@@ -119,7 +116,8 @@ def wraps(ogF):
         return f
     return inner
 def squeeze(_list:Union[list, tuple, torch.Tensor, Any], hard=False):
-    """If list only has 1 element, rethrn that element, else return original list
+    """If list only has 1 element, returns that element, else returns original
+list.
 
 :param hard: If True, then if list/tuple, filters out None, and takes the first
     element out even if that list/tuple has more than 1 element"""
@@ -229,7 +227,10 @@ defined in the notebook appear in the __main__ context by passing `globals()` in
     execute()
     if not preserveDir: os.chdir(oldPath)
 def dontWrap():
-    """Don't wrap horizontally when in a notebook"""
+    """Don't wrap horizontally when in a notebook. Normally, if you're
+displaying something long, like the output of ``print('a'*1000)`` in a notebook,
+it will display it in multiple lines. This may be undesirable, so this solves
+that by displaying some HTML with css styles so that the notebook doesn't wrap."""
     try:
         from IPython.core.display import display, HTML
         display(HTML("""<style>
@@ -322,9 +323,9 @@ class CaptureStdout(list):
     """Captures every print() statement. Taken from https://stackoverflow.com/questions/16571150/how-to-capture-stdout-output-from-a-python-function-call.
 Example::
 
-    with CaptureStdout() as outer:
+    with k1lib.CaptureStdout() as outer:
         print("something")
-        with CaptureStdout() as inner:
+        with k1lib.CaptureStdout() as inner:
             print("inside inner")
         print("else")
     # prints "['something', 'else']"

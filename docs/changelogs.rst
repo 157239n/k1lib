@@ -2,6 +2,52 @@
 Changelogs
 ==========
 
+`0.7 </0.7>`_
+-------------
+
+.. currentmodule:: k1lib.callbacks
+
+DL:
+
+- Added ``metab`` as extra metadata from dataloaders to :class:`~k1lib.Learner` in
+  the core training loop and modified :class:`~recorder.Recorder` to
+  return it if available.
+- Added ``n`` option to :class:`~k1lib.AutoIncrement`.
+- Added :meth:`~k1lib.viz.mask`.
+- Removed :meth:`k1lib.stats`, replaced it with :meth:`torch.Tensor.stats` directly
+- Added :class:`~k1lib.cli.modifier.op` option to :class:`~k1lib.schedule.Fn`.
+- Added :meth:`torch.Tensor.hasInfs`
+- Made :class:`~lossFunctions.shorts.LossNLLCross` integrates with
+  :class:`~lossFunctions.accuracy.AccF` instead.
+- Made :class:`~lossFunctions.accuracy.AccF` integrates with :class:`~confusionMatrix.ConfusionMatrix`.
+- Made :class:`~confusionMatrix.ConfusionMatrix` resilient against nans and infs,
+  and fixed norm strategy (tensor rows divide by max rows, instead of tensor columns
+  divide by max rows, like before).
+
+.. currentmodule:: k1lib.cli
+
+Cli:
+
+- Added :class:`~filt.mask`, :meth:`~structural.unsqueeze`.
+- Made :class:`~modifier.op` compatible with lots of other cli tools, so you can do
+  stuff like ``filt(op() > 3, 1)``.
+- Removed :class:`~structural.split`, as ``op().split().all() | joinStreams()`` does
+  the same thing. This is longer, so I kinda want to put it back in, but the name
+  is incredibly oxymoronic.
+- Removed :meth:`~structural.listToTable` and its alias :meth:`~structural.tableFromList`,
+  as they are too simple, and the new ``unsqueeze(1)`` does the same thing.
+- Removed ``args`` option in :class:`~modifier.applyMp`, as it feels clunky.
+- Removed :class:`~inp.cats` as ``cat().all()`` does the same job.
+- Sped up :class:`~modifier.op` to have roughly same performance as
+  :class:`~modifier.apply`. As a consequence, removed [:class:`~modifier.lstrip`,
+  :class:`~modifier.rstrip`, :class:`~modifier.strip`, :class:`~modifier.upper`,
+  :class:`~modifier.lower`] clis as stuff like ``op().upper().all()`` does the same
+  and I want to simplify the collection of cli tools.
+- Completely removed :mod:`k1lib.cli.ctx` module, as the performance sacrifices are
+  too much, and it doesn't add a lot of useful features.
+- Renamed :class:`utils.to1Str` to :class:`~utils.join` as that is more intuitive.
+- Removed :class:`structural.table`, as ``op().split().all()`` does the same thing
+
 `0.6 </0.6>`_
 -------------
 

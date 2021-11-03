@@ -8,7 +8,7 @@ This is exposed automatically with::
    from k1lib.imports import *
    schedule.Fn # exposed
 """
-import math, k1lib
+import math, k1lib; import k1lib.cli as cli
 import matplotlib.pyplot as plt, numpy as np
 from itertools import accumulate
 from k1lib.callbacks import Cbs, Callback
@@ -20,14 +20,16 @@ class Fn:
 Example::
 
     s = schedule.Fn(lambda x: x**2)
+    s(0.2) # returns 0.04
 
     # you can also use this as a decorator
     @schedule.Fn
     def s(x):
         return x**2
 
-:param f: domain should always in [0, 1]
+:param f: function (domain should always in [0, 1]), can be :class:`~k1lib.cli.modifier.op`
 :param param: (optional) Parameter to schedule (e.g "lr") if using :class:`ParamScheduler`"""
+        if isinstance(f, cli.op): f.op_solidify()
         self.f = f; self.param = param; self.progress = None
         self.domain = k1lib.Range(0, 1)
     def __call__(self, x:float):
@@ -129,7 +131,8 @@ class ParamScheduler(Callback):
         if self.l.model.training and self.groupId is not None:
             paramGroup = self.l.opt.param_groups[self.groupId]
             progress = self.l.ProgressBar.progress
-            for schedule in self.schedules.values(): schedule._startBatch(paramGroup, progress)
+            for schedule in self.schedules.values():
+                schedule._startBatch(paramGroup, progress)
     def __repr__(self):
         print(f"{self._reprHead}, css: \"{self.css}\", selector prop: \"{self.prop}\", schedules:")
         for schedule in self.schedules.values(): schedule.__repr__()

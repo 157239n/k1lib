@@ -53,8 +53,9 @@ check over this:
 
 Core clis include :class:`~modifier.apply`, :class:`~modifier.applyS` (its
 multiprocessing cousins :class:`~modifier.applyMp` and :class:`~modifier.applyMpBatched`
-are great too) and :class:`~utils.deref`, so start reading there first. Then, skim
-over everything to know what you can do with these collection of tools.
+are great too), :class:`~modifier.op` and :class:`~utils.deref`, so start reading
+there first. Then, skim over everything to know what you can do with these
+collection of tools.
 
 bio module
 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -63,21 +64,6 @@ bio module
    :members:
    :undoc-members:
    :show-inheritance:
-
-..
-   ctx module
-   ^^^^^^^^^^^^^^^^^^^^^^^^^
-
-   .. toctree::
-      :maxdepth: 1
-      :hidden:
-
-      ctx
-
-   .. automodule:: k1lib.cli.ctx
-      :members:
-      :undoc-members:
-      :show-inheritance:
 
 entrez module
 ^^^^^^^^^^^^^^^^^^^^^^^^^

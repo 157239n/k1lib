@@ -35,12 +35,12 @@ so the term's order might matter to you"""
                 lines = it | cli.grep(f"/{tag}").till("/") | cli.deref()
                 # check if on same line
                 if len(lines) > 1 and lines[-1].lstrip().startswith("/"): lines.pop()
-                return (lines | cli.split(f"/{tag}=\"") | ~cli.head(1)\
-                | cli.strip() | cli.to1Str("") | cli.item()).rstrip("\"")
+                return (lines | cli.op().split(f"/{tag}=\"").all() | cli.joinStreams() | ~cli.head(1)\
+                | cli.op().strip().all() | cli.join("")).rstrip("\"")
         return _tag()
 class origin(cli.BaseCli):
     """Return the origin section of the genbank file"""
     def __ror__(self, it):
-        return it | cli.grep("ORIGIN", 0, 1e9) | ~cli.head(1) | cli.strip()\
-        | cli.table(" ") | cli.cut()[1:] | cli.to1Str("").all()\
-        | cli.remove("/") | cli.to1Str("")
+        return it | cli.grep("ORIGIN", 0, 1e9) | ~cli.head(1) | cli.op().strip().all()\
+        | cli.op().split(" ").all() | cli.cut()[1:] | cli.join("").all()\
+        | cli.remove("/") | cli.join("")

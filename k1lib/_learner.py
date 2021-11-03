@@ -158,12 +158,12 @@ def _run1Epoch(self):
         try: self.batches = len(train) + len(valid)
         except: pass
         self.model.train()
-        for self.batch, (self.xb, self.yb) in enumerate(train):
+        for self.batch, (self.xb, self.yb, *self.metab) in enumerate(train):
             self._run1Batch()
         trainLen = self.batch + 1
         if not self.cbs("startValidBatches"):
             self.model.eval();
-            for self.batch, (self.xb, self.yb) in enumerate(valid):
+            for self.batch, (self.xb, self.yb, *self.metab) in enumerate(valid):
                 self.batch += trainLen; self._run1Batch()
         if self.batches is None: self.batches = self.batch + 1
     except k1lib.CancelEpochException as ex:

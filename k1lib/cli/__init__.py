@@ -16,13 +16,6 @@ from .structural import *
 from .utils import *
 from .others import *
 
-from . import ctx as _ctx
-class _CtxModule: # add shortcut functionality to getC and setC
-    def __init__(self, _dict): self.__dict__.update(_dict)
-    def __getitem__(self, ctx:str) -> _ctx.Promise: return self.getC(ctx)
-    def __setitem__(self, ctx:str, value): self.setC(ctx, value)
-ctx = _CtxModule(_ctx.__dict__)
-
 # bio specific
 from .entrez import *
 from .bio import *

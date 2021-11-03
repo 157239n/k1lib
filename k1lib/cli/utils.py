@@ -7,7 +7,7 @@ import k1lib.cli as cli, numbers, torch, numpy as np
 from typing import overload, Iterator, Any, List, Set, Union
 import k1lib
 __all__ = ["size", "shape", "item", "identity",
-           "toStr", "to1Str", "toNumpy", "toTensor",
+           "toStr", "join", "toNumpy", "toTensor",
            "toList", "wrapList", "toSet", "toIter", "toRange",
            "equals", "reverse", "ignore",
            "toSum", "toAvg", "toMean", "toMax", "toMin",
@@ -99,13 +99,13 @@ Example::
         else:
             for row in it:
                 yield [e if i != c else str(e) for i, e in enumerate(row)]
-class to1Str(BaseCli):
+class join(BaseCli):
     def __init__(self, delim:str=None):
         r"""Merges all strings into 1, with `delim` in the middle. Basically
 :meth:`str.join`. Example::
 
     # returns '2\na'
-    [2, "a"] | to1Str("\n")"""
+    [2, "a"] | join("\n")"""
         super().__init__(); self.delim = patchDefaultDelim(delim)
     def __ror__(self, it:Iterator[str]):
         super().__ror__(it); return self.delim.join(it | toStr())
@@ -138,7 +138,8 @@ same, but this is just to maintain the style"""
     def __ror__(self, it:Iterator[Any]) -> List[Any]:
         return list(it)
 class wrapList(BaseCli):
-    """Wraps inputs inside a list"""
+    """Wraps inputs inside a list. There's a more advanced cli tool
+built from this, which is :meth:`~k1lib.cli.structural.unsqueeze`."""
     def __ror__(self, it:T) -> List[T]:
         return [it]
 class toSet(BaseCli):
@@ -242,10 +243,8 @@ out. Also sets the context variable "header", in case you need it later.
 Example::
 
     # returns [[0, 'a'], [1, 'b'], [2, 'c']]
-    ["abc"] | headerIdx() | deref()
-    # returns ['a', 'b', 'c']
-    ctx["header"]()"""
-    return item() | cli.ctx.consume("header") | cli.tableFromList() | cli.insertIdColumn(True)
+    ["abc"] | headerIdx() | deref()"""
+    return item() | cli.wrapList() | cli.transpose() | cli.insertIdColumn(True)
 Number = numbers.Number; Tensor = torch.Tensor; NpNumber = np.number
 Module = torch.nn.Module
 class inv_dereference(BaseCli):
@@ -255,7 +254,6 @@ class inv_dereference(BaseCli):
     def __ror__(self, it:Iterator[Any]) -> List[Any]:
         super().__ror__(it); ignoreTensors = self.ignoreTensors; 
         for e in it:
-            if isinstance(e, cli.ctx.Promise): e = e()
             if e is None or isinstance(e, (Number, NpNumber, str)): yield e
             elif isinstance(e, Tensor):
                 if not ignoreTensors and len(e.shape) == 0: yield e.item()
@@ -297,10 +295,11 @@ You can also specify a ``maxDepth``::
     def __ror__(self, it:Iterator[T]) -> List[T]:
         super().__ror__(it); answer = []; ignoreTensors = self.ignoreTensors
         if ignoreTensors and isinstance(it, Tensor): return it
+        try: iter(it)
+        except: return it
         if self.depth >= self.maxDepth: return it
         self.depth += 1
         for e in it:
-            if isinstance(e, cli.ctx.Promise): e = e()
             if e is None or isinstance(e, (Number, NpNumber, str, Module)):
                 answer.append(e)
             elif isinstance(e, Tensor):

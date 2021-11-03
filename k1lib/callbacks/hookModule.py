@@ -40,16 +40,17 @@ class Function:
         self.f = f; self.name = name or "f(<no name>)"
     def __call__(self, *args, **kwargs):
         self.f(*args, **kwargs)
-def hook(fns:List[Function], *args): [fn(*args) for fn in fns]
+def hook(every, fns:List[Function], *args):
+    if every.value: [fn(*args) for fn in fns]
 class Module:
     def __init__(self, module:nn.Module):
         self.nn = module
         self.handles = Handles()
         self.data = ModuleData()
         self.name = module.__class__.__name__
-    def registerHooks(self, forwardFns:List[Function], backwardFns:List[Function]):
-        self.handles.forward = self.nn.register_forward_hook(partial(hook, forwardFns, self.data.forward))
-        self.handles.backward = self.nn.register_full_backward_hook(partial(hook, backwardFns, self.data.backward))
+    def registerHooks(self, forwardFns:List[Function], backwardFns:List[Function], every):
+        self.handles.forward = self.nn.register_forward_hook(partial(hook, every, forwardFns, self.data.forward))
+        self.handles.backward = self.nn.register_full_backward_hook(partial(hook, every, backwardFns, self.data.backward))
         return self
     def unregisterHooks(self): self.handles.remove()
     def __repr__(self):
@@ -73,15 +74,17 @@ callback in a cell for more info"""
         self.forwardFns:List[Function] = []
         self.backwardFns:List[Function] = []
         self.cleanFns = []; self.persistent = persistent
+        self.every = k1lib.Every(3)
     def reset(self):
         """Intended to be called by end user only, to reset
         everything if choose to persist results across runs."""
         self._end(); self._start()
     def startRun(self):
         if (not self.persistent) or (len(self.modules) == 0): self._start()
+    def startBatch(self): self.every()
     def _registerHooks(self):
         for module in self.modules:
-            module.registerHooks(self.forwardFns, self.backwardFns)
+            module.registerHooks(self.forwardFns, self.backwardFns, self.every)
     def _unregisterHooks(self):
         for module in self.modules: module.unregisterHooks()
     def endRun(self):

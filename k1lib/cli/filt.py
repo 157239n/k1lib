@@ -11,7 +11,7 @@ __all__ = ["filt", "isValue", "isFile", "inSet", "contains", "empty",
            "startswith", "endswith",
            "isNumeric", "instanceOf", "inRange",
            "head", "columns", "cut", "rows",
-           "intersection", "union", "unique", "breakIf"]
+           "intersection", "union", "unique", "breakIf", "mask"]
 class filt(BaseCli):
     def __init__(self, predicate:Callable[[T], bool], column:int=None):
         """Filters out lines.
@@ -27,7 +27,7 @@ Examples::
 :param column:
     - if integer, then predicate(row[column])
     - if None, then predicate(row)"""
-        super().__init__()
+        super().__init__(fs=[predicate])
         self.predicate = predicate; self.column = column
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
         super().__ror__(it)
@@ -317,3 +317,14 @@ Example::
         for line in it:
             if f(line): break
             yield line
+class mask(BaseCli):
+    def __init__(self, mask:Iterator[bool]):
+        """Masks the input stream.
+Example::
+
+    # returns [0, 1, 3]
+    range(5) | mask([True, True, False, True, False]) | deref()"""
+        super().__init__(); self.mask = mask
+    def __ror__(self, it):
+        for e, m in zip(it, self.mask):
+            if m: yield e

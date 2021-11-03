@@ -3,22 +3,21 @@
 This is for quick modifiers, think of them as changing formats
 """
 __all__ = ["apply", "applyMp", "applyMpBatched", "applyS",
-           "lstrip", "rstrip", "strip",
-           "upper", "lower", "replace", "remove", "toFloat", "toInt",
+           "replace", "remove", "toFloat", "toInt",
            "sort", "sortF", "consume", "randomize", "stagger", "op"]
 from typing import Callable, Iterator, Any, Union, List
 from k1lib.cli.init import patchDefaultDelim, BaseCli, settings, T
 import k1lib.cli as cli, numpy as np, torch
-import multiprocessing as mp; from collections import deque
+import torch.multiprocessing as mp; from collections import deque
 from functools import partial, update_wrapper
-import dill, pickle, k1lib, warnings
+import dill, pickle, k1lib, warnings, atexit
 def executeFunc(common, line):
     import dill
-    f, args, kwargs = dill.loads(common)
-    return f(dill.loads(line), *args, **kwargs)
+    f, kwargs = dill.loads(common)
+    return f(dill.loads(line), **kwargs)
 class applyMp(BaseCli):
     _pools = set()
-    def __init__(self, f:Callable[[T], T], prefetch:int=None, timeout:float=2, *args, **kwargs):
+    def __init__(self, f:Callable[[T], T], prefetch:int=None, timeout:float=2, **kwargs):
         """Like :class:`apply`, but execute ``f(row)`` of each row in
 multiple processes. Example::
 
@@ -67,23 +66,31 @@ away.
     Also remember that the return result of ``f`` should not be a generator.
     That's why in the example above, there's a ``deref()`` inside f.
 
-One last thing. Remember to close all pools (using :meth:`clearPools`) so that
-all child processes are terminated, and that resources are freed. Let's say if
-you use CUDA tensors, but have not close all pools yet, then it is possible
-that CUDA memory is not freed. I learned this the hard way.
+Most of the time, you'd probably want to use :class:`applyMpBatched` instead.
+That cli tool has the same look and feel as this, but executes ``f`` multiple
+times in a single job, instead of executing ``f`` only 1 time per job here, so
+should dramatically improve performance for most workloads.
+
+One last thing. Remember to close all pools (using :meth:`clearPools`) before
+exiting the script so that all child processes are terminated, and that
+resources are freed. Let's say if you use CUDA tensors, but have not close all
+pools yet, then it is possible that CUDA memory is not freed. I learned this
+the hard way. I've tried to use :mod:`atexit` to close pools automatically, but
+it doesn't seem to work with notebooks.
 
 :param prefetch: if not specified, schedules all jobs at the same time. If
     specified, schedules jobs so that there'll only be a specified amount of
     jobs, and will only schedule more if results are actually being used.
 :param timeout: seconds to wait for job before raising an error
-:param args: extra arguments to be passed to the function. ``kwargs`` too"""
-        super().__init__(); self.f = f; self.prefetch = prefetch or 1_000_000
-        self.timeout = timeout; self.args = args; self.kwargs = kwargs
+:param kwargs: extra arguments to be passed to the function. ``args`` not
+    included as there're a couple of options you can pass for this cli."""
+        super().__init__(fs=[f]); self.f = f; self.prefetch = prefetch or 1_000_000
+        self.timeout = timeout; self.kwargs = kwargs
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
         super().__ror__(it); it = iter(it) # really make sure it's an iterator, for prefetch
         self.p = p = mp.Pool(mp.cpu_count()*4//5)
         applyMp._pools.add(p); timeout = self.timeout
-        common = dill.dumps([self.f, self.args, self.kwargs])
+        common = dill.dumps([self.f, self.kwargs])
         def gen():
             fs = deque()
             for i, line in zip(range(self.prefetch), it):
@@ -105,6 +112,7 @@ script/notebook to make sure all resources (like GPU) are freed."""
     def pools():
         """Get set of all pools. Meant for debugging purposes only."""
         return applyMp._pools
+atexit.register(lambda: applyMp.clearPools())
 class applyS(BaseCli):
     def __init__(self, f:Callable[[T], T]):
         """Like :class:`apply`, but much simpler, just operating on the entire input
@@ -123,10 +131,9 @@ Like :class:`apply`, you can also use this as a decorator like this::
 
 This also decorates the returned object so that it has same qualname, docstring
 and whatnot."""
-        super().__init__(); self.f = f
+        super().__init__(fs=[f]); self.f = f
         update_wrapper(self, f)
     def __ror__(self, it:T) -> T:
-        if settings["useCtx"]: super().__ror__(it)
         return self.f(it)
     def all(self):
         return apply(self.f)
@@ -149,11 +156,12 @@ You can also use this as a decorator, like this::
     range(5) | f | deref()
 
 :param column: if not None, then applies the function to that column only"""
-        super().__init__();
+        super().__init__(fs=[f]);
         self.f = f.f if isinstance(f, applyS) else f
         self.column = column
     def __ror__(self, it:Iterator[str]):
         super().__ror__(it); f = self.f; c = self.column
+        if isinstance(f, cli.op): f = f.ab_operate
         if c is None: return (f(line) for line in it)
         else: return ([(e if i != c else f(e)) 
                        for i, e in enumerate(row)] for row in it)
@@ -163,30 +171,7 @@ too. Iterator[A] goes in, Iterator[B] goes out, and you specify `f(A) -> B`.
 However, this will launch jobs that will execute multiple f(), instead of
 1 job per execution. All examples from :class:`applyMp` should work perfectly
 here."""
-    return cli.batched(bs) | applyMp(apply(f) | cli.deref(True), prefetch, timeout) | cli.joinStreams()
-def lstrip(column:int=None, char:str=None):
-    """Strips left of every line.
-Example::
-
-    # returns ['12 ', '34']
-    ["  12 ", " 34"] | lstrip() | deref()"""
-    return apply(lambda e: e.lstrip(char), column)
-def rstrip(column:int=None, char:str=None):
-    """Strips right of every line"""
-    return apply(lambda e: e.rstrip(char), column)
-def strip(column:int=None, char:str=None):
-    """Strips both sides of every line"""
-    return apply(lambda e: e.strip(char), column)
-def upper(column:int=None):
-    """Makes all characters uppercase.
-Example::
-
-    # returns ['ABCDE', '123R']
-    ["abcde", "123r"] | upper() | deref()"""
-    return apply(lambda e: e.upper(), column)
-def lower(column:int=None):
-    """Makes all characters lowercase"""
-    return apply(lambda e: e.lower(), column)
+    return cli.batched(bs, True) | applyMp(apply(f) | cli.deref(), prefetch, timeout) | cli.joinStreams()
 def replace(s:str, target:str=None, column:int=None):
     """Replaces substring `s` with `target` for each line.
 Example::
@@ -268,7 +253,7 @@ Example::
         if c is None:
             return it | cli.wrapList() | cli.transpose() | sort(0, self.numeric, self.reverse)
         f = self.filterF
-        rows = list(it | cli.isNumeric(c) if self.numeric else it)
+        rows = (it | cli.isNumeric(c) if self.numeric else it) | cli.deref(maxDepth=2)
         def sortF(row):
             if len(row) > c: return f(row[c])
             return float("inf")
@@ -285,7 +270,7 @@ Example::
     ["a", "aaa", "aaaaa", "aa", "aaaa"] | sortF(lambda r: len(r)) | deref()
     # returns ['aaaaa', 'aaaa', 'aaa', 'aa', 'a']
     ["a", "aaa", "aaaaa", "aa", "aaaa"] | ~sortF(lambda r: len(r)) | deref()"""
-        super().__init__(); self.f = f; self.reverse = reverse
+        super().__init__(fs=[f]); self.f = f; self.reverse = reverse
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
         super().__ror__(it)
         return iter(sorted(list(it), key=self.f, reverse=self.reverse))
@@ -303,7 +288,7 @@ Kinda like the bash command ``tee``. Example::
 
 This is useful whenever you want to mutate something, but don't want to
 include the function result into the main stream."""
-        super().__init__(); self.f = f
+        super().__init__(fs=[f]); self.f = f
     def __ror__(self, it:T) -> T:
         super().__ror__(it); self.f(it); return it
 class randomize(BaseCli):
@@ -394,25 +379,61 @@ on :class:`~k1lib.Absorber`. Example::
 
     t = torch.tensor([[1, 2, 3], [4, 5, 6.0]])
     # returns [torch.tensor([[4., 5., 6., 7., 8., 9.]])]
-    [t] | (op() + 3).view(1, -1).all() | deref(True)
+    [t] | (op() + 3).view(1, -1).all() | deref()
 
 Basically, you can treat ``op()`` as the input tensor. Tbh, you
 can do the same thing with this::
 
-    [t] | applyS(lambda t: (t+3).view(-1, 1)).all() | deref(True)
+    [t] | applyS(lambda t: (t+3).view(-1, 1)).all() | deref()
 
 But that's kinda long and may not be obvious. This can be surprisingly resilient, as
 you can still combine with other cli tools as usual, for example::
 
     # returns [2, 3], demonstrating "&" operator
-    torch.randn(2, 3) | (op().shape & identity()) | deref(True) | item()
+    torch.randn(2, 3) | (op().shape & identity()) | deref() | item()
 
     a = torch.tensor([[1, 2, 3], [7, 8, 9]])
     # returns torch.tensor([4, 5, 6]), demonstrating "+" operator for clis and not clis
     (a | op() + 3 + identity() | item() == torch.tensor([4, 5, 6])).all()
 
     # returns [[3], [3]], demonstrating .all() and "|" serial chaining
-    torch.randn(2, 3) | (op().shape.all() | deref())"""
+    torch.randn(2, 3) | (op().shape.all() | deref())
+    
+    # returns [[8, 18], [9, 19]], demonstrating you can treat `op()` as a regular function
+    [range(10), range(10, 20)] | transpose() | filt(op() > 7, 0) | deref()
+
+Performance-wise, there are some, but not a lot of degradation, so don't worry
+about it::
+
+    n = 10_000_000
+    # takes 1.6s
+    for i in range(n): i**2
+    # takes 1.8s, 1.125x worse than for loop
+    range(n) | apply(lambda x: x**2) | ignore()
+    # takes 2.7s, 1.7x worse than for loop
+    range(n) | apply(op()**2) | ignore()
+    # takes 2.7s
+    range(n) | (op()**2).all() | ignore()
+
+Reserved operations that are not absorbed are:
+
+- all
+- __ror__ (__or__ still works!)
+- op_solidify"""
+    def __init__(self):
+        super().__init__({"_op_solidified": False})
+    def op_solidify(self):
+        """Use this to not absorb ``__call__`` operations anymore and makes it
+feel like a regular function (still absorbs other operations though)::
+
+    f = op()**2
+    3 | f # returns 9, but may be you don't want to pipe it in
+    f.op_solidify()
+    f(3)  # returns 9"""
+        self._ab_sentinel = True
+        self._op_solidified = True
+        self._ab_sentinel = False
+        return self
     def __ror__(self, it):
         return self.ab_operate(it)
     def __or__(self, o):
@@ -424,3 +445,6 @@ you can still combine with other cli tools as usual, for example::
     def __and__(self, o):
         if isinstance(o, BaseCli): return super(k1lib.Absorber, self).__and__(o)
         return super().__and__(o)
+    def __call__(self, *args, **kwargs):
+        if self._op_solidified: return self.ab_operate(*args, **kwargs)
+        return super().__call__(*args, **kwargs)

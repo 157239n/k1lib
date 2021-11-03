@@ -27,30 +27,26 @@ class LossNLLCross(Callback):
     def __init__(self, nll:bool, integrations:bool):
         """Adds a cross-entropy/negative-likelihood loss function.
 
-This sets a shared variable ``preds`` inside :class:`k1lib.Learner`, representing
-the category predictions of the output.
-
 :param nll: if True, then use :class:`torch.nn.NLLLoss`, else use :class:`torch.nn.CrossEntropyLoss`
-:param integrations: whether to integrate with
-    :class:`~k1lib.callbacks.loss_accuracy.Accuracy` callback"""
-        super().__init__(); self.integrations = integrations; self.accuracyCb = None
+:param integrations: whether to integrate with :class:`~k1lib.callbacks.accuracy.AccF` callback"""
+        super().__init__(); self.integrations = integrations; self.ownsAccCb = False
+        self.order = 11 # to make sure it's after AccF
         self.lossF = torch.nn.NLLLoss() if nll else torch.nn.CrossEntropyLoss()
-        if nll: self.predF = lambda y: torch.argmax(math.e ** y, dim=1)
-        else: self.predF = lambda y: torch.argmax(F.softmax(y, dim=1), dim=1)
     def appended(self): # delayed initialization, so that learner and cbs has already been attached
         if self.integrations:
-            def accF(y, yb):
-                a = (y.argmax(dim=1) == yb).detach()
-                return a.sum() / a.numel()
-            self.accuracyCb = Cbs.AccF(accF)
-            self.cbs.append(self.accuracyCb)
+            if "AccF" not in self.cbs:
+                self.accuracyCb = Cbs.AccF()
+                self.cbs.append(self.accuracyCb)
+                self.ownsAccCb = True
+            else: self.accuracyCb = self.cbs.AccF
     def inLoss(self):
         self.l.lossG = self.lossF(self.l.y, self.l.yb)
         self.l.loss = self.l.lossG.detach().item()
-        self.l.preds = self.predF(self.l.y.detach())
     def detach(self):
+        super().detach()
         if self.accuracyCb != None:
-            self.accuracyCb.detach(); self.accuracyCb = None
+            if self.ownsAccCb: self.accuracyCb.detach()
+            self.accuracyCb = None
 @k1lib.patch(Callbacks, docs=LossNLLCross.__init__)
 def withLossNLL(self, integrations:bool=True, name:str=None):
     return self.append(LossNLLCross(True, integrations), name=name or "LossNLL")

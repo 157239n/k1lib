@@ -29,6 +29,7 @@ Class :class:`torch.Tensor`
 .. automethod:: torch.Tensor.histScaled
 .. automethod:: torch.Tensor.clearNan
 .. automethod:: torch.Tensor.hasNan
+.. automethod:: torch.Tensor.hasInfs
 
 Class :class:`graphviz.dot.Digraph`
 -------------------------------------

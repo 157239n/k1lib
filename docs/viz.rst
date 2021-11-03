@@ -15,3 +15,5 @@ k1lib.viz module
    .. autofunction:: confusionMatrix
 
    .. autofunction:: FAnim
+
+   .. autofunction:: mask

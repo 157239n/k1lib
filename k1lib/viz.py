@@ -3,7 +3,8 @@ import k1lib, base64, io, torch, os, matplotlib as mpl
 import matplotlib.pyplot as plt, numpy as np
 from typing import Callable, List, Union
 from functools import partial, update_wrapper
-__all__ = ["SliceablePlot", "plotSegments", "Carousel", "confusionMatrix", "FAnim"]
+__all__ = ["SliceablePlot", "plotSegments", "Carousel", "confusionMatrix", "FAnim",
+           "mask"]
 class _PlotDecorator:
     """The idea with decorators is that you can do something like this::
 
@@ -316,3 +317,14 @@ def FAnim(fig, f, frames, *args, **kwargs):
 :param f: function that accepts 1 frame from `frames`.
 :param frames: number of frames, or iterator, to pass into function"""
     return partial(mpl.animation.FuncAnimation, interval=1000/30)(fig, f, frames, *args, **kwargs)
+from torch import nn
+from k1lib.cli import op
+def mask(img:torch.Tensor, act:torch.Tensor) -> torch.Tensor:
+    """Shows which part of the image the network is focusing on.
+
+:param img: the image, expected to have dimension of (3, h, w)
+:param act: the activation, expected to have dimension of (x, y), and with
+    elements from 0 to 1."""
+    *_, h, w = img.shape
+    mask = act[None,] | nn.AdaptiveAvgPool2d([h, w])
+    return mask * img | op().permute(1, 2, 0)
