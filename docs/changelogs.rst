@@ -2,6 +2,38 @@
 Changelogs
 ==========
 
+`0.8 </0.8>`_
+-------------
+
+.. currentmodule:: k1lib.callbacks
+
+DL:
+
+- Exposed :mod:`k1lib.viz` automatically, and improve :meth:`~k1lib.viz.mask` so
+  that it smoothes out highlighted regions.
+- Added :meth:`~k1lib.perlin3d`.
+- Monkey patched :meth:`~mpl_toolkits.mplot3d.axes3d.Axes3D.march`,
+  :meth:`~mpl_toolkits.mplot3d.axes3d.Axes3D.surface`, :meth:`~matplotlib.pyplot.k3d`,
+  :meth:`~torch.loglinspace`, :meth:`~mpl_toolkits.mplot3d.axes3d.Axes3D.point`,
+  :meth:`~mpl_toolkits.mplot3d.axes3d.Axes3D.line`, :meth:`~mpl_toolkits.mplot3d.axes3d.Axes3D.plane`,
+  :meth:`~mpl_toolkits.mplot3d.axes3d.Axes3D.aspect`.
+- Renamed :meth:`~callbacks.Callbacks.append` to :meth:`~callbacks.Callbacks.add`.
+- Removed ``with-`` semantics for :meth:`~callbacks.Callback`. Use :attr:`~callbacks.Cbs` instead.
+- Changed :meth:`~k1lib.selector.ModuleSelector.__contains__` so that it handles ``*``
+  differently.
+
+.. currentmodule:: k1lib.cli
+
+Cli:
+
+- Modified :class:`~utils.shape` so that it can detect multiple dimensions now, not
+  just 2.
+- Added :meth:`~structural.activeSamples.extend`, :meth:`~structural.activeSamples.fullness`.
+- Added :class:`~modifier.applyCached`.
+- Brought back :meth:`~structural.table`.
+- Removed :meth:`~filt.startswith` and :meth:`~filt.endswith`, as ``filt(op().startswith())``
+  does the same thing.
+
 `0.7 </0.7>`_
 -------------
 

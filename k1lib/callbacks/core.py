@@ -9,9 +9,6 @@ class CoreNormal(Callback):
     """Just a normal, typical feed forward pass"""
     def inPass(self):
         self.l.y = self.l.model(self.l.xb)
-@k1lib.patch(Callbacks, docs=CoreNormal)
-def withCoreNormal(self, name:str=None):
-    return self.append(CoreNormal(), name=name)
 @k1lib.patch(Cbs)
 class CoreRNN(Callback):
     """RNN forward pass. Expected model to have the ``initHidden(bs) -> torch.Tensor``
@@ -23,6 +20,3 @@ method."""
         for item in self.l.xb:
             self.l.y, self.hx = self.l.model(item, self.hx)
             self.cbs("rnnPass")
-@k1lib.patch(Callbacks, docs=CoreRNN)
-def withCoreRNN(self, name:str=None):
-    return self.append(CoreRNN(), name=name)

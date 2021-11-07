@@ -9,7 +9,7 @@ class Recorder(Callback):
 Example::
 
     l = k1lib.Learner.sample()
-    l.cbs.withRecorder()
+    l.cbs.add(Cbs.Recorder())
     xbs, ybs, ys = l.Recorder.record(1, 2)
     xbs # list of x batches passed in
     ybs # list of y batches passed in, "the correct label"
@@ -24,7 +24,7 @@ If you have extra metadata in your dataloader, then the recorder will return
     | (transpose() | (toTensor() + toTensor() + toTensor())).all() | stagger(50)
     
     l = k1lib.Learner.sample(); l.data = [dl, []]
-    l.cbs.withRecorder()
+    l.cbs.add(Cbs.Recorder())
     xbs, ybs, metabs, ys = l.Recorder.record(1, 2)
 """
     def __init__(self):
@@ -35,6 +35,10 @@ If you have extra metadata in your dataloader, then the recorder will return
         self.xbs.append(self.l.xb.detach())
         self.ybs.append(self.l.yb.detach())
         self.metabs.append(self.l.metab)
+    def endRun(self):
+        n = min(len(self.xbs), len(self.ybs), len(self.metabs), len(self.ys))
+        self.xbs = self.xbs[:n]; self.ybs = self.ybs[:n]
+        self.metabs = self.metabs[:n]; self.ys = self.ys[:n]
     def endPass(self):
         self.ys.append(self.l.y.detach())
     @property
@@ -47,7 +51,7 @@ If you have extra metadata in your dataloader, then the recorder will return
         self.suspended = False
         try:
             with self.cbs.context(), self.cbs.suspendEval():
-                self.cbs.withDontTrain().withTimeLimit(5)
+                self.cbs.add(Cbs.DontTrain()).add(Cbs.TimeLimit(5))
                 self.l.run(epochs, batches)
         finally: self.suspended = True
         return self.values
@@ -55,5 +59,3 @@ If you have extra metadata in your dataloader, then the recorder will return
         return f"""{self._reprHead}, can...
 - r.record(epoch[, batches]): runs for a while, and records x and y batches, and the output
 {self._reprCan}"""
-@k1lib.patch(Callbacks, docs=Recorder)
-def withRecorder(self): return self.append(Recorder())

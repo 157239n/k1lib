@@ -73,6 +73,3 @@ to put this into an iterator so that it's not the driving thread."""
         return f"""{super()._reprHead}, use...
 - l.plot(): to plot everything
 {super()._reprCan}"""
-@k1lib.patch(Callbacks, docs=Landscape.__init__)
-def withLandscape(self, propertyF:F, name:str=None):
-    return self.append(Landscape(propertyF, name))

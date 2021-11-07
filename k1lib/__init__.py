@@ -3,6 +3,7 @@ __version__ = _get_distribution("k1lib").version
 
 from ._hidden.hiddenFile import hiddenF
 from ._basics import *
+from ._perlin import *
 from ._baseClasses import *
 from . import cli
 from ._higher import *

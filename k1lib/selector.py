@@ -152,16 +152,25 @@ Example::
     # returns True
     "b" in nn.Linear(3, 4).select("*:b")
     # returns False
-    "h" in nn.Linear(3, 4).select("*:b")"""
-    return "*" in self.props or prop in self.props
+    "h" in nn.Linear(3, 4).select("*:b")
+    # returns True, "*" here means the ModuleSelector has any properties at all
+    "*" in nn.Linear(3, 4).select("*:b")"""
+    if "*" in self.props: return True
+    if prop in self.props: return True
+    if prop == "*" and len(self.props) > 0: return True
+    return False
 @k1lib.patch(ModuleSelector)
 def named_children(self, prop:str=None) -> Iterator[Tuple[str, ModuleSelector]]:
-    """Get all named direct childs"""
+    """Get all named direct childs.
+
+:param prop: Filter property. See also: :meth:`__contains__`"""
     if prop is None: return self._children.items()
     return ((k, v) for k, v in self._children.items() if prop in v)
 @k1lib.patch(ModuleSelector)
 def children(self, prop:str=None) -> Iterator[ModuleSelector]:
-    """Get all direct childs"""
+    """Get all direct childs.
+
+:param prop: Filter property. See also: :meth:`__contains__`"""
     return (x for _, x in self.named_children(prop))
 @k1lib.patch(ModuleSelector, "directParams")
 @property
@@ -179,7 +188,7 @@ Example::
     # return tuple ('0', <ModuleSelector of Linear>)
     modules[1]
 
-:param prop: Filter property"""
+:param prop: Filter property. See also: :meth:`__contains__`"""
     if prop != None:
         yield from ((name, m) for name, m in self.named_modules() if prop in m)
         return
@@ -187,7 +196,9 @@ Example::
     for child in self._children.values(): yield from child.named_modules()
 @k1lib.patch(ModuleSelector)
 def modules(self, prop:str=None) -> Iterator[ModuleSelector]:
-    """Get all child recursively. Optional filter prop"""
+    """Get all child recursively.
+
+:param prop: Filter property. See also: :meth:`__contains__`"""
     for name, x in self.named_modules(prop): yield x
 @k1lib.patch(ModuleSelector)
 def clearProps(self) -> "ModuleSelector":

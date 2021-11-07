@@ -2,7 +2,7 @@
 """
 This is for quick modifiers, think of them as changing formats
 """
-__all__ = ["apply", "applyMp", "applyMpBatched", "applyS",
+__all__ = ["apply", "applyMp", "applyMpBatched", "applyCached", "applyS",
            "replace", "remove", "toFloat", "toInt",
            "sort", "sortF", "consume", "randomize", "stagger", "op"]
 from typing import Callable, Iterator, Any, Union, List
@@ -61,7 +61,7 @@ away.
     function, meaning that you can do stuff like::
 
         # returns [['ab', 'ac']]
-        [["ab", "cd", "ac"]] | applyMp(startswith("a") | deref()) | deref()
+        [["ab", "cd", "ac"]] | applyMp(filt(op().startswith("a")) | deref()) | deref()
 
     Also remember that the return result of ``f`` should not be a generator.
     That's why in the example above, there's a ``deref()`` inside f.
@@ -172,6 +172,28 @@ However, this will launch jobs that will execute multiple f(), instead of
 1 job per execution. All examples from :class:`applyMp` should work perfectly
 here."""
     return cli.batched(bs, True) | applyMp(apply(f) | cli.deref(), prefetch, timeout) | cli.joinStreams()
+class applyCached(BaseCli):
+    def __init__(self, f, limit:int=1000):
+        """Like :class:`apply`, but caches the results, so subsequent requests
+are faster. All examples from :class:`apply` should work. Example::
+
+    # returns [0, 1, 4, 9, 16, 0, 1, 4, 9, 16]
+    [*range(5), *range(5)] | applyCached(lambda x: x**2) | cli.deref()
+
+I'm thinking about just adding a ``cacheLimit`` argument to :class:`apply`, and
+have it integrate with everything. However, this feature doesn't seem useful
+enough yet. May be in a future version.
+
+:param limit: max cache size"""
+        super().__init__(fs=[f]); self.f = f
+        self.limit = limit; self.lookup = dict()
+    def __ror__(self, it):
+        lookup = self.lookup; f = self.f; limit = self.limit
+        for e in it:
+            if e not in lookup:
+                lookup[e] = f(e)
+            yield lookup[e]
+            if len(lookup) > limit: del a[next(iter(a.keys()))]
 def replace(s:str, target:str=None, column:int=None):
     """Replaces substring `s` with `target` for each line.
 Example::

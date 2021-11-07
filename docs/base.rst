@@ -104,6 +104,7 @@ Functions
 .. autofunction:: k1lib.dontWrap
 .. autofunction:: k1lib.positionalEncode
 .. autofunction:: k1lib.debounce
+.. autofunction:: k1lib.perlin3d
 .. autofunction:: k1lib.graph
 .. autofunction:: k1lib.digraph
 

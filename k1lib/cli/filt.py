@@ -8,7 +8,6 @@ import k1lib.cli as cli
 import k1lib, os
 from collections import deque
 __all__ = ["filt", "isValue", "isFile", "inSet", "contains", "empty",
-           "startswith", "endswith",
            "isNumeric", "instanceOf", "inRange",
            "head", "columns", "cut", "rows",
            "intersection", "union", "unique", "breakIf", "mask"]
@@ -98,18 +97,6 @@ but "empty" is a short, sweet name easy to remember. Example::
             except StopIteration: pass
     def __invert__(self):
         return empty(not self.reverse)
-def startswith(s:str, column:int=None) -> filt:
-    """Filters out lines that don't start with `s`.
-Example::
-
-    # returns ['ab', 'ac']
-    ["ab", "cd", "ac"] | startswith("a") | deref()
-    # returns ['cd']
-    ["ab", "cd", "ac"] | ~startswith("a") | deref()"""
-    return filt(lambda l: l.startswith(s), column)
-def endswith(s:str, column:int=None) -> filt:
-    """Filters out lines that don't end with `s`. See also: :meth:`startswith`"""
-    return filt(lambda l: l.endswith(s), column)
 def isNumeric(column:int=None) -> filt:
     """Filters out a line if that column is not a number.
 Example:

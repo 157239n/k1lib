@@ -88,5 +88,3 @@ def plotF(params:Union[HookParam, Param, List[Param]], rangeSlice:slice):
 @k1lib.patch(HookParam)
 @k1lib.patch(Param)
 def plot(self): return k1lib.viz.SliceablePlot(partial(plotF, self))
-@k1lib.patch(Callbacks, docs=HookParam)
-def withHookParam(self): return self.append(HookParam())

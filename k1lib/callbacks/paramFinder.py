@@ -72,6 +72,3 @@ if hasn't, returns a :class:`k1lib.viz.SliceablePlot`.
     if len(self.losses) == 0: self.run(*args, **kwargs)
     print(f"Suggested param: {self.suggestedValue}"); plt.figure(dpi=120)
     return k1lib.viz.SliceablePlot(partial(plotF, self), docs="\n\nReminder: slice range here is actually [0, 1], because it's kinda hard to slice the normal way")
-@k1lib.patch(Callbacks, docs=ParamFinder)
-def withParamFinder(self, tolerance:float=10, name:str=None):
-    return self.append(ParamFinder(tolerance), name)

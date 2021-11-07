@@ -12,6 +12,18 @@ __all__ = ["size", "shape", "item", "identity",
            "equals", "reverse", "ignore",
            "toSum", "toAvg", "toMean", "toMax", "toMin",
            "lengths", "headerIdx", "deref"]
+def exploreSize(it):
+    """Returns first element and length of array"""
+    if isinstance(it, str): raise TypeError("Just here to terminate shape()")
+    sentinel = object(); it = iter(it)
+    o = next(it, sentinel); count = 1
+    if o == sentinel: return None, 0
+    try:
+        while True:
+            next(it)
+            count += 1
+    except StopIteration: pass
+    return o, count
 class size(BaseCli):
     def __init__(self, idx=None):
         """Returns number of rows and columns in the input.
@@ -25,10 +37,16 @@ Example::
     [[2, 3], [4, 5, 6], [3]] | size(1)
     # returns (2, 0)
     [[], [2, 3]] | size()
-    # returns (3, None)
+    # returns (3,)
     [2, 3, 5] | size()
     # returns 3
     [2, 3, 5] | size(0)
+    # returns (3, 2, 2)
+    [[[2, 1], [0, 6, 7]], 3, 5] | size()
+    # returns (1,) and not (1, 3)
+    ["abc"] | size()
+    # returns (1, 2, 3)
+    [torch.randn(2, 3)] | size()
 
 You can also pipe in a :class:`torch.Tensor`, and it will just return its shape::
 
@@ -40,23 +58,18 @@ You can also pipe in a :class:`torch.Tensor`, and it will just return its shape:
         super().__init__(); self.idx = idx
     def __ror__(self, it:Iterator[str]):
         super().__ror__(it)
-        if isinstance(it, torch.Tensor):
-            return it.shape
-        it = iter(it)
-        if self.idx == 0: # get rows only
-            rows = 0
-            for line in it: rows += 1
-            return rows
-        if self.idx == 1: # get #columns only
-            return len(next(it))
-        columns = -1; rows = 0
-        for row in it:
-            if columns == -1:
-                try: columns = len(list(row))
-                except: columns = None
-            rows += 1
-        if columns == -1: columns = None
-        return rows, columns
+        if isinstance(it, torch.Tensor): return it.shape
+        if self.idx is None:
+            answer = []
+            try:
+                while True:
+                    it, s = exploreSize(it)
+                    answer.append(s)
+            except TypeError: pass
+            return tuple(answer)
+        else:
+            it |= cli.item(self.idx)
+            return exploreSize(it)[1]
 shape = size
 class item(BaseCli):
     def __init__(self, amt:int=1):

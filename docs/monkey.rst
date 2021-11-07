@@ -31,6 +31,11 @@ Class :class:`torch.Tensor`
 .. automethod:: torch.Tensor.hasNan
 .. automethod:: torch.Tensor.hasInfs
 
+Module :mod:`torch`
+--------------------------------------------------
+
+.. automethod:: torch.loglinspace
+
 Class :class:`graphviz.dot.Digraph`
 -------------------------------------
 
@@ -40,3 +45,17 @@ Class :class:`graphviz.dot.Graph`
 -------------------------------------
 
 .. automethod:: graphviz.dot.Graph.__call__
+
+Class :class:`mpl_toolkits.mplot3d.axes3d.Axes3D`
+--------------------------------------------------
+
+.. automethod:: mpl_toolkits.mplot3d.axes3d.Axes3D.march
+.. automethod:: mpl_toolkits.mplot3d.axes3d.Axes3D.surface
+.. automethod:: mpl_toolkits.mplot3d.axes3d.Axes3D.plane
+.. automethod:: mpl_toolkits.mplot3d.axes3d.Axes3D.point
+.. automethod:: mpl_toolkits.mplot3d.axes3d.Axes3D.line
+
+Module :mod:`matplotlib.pyplot`
+--------------------------------------------------
+
+.. automethod:: matplotlib.pyplot.k3d

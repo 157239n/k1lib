@@ -15,8 +15,6 @@ class BatchLimit(Callback):
         if self.currentBatch >= self.limit:
             raise k1lib.CancelEpochException(f"Batch {self.limit} reached")
     def endBatch(self): self.currentBatch += 1
-@k1lib.patch(Callbacks, docs=BatchLimit)
-def withBatchLimit(self, limit:int, name:str=None): return self.append(BatchLimit(limit), name)
 @k1lib.patch(Cbs)
 class EpochLimit(Callback):
     """Cancels the run after executed certain number of epochs"""
@@ -28,8 +26,6 @@ class EpochLimit(Callback):
         if self.currentEpoch >= self.limit:
             raise k1lib.CancelRunException(f"Epoch {self.limit} reached!")
     def endEpoch(self): self.currentEpoch += 1
-@k1lib.patch(Callbacks, docs=EpochLimit)
-def withEpochLimit(self, limit:int, name:str=None): return self.append(EpochLimit(limit), name)
 @k1lib.patch(Cbs)
 class TimeLimit(Callback):
     """Cancels the run after a certain number of seconds have passed"""
@@ -39,9 +35,6 @@ class TimeLimit(Callback):
     def startBatch(self):
         if time.time() - self.startTime > self.seconds:
             raise k1lib.CancelRunException(f"Takes more than {self.seconds} seconds!")
-@k1lib.patch(Callbacks, docs=TimeLimit)
-def withTimeLimit(self, seconds=30, name:str=None):
-    return self.append(TimeLimit(seconds), name)
 @k1lib.patch(Cbs)
 class CancelOnExplosion(Callback):
     """Cancels the run if any of the parameters are larger than a certain limit"""
@@ -60,9 +53,6 @@ class CancelOnExplosion(Callback):
 - cb.triggered: to see if there was an explosion on the last run
 - cb.progress: to see current progress at explosion time
 {self._reprCan}"""
-@k1lib.patch(Callbacks, docs=CancelOnExplosion)
-def withCancelOnExplosion(self, limit:float=1e6, name:str=None):
-    return self.append(CancelOnExplosion(limit), name)
 @k1lib.patch(Cbs)
 class CancelOnLowLoss(Callback):
     " "
@@ -83,9 +73,6 @@ Original class: :class:`~k1lib.callbacks.limits.CancelOnLowLoss`
                 raise k1lib.CancelRunException(f"Low loss {self.loss} ({self.ve[-3:]} actual) achieved!")
         elif len(self.v) and self.v[-1] < self.loss:
             raise k1lib.CancelRunException(f"Low loss {self.loss} ({self.v[-3:]} actual) achieved!")
-@k1lib.patch(Callbacks, docs=CancelOnLowLoss.__init__)
-def withCancelOnLowLoss(self, loss:float, epochMode:bool=False, name:str=None):
-    return self.append(CancelOnLowLoss(loss, epochMode), name)
 @k1lib.patch(Cbs)
 class CancelOnHighAccuracy(Callback):
     """Cancels the run if accuracy is higher than the amount specified"""
@@ -97,16 +84,11 @@ class CancelOnHighAccuracy(Callback):
         a = self.l.Accuracy.valid[-1]
         if a > self.accuracy:
             raise k1lib.CancelRunException(f"High accuracy {self.accuracy} ({a} actual) achieved!")
-@k1lib.patch(Callbacks, docs=CancelOnHighAccuracy)
-def withCancelOnHighAccuracy(self, accuracy:float, name:str=None):
-    return self.append(CancelOnHighAccuracy(accuracy), name)
 @k1lib.patch(Cbs)
 class DontTrain(Callback):
     """Don't allow the network to train at all"""
     def startBackward(self): return True
     def startStep(self): return True
-@k1lib.patch(Callbacks, docs=DontTrain)
-def withDontTrain(self, name:str=None): return self.append(DontTrain(), name)
 from torch.nn.utils import clip_grad_value_
 @k1lib.patch(Cbs)
 class GradientClipping(Callback):
@@ -114,9 +96,6 @@ class GradientClipping(Callback):
     def __init__(self, value:float): super().__init__(); self.value = value
     def startStep(self):
         clip_grad_value_(self.l.model.parameters(), self.value)
-@k1lib.patch(Callbacks, docs=GradientClipping)
-def withGradientClipping(self, value:float, name:str=None):
-    return self.append(GradientClipping(value), name)
 from torch.nn.utils import clip_grad_norm_
 @k1lib.patch(Cbs)
 class GradientClippingNorm(Callback):
@@ -131,6 +110,3 @@ See also: :class:`~k1lib.callbacks.limits.GradientClipping` callback."""
             for m in self.l.model.parameters():
                 clip_grad_norm_(m, self.max_norm)
         else: clip_grad_norm_(self.l.model.parameters(), self.max_norm)
-@k1lib.patch(Callbacks, docs=GradientClippingNorm)
-def withGradientClippingNorm(self, max_norm:float, each:bool=True, name:str=None):
-    return self.append(GradientClippingNorm(max_norm, each), name)

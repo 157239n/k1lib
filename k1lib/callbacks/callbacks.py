@@ -21,7 +21,7 @@ Bare example of how this module works::
 
     # initialization
     cbs = k1lib.Callbacks()
-    cbs.append(CbA()).append(CbB())
+    cbs.add(CbA()).add(CbB())
     model = lambda xb: xb + 3
     lossF = lambda y, yb: y - yb
     
@@ -115,7 +115,7 @@ If your Callback is mainly dormant, then you can do something like this::
             # do something that sometimes call ``startBatch``
             self.suspended = True
 
-    cbs = k1lib.Callbacks().append(CbD())
+    cbs = k1lib.Callbacks().add(CbD())
     # dormant phase:
     cbs("startBatch") # does not execute CbD.startBatch()
     # active phase
@@ -232,8 +232,8 @@ you set :attr:`k1lib.Learner.cbs` to this :class:`Callbacks`"""
         """List of :class:`Callback`"""
         return [*self.cbsDict.values()] # convenience method for looping over stuff
     def _sort(self) -> "Callbacks":
-        self.cbsDict = OrderedDict(sorted(self.cbsDict.items())); return self
-    def append(self, cb:Callback, name:str=None):
+        self.cbsDict = OrderedDict(sorted(self.cbsDict.items(), key=(lambda o: o[1].order))); return self
+    def add(self, cb:Callback, name:str=None):
         """Adds a callback to the collection."""
         if cb in self.cbs: cb.l = self.l; cb.cbs = self; return self
         cb.l = self.l; cb.cbs = self; name = name or cb.name
@@ -286,30 +286,27 @@ Returns True if any of the checkpoints return anything at all"""
     def __repr__(self):
         return "Callbacks:\n" + '\n'.join([f"- {cbName}" for cbName in self.cbsDict if not cbName.startswith("_")]) + """\n
 Use...
-- cbs.append(cb[, name]): to add a callback with a name
+- cbs.add(cb[, name]): to add a callback with a name
 - cbs("startRun"): to trigger a specific checkpoint, this case "startRun"
 - cbs.Loss: to get a specific callback by name, this case "Loss"
 - cbs[i]: to get specific callback by index
 - cbs.timings: to get callback execution times
 - cbs.checkpointGraph(): to graph checkpoint calling orders
 - cbs.context(): context manager that will detach all Callbacks attached inside the context
-- cbs.suspend("Loss", "Cuda"): context manager to temporarily prevent triggering checkpoints
-- cbs.withs: to get list of with- functions. Corresponding classes are in k1lib.Cbs
-"""
+- cbs.suspend("Loss", "Cuda"): context manager to temporarily prevent triggering checkpoints"""
     def withBasics(self):
         """Adds a bunch of very basic Callbacks that's needed for everything. Also
 includes Callbacks that are not necessary, but don't slow things down"""
-        self.withCoreNormal().withProfiler().withRecorder()
-        self.withProgressBar().withLoss().withAccuracy().withDontTrainValid()
-        return self.withCancelOnExplosion().withParamFinder()
+        self.add(Cbs.CoreNormal()).add(Cbs.Profiler()).add(Cbs.Recorder())
+        self.add(Cbs.ProgressBar()).add(Cbs.Loss()).add(Cbs.Accuracy()).add(Cbs.DontTrainValid())
+        return self.add(Cbs.CancelOnExplosion()).add(Cbs.ParamFinder())
     def withQOL(self):
         """Adds quality of life Callbacks."""
         return self
-        #return self.withAutosave()
     def withAdvanced(self):
         """Adds advanced Callbacks that do fancy stuff, but may slow things
 down if not configured specifically."""
-        return self.withHookModule().withHookParam()
+        return self.add(Cbs.HookModule().withMeanRecorder().withStdRecorder()).add(Cbs.HookParam())
 @k1lib.patch(Callbacks)
 def _resolveDependencies(self):
     for cb in self.cbs:
@@ -342,7 +339,7 @@ def suspend(self, *cbNames:List[str]) -> ContextManager:
     """Creates suspension context for specified Callbacks. Matches callbacks with
 their name. Works like this::
 
-    cbs = k1lib.Callbacks().append(CbA()).append(CbB()).append(CbC())
+    cbs = k1lib.Callbacks().add(CbA()).add(CbB()).add(CbC())
     with cbs.suspend("CbA", "CbC"):
         pass # inside here, only CbB will be active, and its checkpoints executed
     # CbA, CbB and CbC are all active
@@ -354,11 +351,10 @@ def suspendClasses(self, *classNames:List[str]) -> ContextManager:
     """Like :meth:`suspend`, but matches callbacks' class names to the given list,
 instead of matching names. Meaning::
 
-    cbs.k1lib.Callbacks().withLoss().withLoss()
+    cbs.k1lib.Callbacks().add(Cbs.Loss()).add(Cbs.Loss())
     # cbs now has 2 callbacks "Loss" and "Loss0"
     with cbs.suspendClasses("Loss"):
-        pass # now both of them are suspended
-"""
+        pass # now both of them are suspended"""
     return SuspendContext(self, [], classNames)
 @k1lib.patch(Callbacks)
 def suspendEval(self, more:List[str]=[], less:List[str]=[]) -> ContextManager:
@@ -389,12 +385,12 @@ def context(self) -> ContextManager:
 
 Works like this::
 
-    cbs = k1lib.Callbacks().append(CbA())
+    cbs = k1lib.Callbacks().add(CbA())
     # CbA is available
     with cbs.context():
-        cbs.append(CbB())
+        cbs.add(CbB())
         # CbA and CbB available
-        cbs.append(CbC())
+        cbs.add(CbC())
         # all 3 are available
     # only CbA is available
 """
@@ -441,24 +437,3 @@ first. Requires graphviz package though. Example::
         for cp in s:
             if hasattr(_cb, cp): g.node(cp, color="red")
     return g
-@k1lib.patch(Callbacks, "withs")
-@property
-def withs(self):
-    """Gets all with- functions nicely formatted, with `order`
-and `short docs` fields"""
-    ws = [w for w in dir(Callbacks()) if w.startswith("with") and w != "withs"]
-    ws.sort(); lname = 25; lorder = 6; ldocs = int(os.getenv('COLUMNS', 73)) - lname - lorder
-    print("function name".ljust(lname) + "order".ljust(lorder) + "short docs")
-    for w in ws:
-        docs = ""; print(w.ljust(lname), end="")
-        if w[4:] in Cbs:
-            try:
-                from inspect import signature
-                cl = Cbs[w[4:]]; docs = docs or cl.__doc__
-                params = [None] * (len(signature(cl.__init__).parameters) - 1)
-                orderI = cl(*params).order; order = f"{orderI}".ljust(lorder)
-                print((k1lib.fmt.txt.grey if orderI == 10 else k1lib.fmt.txt.identity)(order), end="")
-            except Exception: print(" "*lorder, end="")
-        else: print(" "*lorder, end="")
-        print(k1lib.limitChars(docs or getattr(self, w).__doc__, ldocs))
-    print(f"\nHere for order value suggestions: {k1lib._docsUrl}/callbacks")

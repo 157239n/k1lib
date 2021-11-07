@@ -41,7 +41,7 @@ Deposits these variables into :class:`~k1lib.Learner`:
         if self.integrations:
             if "ConfusionMatrix" not in self.cbs:
                 self.conMatCb = Cbs.ConfusionMatrix()
-                self.cbs.append(self.conMatCb); self.ownsConMat = True
+                self.cbs.add(self.conMatCb); self.ownsConMat = True
             else: self.conMatCb = self.cbs.ConfusionMatrix
     def endLoss(self):
         preds = self.predF(self.l.y); self.l.preds = preds.detach()
@@ -52,6 +52,3 @@ Deposits these variables into :class:`~k1lib.Learner`:
         if self.conMatCb != None:
             if self.ownsConMat: self.conMatCb.detach()
             self.conMatCb = None
-@k1lib.patch(Callbacks, docs=AccF.__init__)
-def withAccF(self, accF:AccFSig=None, name:str=None):
-    return self.append(AccF(accF), name=name)

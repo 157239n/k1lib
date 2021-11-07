@@ -42,7 +42,7 @@ class Loss(Callback):
     @property
     def Landscape(self):
         """Gets loss-landscape-plotting Callback"""
-        self.cbs.append(self._landscape); return self._landscape
+        self.cbs.add(self._landscape); return self._landscape
     def detach(self): self._landscape.detach(); return super().detach()
     def __repr__(self):
         return f"""{super()._reprHead}, use...
@@ -52,8 +52,6 @@ class Loss(Callback):
 - cb.epoch: for average losses of each epochs
 - cb.Landscape: for loss-landscape-plotting Callback
 {super()._reprCan}"""
-@k1lib.patch(Callbacks, docs=Loss)
-def withLoss(self): return self.append(Loss())
 accFMsg = "You have to specify how to compute the accuracy with the AccF callback first"
 @k1lib.patch(Cbs)
 class Accuracy(Callback):
@@ -91,7 +89,7 @@ class Accuracy(Callback):
         """Gets accuracy-landscape-plotting Callback"""
         if self.hasAccF:
             self._landscape.parent = self
-            self.cbs.append(self._landscape); return self._landscape
+            self.cbs.add(self._landscape); return self._landscape
         else: raise RuntimeError(f"{accFMsg}, before you can view the landscape")
     def __repr__(self):
         return f"""{super()._reprHead}{f" (.accuracyF not defined yet)" if not self.hasAccF else ""}, use...
@@ -100,6 +98,3 @@ class Accuracy(Callback):
 - a.plot(): to plot the 2 above
 - a.Landscape: for loss-landscape-plotting Callback
 {super()._reprCan}"""
-@k1lib.patch(Callbacks, docs=Accuracy.__init__)
-def withAccuracy(self):
-    return self.append(Accuracy())

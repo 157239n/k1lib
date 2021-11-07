@@ -12,8 +12,6 @@ class Autosave(Callback):
         os.system("mv autosave-1.pth autosave-0.pth")
         os.system("mv autosave-2.pth autosave-1.pth")
         self.l.save("autosave-2.pth")
-@k1lib.patch(Callbacks, docs=Autosave)
-def withAutosave(self): return self.append(Autosave())
 @k1lib.patch(Cbs)
 class DontTrainValid(Callback):
     """If is not training, then don't run m.backward() and opt.step().
@@ -23,22 +21,16 @@ cause there may be some weird cases where you want to also train valid."""
         if not self.l.model.training: return True
     def startBackward(self): return self._common()
     def startStep(self): return self._common()
-@k1lib.patch(Callbacks, docs=DontTrainValid)
-def withDontTrainValid(self): return self.append(DontTrainValid())
 @k1lib.patch(Cbs)
 class InspectLoss(Callback):
     """Expected `f` to take in 1 float."""
     def __init__(self, f): super().__init__(); self.f = f; self.order = 15
     def endLoss(self): self.f(self.loss.detach())
-@k1lib.patch(Callbacks, docs=InspectLoss)
-def withInspectLoss(self, f): return self.append(InspectLoss(f))
 @k1lib.patch(Cbs)
 class ModifyLoss(Callback):
     """Expected `f` to take in 1 float and return 1 float."""
     def __init__(self, f): super().__init__(); self.f = f; self.order = 13
     def endLoss(self): self.l.loss = self.f(self.loss)
-@k1lib.patch(Callbacks, docs=ModifyLoss)
-def withModifyLoss(self, f): return self.append(ModifyLoss(f))
 @k1lib.patch(Cbs)
 class Cuda(Callback):
     """Moves batch and model to the default GPU"""
@@ -46,8 +38,6 @@ class Cuda(Callback):
     def startBatch(self):
         self.l.xb = self.l.xb.cuda()
         self.l.yb = self.l.yb.cuda()
-@k1lib.patch(Callbacks, docs=Cuda)
-def withCuda(self, name:str=None): return self.append(Cuda(), name)
 @k1lib.patch(Cbs)
 class Cpu(Callback):
     """Moves batch and model to CPU"""
@@ -55,8 +45,6 @@ class Cpu(Callback):
     def startBatch(self):
         self.l.xb = self.l.xb.cpu()
         self.l.yb = self.l.yb.cpu()
-@k1lib.patch(Callbacks, docs=Cpu)
-def withCpu(self, name:str=None): return self.append(Cpu(), name)
 @k1lib.patch(Cbs)
 class DType(Callback):
     """Moves batch and model to a specified data type"""
@@ -65,41 +53,29 @@ class DType(Callback):
     def startBatch(self):
         self.l.xb = self.l.xb.to(self.dtype)
         self.l.yb = self.l.yb.to(self.dtype)
-@k1lib.patch(Callbacks, docs=DType)
-def withDType(self, dtype:torch.dtype): return self.append(DType(dtype))
 @k1lib.patch(Cbs)
 class InspectBatch(Callback):
     """Expected `f` to take in 2 tensors."""
     def __init__(self, f:callable): super().__init__(); self.f = f; self.order = 15
     def startBatch(self): self.f(self.l.xb, self.l.yb)
-@k1lib.patch(Callbacks, docs=InspectBatch)
-def withInspectBatch(self, f): return self.append(InspectBatch(f))
 @k1lib.patch(Cbs)
 class ModifyBatch(Callback):
     """Modifies xb and yb on the fly. Expected `f`
     to take in 2 tensors and return 2 tensors."""
     def __init__(self, f): super().__init__(); self.f = f; self.order = 13
     def startBatch(self): self.l.xb, self.l.yb = self.f(self.l.xb, self.l.yb)
-@k1lib.patch(Callbacks, docs=ModifyBatch)
-def withModifyBatch(self, f): return self.append(ModifyBatch(f))
 @k1lib.patch(Cbs)
 class InspectOutput(Callback):
     """Expected `f` to take in 1 tensor."""
     def __init__(self, f): super().__init__(); self.f = f; self.order = 15
     def endPass(self): self.f(self.y)
-@k1lib.patch(Callbacks, docs=InspectOutput)
-def withInspectOutput(self, f): return self.append(InspectOutput(f))
 @k1lib.patch(Cbs)
 class ModifyOutput(Callback):
     """Modifies output on the fly. Expected `f` to take
 in 1 tensor and return 1 tensor"""
     def __init__(self, f): super().__init__(); self.f = f; self.order = 13
     def endPass(self): self.l.y = self.f(self.y)
-@k1lib.patch(Callbacks, docs=ModifyOutput)
-def withModifyOutput(self, f): return self.append(ModifyOutput(f))
 @k1lib.patch(Cbs)
 class Beep(Callback):
     """Plays a beep sound when the run is over"""
     def endRun(self): k1lib.beep()
-@k1lib.patch(Callbacks, docs=Beep)
-def withBeep(self, name:str=None): return self.append(Beep(), name)

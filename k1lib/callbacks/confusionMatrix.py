@@ -41,6 +41,8 @@ or when it's added automatically when using :class:`~k1lib.callbacks.lossFunctio
         while m.hasNan() or m.hasInfs():
             n -= 1; m = m[:n, :n]
         if n != self.n: warnings.warn(f"Originally, the confusion matrix has {self.n} categories, now it has {n} only, after filtering, because there are some nans and infinite values.")
+        if self.categories is not None:
+            n = len(self.categories); m = m[:n, :n]
         return m/m.max(dim=1).values[:,None]
     def plot(self):
         """Plots everything"""
@@ -49,6 +51,3 @@ or when it's added automatically when using :class:`~k1lib.callbacks.lossFunctio
         return f"""{super()._reprHead}, use...
 - l.plot(): to plot everything
 {super()._reprCan}"""
-@k1lib.patch(Callbacks, docs=ConfusionMatrix.__init__)
-def withConfusionMatrix(self, categories:List[str]=None, name:str=None):
-    return self.append(ConfusionMatrix(categories), name)

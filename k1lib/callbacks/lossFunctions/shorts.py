@@ -17,11 +17,6 @@ correct y ``yb`` and return a single loss float (still attached to graph)."""
     def inLoss(self):
         self.l.lossG = self.lossF(self.l.y, self.l.yb)
         self.l.loss = self.l.lossG.detach().item()
-@k1lib.patch(Callbacks, docs=LossF.__init__)
-def withLossF(self, lossF:LossFSig, name:str=None):
-    return self.append(LossF(lossF), name=name)
-@k1lib.patch(Cbs)
-@k1lib.patch(Callback.lossCls)
 class LossNLLCross(Callback):
     " "
     def __init__(self, nll:bool, integrations:bool):
@@ -36,7 +31,7 @@ class LossNLLCross(Callback):
         if self.integrations:
             if "AccF" not in self.cbs:
                 self.accuracyCb = Cbs.AccF()
-                self.cbs.append(self.accuracyCb)
+                self.cbs.add(self.accuracyCb)
                 self.ownsAccCb = True
             else: self.accuracyCb = self.cbs.AccF
     def inLoss(self):
@@ -47,9 +42,13 @@ class LossNLLCross(Callback):
         if self.accuracyCb != None:
             if self.ownsAccCb: self.accuracyCb.detach()
             self.accuracyCb = None
-@k1lib.patch(Callbacks, docs=LossNLLCross.__init__)
-def withLossNLL(self, integrations:bool=True, name:str=None):
-    return self.append(LossNLLCross(True, integrations), name=name or "LossNLL")
-@k1lib.patch(Callbacks, docs=LossNLLCross.__init__)
-def withLossCrossEntropy(self, integrations:bool=True, name:str=None):
-    return self.append(LossNLLCross(False, integrations), name=name or "LossCrossEntropy")
+@k1lib.patch(Cbs)
+@k1lib.patch(Callback.lossCls)
+class LossCrossEntropy(LossNLLCross):
+    def __init__(self, integrations:bool=True):
+        super().__init__(False, integrations)
+@k1lib.patch(Cbs)
+@k1lib.patch(Callback.lossCls)
+class LossNLL(LossNLLCross):
+    def __init__(self, integrations:bool=True):
+        super().__init__(True, integrations)

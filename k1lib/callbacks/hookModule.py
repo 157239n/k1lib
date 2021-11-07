@@ -231,6 +231,3 @@ def plot(self, *fields:List[str]):
             if type(fieldData) == list and k1lib.isNumeric(fieldData[0]):
                 fields.append(field)
     return k1lib.viz.SliceablePlot(partial(plotF, modules, fields))
-@k1lib.patch(Callbacks, docs=HookModule)
-def withHookModule(self, persistent=True):
-    return self.append(HookModule(persistent).withMeanRecorder().withStdRecorder())

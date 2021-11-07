@@ -17,5 +17,3 @@ class ProgressBar(Callback):
         c = f"{self.l.batch}/{self.l.batches}".rjust(k1lib.numDigits(self.l.batches) * 2 + 1)
         d = f"{round(self.elapsedTime, 2)}".rjust(6)
         print(f"\rProgress: {a}%, epoch: {b}, batch: {c}, elapsed: {d}s, loss: {self.l.loss}             ", end="")
-@k1lib.patch(Callbacks, docs=ProgressBar)
-def withProgressBar(self): return self.append(ProgressBar())

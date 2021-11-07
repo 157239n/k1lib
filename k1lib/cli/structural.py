@@ -10,7 +10,7 @@ import k1lib.cli as cli
 import itertools, numpy as np, torch, k1lib
 __all__ = ["transpose", "joinList", "splitList",
            "joinStreams", "yieldSentinel", "joinStreamsRandom", "activeSamples",
-           "batched", "collate",
+           "table", "batched", "collate",
            "insertRow", "insertColumn", "insertIdColumn",
            "toDict", "toDictF", "expandE", "unsqueeze",
            "count", "permute", "accumulate", "AA_", "peek", "peekF",
@@ -103,7 +103,7 @@ continue. Could be useful in active learning. Example::
                 if o != yieldSentinel: yield o
         except StopIteration: pass
 class activeSamples(BaseCli):
-    def __init__(self, limit:int=float("inf")):
+    def __init__(self, limit:int=100, p:float=0.95):
         """Yields active learning samples.
 Example::
 
@@ -122,17 +122,45 @@ as a mix of active learning samples and standard samples. Whenever there's a dat
 point that you want to focus on, you can add it to ``o`` and it will eventially yield
 it.
 
+.. warning::
+
+    It might not be a good idea to set param ``limit`` to higher numbers than
+    100. This is because, the network might still not understand a wrong sample
+    after being shown multiple times, and will keep adding that wrong sample
+    back in, distracting it from other samples, and reduce network's accuracy
+    after removing active learning from it.
+    
+    If ``limit`` is low enough (from my testing, 30-100 should be fine), then
+    old wrong samples will be kicked out, allowing for a fresh stream of wrong
+    samples coming in, and preventing the problem above. If you found that
+    removing active learning makes the accuracy drops dramatically, then try
+    decreasing the limit.
+
 :param limit: max number of active samples. Discards samples if number of samples
-    is over this."""
-        super().__init__(); self.samples = deque(); self.limit = limit
-    def append(self, item): self.samples.append(item)
+    is over this.
+:param p: probability of actually adding the samples in"""
+        super().__init__(); self.samples = deque()
+        self.limit = limit; self.p = p
+    def append(self, item):
+        """Adds 1 sample."""
+        if random.random() < self.p:
+            if len(self.samples) > self.limit: self.samples.popleft()
+            self.samples.append(item)
+    def extend(self, items):
+        """Adds multiple samples."""
+        for item in items: self.append(item)
     def __iter__(self):
         samples = self.samples; limit = self.limit
         while True:
-            if len(samples) > limit:
-                [samples.popleft() for i in range(len(samples) - limit)]
             if len(samples) == 0: yield yieldSentinel
             else: yield samples.popleft()
+def table(delim:str=None):
+    """Basically ``op().split(delim).all()``. This exists because this is used
+quite a lot in bioinformatics. Example::
+
+    # returns [['a', 'bd'], ['1', '2', '3']]
+    ["a|bd", "1|2|3"] | table("|") | deref()"""
+    return cli.op().split(patchDefaultDelim(delim)).all()
 class batched(BaseCli):
     def __init__(self, bs=32, includeLast=False):
         """Batches the input stream.
