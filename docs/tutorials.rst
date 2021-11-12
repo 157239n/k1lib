@@ -2,15 +2,24 @@
 Tutorials
 =========
 
-Not a lot at the moment:
+Deep learning related:
 
 - `basics <tutorials/basics.html>`_: Go over the basics of the main DL framework
-- `cli <tutorials/cli.html>`_: Go over the :mod:`k1lib.cli` module
-- `covid <tutorials/covid.html>`_: Analyze covid's genome using the :mod:`k1lib.cli` module
-- `osic <tutorials/osic.html>`_: Analyze dicom images
-- `mp <tutorials/mp.html>`_: Supplementary for osic
 - `schedule <tutorials/schedule.html>`_: Scheduling network parameters
 - `selector <tutorials/selector.html>`_: Selecting subnetwork
+
+.. currentmodule:: k1lib.cli
+
+Cli related:
+
+- `cli <tutorials/cli.html>`_: Go over the :mod:`k1lib.cli` module
+- `covid <tutorials/covid.html>`_: Analyze covid's genome
+- `osic <tutorials/osic.html>`_: Analyze dicom images
+- `mp <tutorials/mp.html>`_: Supplementary for osic, demonstrating multiprocessing
+- `trace <tutorials/trace.html>`_: Go over :meth:`~trace.trace` visualizations
+
+Others:
+
 - `mo <tutorials/mo.html>`_: Molecular dynamics
 
 Also note that all tutorials are versioned, and they will change if features in

@@ -26,3 +26,4 @@ def export(nb:str) -> None:
     os.system(f"./setup.py install")
 
 if __name__ == "__main__": fire.Fire(export)
+

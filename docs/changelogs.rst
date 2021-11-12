@@ -2,6 +2,34 @@
 Changelogs
 ==========
 
+`0.9 </0.9>`_
+-------------
+
+.. currentmodule:: k1lib.callbacks
+
+DL:
+
+- Added :meth:`~k1lib.scaleSvg`.
+- Added ``prefix`` option to :class:`~k1lib.AutoIncrement`.
+
+.. currentmodule:: k1lib.cli
+
+Cli:
+
+- Added ``kwargs`` argument to :meth:`modifier.applyMpBatched`.
+- Added :class:`~k1lib.RunOnce`, :class:`~k1lib.MaxDepth`.
+- Added alias :class:`~utils.iden`.
+- Added :meth:`~trace.trace` mechanism, with accompanying tutorial.
+- Remove :class:`~utils.shape`'s tensor special case
+- Added :class:`~modifier.applySerial`.
+- Added ``inf`` and ``context`` to :attr:`cliSettings`.
+- Fixed bug where ``"abc" | deref()`` will actually split the string into characters.
+- Terminates pool in :class:`~modifier.applyMp` if is keyboard interrupted, and in
+  general made it much more robust.
+- Stops :class:`~utils.deref` early if encountered :attr:`~structural.yieldSentinel`
+- Optimizes :class:`~modifier.op` even further, thus removing :meth:`~filt.isValue`,
+  as ``filt(op() == value)`` does the same thing.
+
 `0.8 </0.8>`_
 -------------
 

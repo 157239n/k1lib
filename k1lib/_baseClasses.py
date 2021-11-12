@@ -3,9 +3,10 @@
 .. module:: k1lib
 """
 from typing import Callable, Iterator, Tuple, Union, Dict, Any, List
-from k1lib import isNumeric
+from k1lib import isNumeric; import k1lib
 import random, torch, math, numpy as np
-__all__ = ["Object", "Range", "Domain", "AutoIncrement", "Wrapper", "Every", "Absorber"]
+__all__ = ["Object", "Range", "Domain", "AutoIncrement", "Wrapper", "Every",
+           "RunOnce", "MaxDepth", "Absorber"]
 class Object:
     """Convenience class that acts like :class:`~collections.defaultdict`. You
 can use it like a normal object::
@@ -370,7 +371,7 @@ is :math:`(-\inf, a)`, then starts at the specified integer"""
 - -d: excludes the domain from R
 - d1 - d2: same as d1 + (-d2)"""
 class AutoIncrement:
-    def __init__(self, initialValue:int=-1, n:int=float("inf")):
+    def __init__(self, initialValue:int=-1, n:int=float("inf"), prefix:str=None):
         """Creates a new AutoIncrement object. Every time the object is called
 it gets incremented by 1 automatically. Example::
 
@@ -382,14 +383,15 @@ it gets incremented by 1 automatically. Example::
     a.value # returns 2
     a() # returns 3
 
-    a = AutoIncrement(n=3)
-    a() # returns 0
-    a() # returns 1
-    a() # returns 2
-    a() # returns 0
+    a = AutoIncrement(n=3, prefix="cluster_")
+    a() # returns "cluster_0"
+    a() # returns "cluster_1"
+    a() # returns "cluster_2"
+    a() # returns "cluster_0"
 
-:param n: if specified, then will wrap around to 0 when hit this number."""
-        self.value = initialValue; self.n = n
+:param n: if specified, then will wrap around to 0 when hit this number
+:param prefix: if specified, will yield strings with specified prefix"""
+        self.value = initialValue; self.n = n; self.prefix = prefix
     @staticmethod
     def random() -> "AutoIncrement":
         """Creates a new AutoIncrement object that has a random integer initial value"""
@@ -397,14 +399,15 @@ it gets incremented by 1 automatically. Example::
     @property
     def value(self):
         """Get the value as-is, without auto incrementing it"""
-        return self._value
+        if self.prefix is None: return self._value
+        return f"{self.prefix}{self._value}"
     @value.setter
     def value(self, value): self._value = value
     def __call__(self):
         """Increments internal counter, and return it."""
         self._value += 1
         if self._value >= self.n: self._value = 0
-        return self._value
+        return self.value
 class Wrapper:
     def __init__(self, value):
         """Creates a wrapper for some value and get it by calling it.
@@ -423,7 +426,7 @@ class Every:
         """Returns True every interval.
 Example::
 
-    e = Every(4)
+    e = k1lib.Every(4)
     e() # returns True
     e() # returns False
     e() # returns False
@@ -437,6 +440,63 @@ Example::
     def value(self) -> bool:
         if self.i % self.n: return False
         else: return True
+class RunOnce:
+    def __init__(self):
+        """Returns False first time only.
+Example::
+
+    r = k1lib.RunOnce()
+    r.done() # returns False
+    r.done() # returns True
+    r.done() # returns True
+    r.revert()
+    r.done() # returns False
+    r.done() # returns True
+    r.done() # returns True
+
+May be useful in situations like::
+
+    class A:
+        def __init__(self):
+            self.ro = k1lib.RunOnce()
+        def f(self, x):
+            if self.ro.done(): return 3 + x
+            return 5 + x
+    a = A()
+    a.f(4) # returns 9
+    a.f(4) # returns 7"""
+        self.value = False
+    def done(self):
+        """Whether this has been called once before."""
+        v = self.value
+        self.value = True
+        return v
+    def __call__(self):
+        """Alias of :meth:`done`."""
+        return self.done()
+    def revert(self):
+        self.value = False
+class MaxDepth:
+    def __init__(self, maxDepth:int, depth:int=0):
+        """Convenience utility to check for graph max depth.
+Example::
+
+    def f(d):
+        print(d.depth)
+        if d: f(d.enter())
+    # prints "0\\n1\\n2\\n3"
+    f(k1lib.MaxDepth(3))
+
+Of course, this might look unpleasant to the end user, so this is more
+likely for internal tools."""
+        self.maxDepth = maxDepth; self.depth = depth
+    def enter(self) -> "MaxDepth":
+        return MaxDepth(self.maxDepth, self.depth + 1)
+    def __bool__(self):
+        return self.depth < self.maxDepth
+    def __call__(self):
+        """Alias of :meth:`__bool__`."""
+        return bool(self)
 sen = "_ab_sentinel"
 class Absorber:
     """Creates an object that absorbes every operation done on it. Could be

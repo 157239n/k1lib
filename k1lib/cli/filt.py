@@ -3,11 +3,11 @@
 This is for functions that cuts out specific parts of the table
 """
 from typing import Callable, Union, List, overload, Iterator, Any, Set, Tuple
-from k1lib.cli.init import BaseCli, settings, Table, T
+from k1lib.cli.init import BaseCli, Table, T, fastF
 import k1lib.cli as cli
 import k1lib, os
 from collections import deque
-__all__ = ["filt", "isValue", "isFile", "inSet", "contains", "empty",
+__all__ = ["filt", "isFile", "inSet", "contains", "empty",
            "isNumeric", "instanceOf", "inRange",
            "head", "columns", "cut", "rows",
            "intersection", "union", "unique", "breakIf", "mask"]
@@ -23,6 +23,13 @@ Examples::
     # returns [[2, 'a'], [6, 'c']]
     [[2, "a"], [3, "b"], [5, "a"], [6, "c"]] | filt(lambda x: x%2 == 0, 0) | deref()
 
+You can also pass in :class:`~k1lib.cli.modifier.op`, for extra intuitiveness::
+
+    # returns [2, 6]
+    [2, 3, 5, 6] | filt(op() % 2 == 0) | deref()
+    # returns ['abc', 'a12']
+    ["abc", "def", "a12"] | filt(op().startswith("a")) | deref()
+
 :param column:
     - if integer, then predicate(row[column])
     - if None, then predicate(row)"""
@@ -30,7 +37,7 @@ Examples::
         self.predicate = predicate; self.column = column
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
         super().__ror__(it)
-        p = self.predicate; c = self.column
+        p = fastF(self.predicate); c = self.column
         if c is None: yield from (l for l in it if p(l))
         else:
             for es in it:
@@ -39,17 +46,6 @@ Examples::
     def __invert__(self):
         """Negate the condition"""
         return filt(lambda s: not self.predicate(s), self.column)
-def isValue(value, column:int=None) -> filt:
-    """Filters out lines that is different from the given value.
-Example::
-
-    # returns [2, 2]
-    [1, 2, 3, 2, 1] | isValue(2) | deref()
-    # returns [1, 3, 1]
-    [1, 2, 3, 2, 1] | ~isValue(2) | deref()
-    # returns [[1, 2]]
-    [[1, 2], [2, 1], [3, 4]] | isValue(2, 1) | deref()"""
-    return filt(lambda l: l == value, column)
 def isFile() -> filt:
     """Filters out non-files.
 Example::

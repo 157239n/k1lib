@@ -2,11 +2,11 @@
 """
 This is for all short utilities that has the boilerplate feeling
 """
-from k1lib.cli.init import patchDefaultDelim, BaseCli, settings, Table, T
+from k1lib.cli.init import patchDefaultDelim, BaseCli, cliSettings, Table, T
 import k1lib.cli as cli, numbers, torch, numpy as np
 from typing import overload, Iterator, Any, List, Set, Union
 import k1lib
-__all__ = ["size", "shape", "item", "identity",
+__all__ = ["size", "shape", "item", "identity", "iden",
            "toStr", "join", "toNumpy", "toTensor",
            "toList", "wrapList", "toSet", "toIter", "toRange",
            "equals", "reverse", "ignore",
@@ -48,21 +48,17 @@ Example::
     # returns (1, 2, 3)
     [torch.randn(2, 3)] | size()
 
-You can also pipe in a :class:`torch.Tensor`, and it will just return its shape::
-
-    # returns torch.Size([3, 4])
-    torch.randn(3, 4) | size()
-
 :param idx: if idx is None return (rows, columns). If 0 or 1, then rows or
     columns"""
         super().__init__(); self.idx = idx
     def __ror__(self, it:Iterator[str]):
         super().__ror__(it)
-        if isinstance(it, torch.Tensor): return it.shape
         if self.idx is None:
             answer = []
             try:
                 while True:
+                    if isinstance(it, torch.Tensor):
+                        tuple(answer + list(it.shape))
                     it, s = exploreSize(it)
                     answer.append(s)
             except TypeError: pass
@@ -95,6 +91,7 @@ Example::
     range(5) | identity()"""
     def __ror__(self, it:Iterator[Any]):
         return it
+iden = identity
 class toStr(BaseCli):
     def __init__(self, column:int=None):
         """Converts every line to a string.
@@ -221,7 +218,7 @@ Example::
         s = 0; i = -1
         for i, v in enumerate(it): s += v
         i += 1
-        if not settings["strict"] and i == 0: return float("nan")
+        if not cliSettings["strict"] and i == 0: return float("nan")
         return s / i
 toMean = toAvg
 class toMax(BaseCli):
@@ -243,10 +240,14 @@ Example::
         if isinstance(it, torch.Tensor): return it.min()
         return min(it)
 class lengths(BaseCli):
-    """Returns the lengths of each row.
+    """Returns the lengths of each element.
 Example::
 
-    [range(5), range(10)] | lengths() == [5, 10]"""
+    [range(5), range(10)] | lengths() == [5, 10]
+
+This is a simpler (and faster!) version of :class:`shape`. It assumes each element
+can be called with ``len(x)``, while :class:`shape` iterates through every elements
+to get the length, and thus is much slower."""
     def __ror__(self, it:Iterator[List[Any]]) -> Iterator[int]:
         for e in it: yield len(e)
 def headerIdx():
@@ -258,8 +259,8 @@ Example::
     # returns [[0, 'a'], [1, 'b'], [2, 'c']]
     ["abc"] | headerIdx() | deref()"""
     return item() | cli.wrapList() | cli.transpose() | cli.insertIdColumn(True)
-Number = numbers.Number; Tensor = torch.Tensor; NpNumber = np.number
-Module = torch.nn.Module
+Tensor = torch.Tensor
+atomicTypes = (numbers.Number, np.number, str, torch.nn.Module)
 class inv_dereference(BaseCli):
     def __init__(self, ignoreTensors=False):
         """Kinda the inverse to :class:`dereference`"""
@@ -267,7 +268,7 @@ class inv_dereference(BaseCli):
     def __ror__(self, it:Iterator[Any]) -> List[Any]:
         super().__ror__(it); ignoreTensors = self.ignoreTensors; 
         for e in it:
-            if e is None or isinstance(e, (Number, NpNumber, str)): yield e
+            if e is None or isinstance(e, atomicTypes): yield e
             elif isinstance(e, Tensor):
                 if not ignoreTensors and len(e.shape) == 0: yield e.item()
                 else: yield e
@@ -283,6 +284,8 @@ class deref(BaseCli):
     iter(range(5))
     # returns [0, 1, 2, 3, 4]
     iter(range(5)) | deref()
+    # returns [2, 3], yieldSentinel stops things early
+    [2, 3, yieldSentinel, 6] | deref()
 
 You can also specify a ``maxDepth``::
 
@@ -306,25 +309,22 @@ You can also specify a ``maxDepth``::
         super().__init__(); self.ignoreTensors = ignoreTensors
         self.maxDepth = maxDepth; self.depth = 0
     def __ror__(self, it:Iterator[T]) -> List[T]:
-        super().__ror__(it); answer = []; ignoreTensors = self.ignoreTensors
-        if ignoreTensors and isinstance(it, Tensor): return it
+        super().__ror__(it); ignoreTensors = self.ignoreTensors
+        if self.depth >= self.maxDepth: return it
+        elif isinstance(it, atomicTypes): return it
+        elif isinstance(it, Tensor):
+            if ignoreTensors: return it
+            if len(it.shape) == 0: return it.item()
         try: iter(it)
         except: return it
-        if self.depth >= self.maxDepth: return it
-        self.depth += 1
+        self.depth += 1; answer = []
         for e in it:
-            if e is None or isinstance(e, (Number, NpNumber, str, Module)):
-                answer.append(e)
-            elif isinstance(e, Tensor):
-                if not ignoreTensors and len(e.shape) == 0:
-                    answer.append(e.item())
-                else: answer.append(e | self)
-            else:
-                try: answer.append(e | self)
-                except: answer.append(e)
+            if e == cli.yieldSentinel: return answer
+            answer.append(e | self)
         self.depth -= 1
         return answer
     def __invert__(self) -> BaseCli:
         """Returns a :class:`~k1lib.cli.init.BaseCli` that makes
-everything an iterator."""
+everything an iterator. Not entirely sure when this comes in handy, but it's
+there."""
         return inv_dereference(self.ignoreTensors)

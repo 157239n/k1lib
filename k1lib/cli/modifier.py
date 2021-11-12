@@ -2,15 +2,16 @@
 """
 This is for quick modifiers, think of them as changing formats
 """
-__all__ = ["apply", "applyMp", "applyMpBatched", "applyCached", "applyS",
+__all__ = ["apply", "applyMp", "applyMpBatched", "applyS",
+           "applyCached", "applySerial",
            "replace", "remove", "toFloat", "toInt",
            "sort", "sortF", "consume", "randomize", "stagger", "op"]
 from typing import Callable, Iterator, Any, Union, List
-from k1lib.cli.init import patchDefaultDelim, BaseCli, settings, T
+from k1lib.cli.init import patchDefaultDelim, BaseCli, T, fastF
 import k1lib.cli as cli, numpy as np, torch
 import torch.multiprocessing as mp; from collections import deque
 from functools import partial, update_wrapper
-import dill, pickle, k1lib, warnings, atexit
+import dill, pickle, k1lib, warnings, atexit, signal
 def executeFunc(common, line):
     import dill
     f, kwargs = dill.loads(common)
@@ -84,21 +85,28 @@ it doesn't seem to work with notebooks.
 :param timeout: seconds to wait for job before raising an error
 :param kwargs: extra arguments to be passed to the function. ``args`` not
     included as there're a couple of options you can pass for this cli."""
-        super().__init__(fs=[f]); self.f = f; self.prefetch = prefetch or 1_000_000
+        super().__init__(fs=[f]); self.f = fastF(f)
+        self.prefetch = prefetch or 1_000_000
         self.timeout = timeout; self.kwargs = kwargs
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
         super().__ror__(it); it = iter(it) # really make sure it's an iterator, for prefetch
-        self.p = p = mp.Pool(mp.cpu_count()*4//5)
+        self.p = p = mp.Pool(mp.cpu_count()*4//5, lambda: signal.signal(signal.SIGINT, signal.SIG_IGN))
         applyMp._pools.add(p); timeout = self.timeout
         common = dill.dumps([self.f, self.kwargs])
         def gen():
-            fs = deque()
-            for i, line in zip(range(self.prefetch), it):
-                fs.append(p.apply_async(executeFunc, [common, dill.dumps(line)]))
-            for line in it:
-                yield fs.popleft().get(timeout)
-                fs.append(p.apply_async(executeFunc, [common, dill.dumps(line)]))
-            for f in fs: yield f.get(timeout)
+            try:
+                fs = deque()
+                for i, line in zip(range(self.prefetch), it):
+                    fs.append(p.apply_async(executeFunc, [common, dill.dumps(line)]))
+                for line in it:
+                    yield fs.popleft().get(timeout)
+                    fs.append(p.apply_async(executeFunc, [common, dill.dumps(line)]))
+                for f in fs: yield f.get(timeout)
+            except KeyboardInterrupt as e:
+                print("applyMp interrupted. Terminating pool now")
+                self.p.terminate(); applyMp._pools.remove(self.p)
+                raise e
+            else: self.p.terminate(); applyMp._pools.remove(self.p)
         return gen()
     @staticmethod
     def clearPools():
@@ -112,6 +120,9 @@ script/notebook to make sure all resources (like GPU) are freed."""
     def pools():
         """Get set of all pools. Meant for debugging purposes only."""
         return applyMp._pools
+    def __del__(self):
+        self.p.terminate();
+        if self.p in applyMp._pools: applyMp._pools.remove(self.p)
 atexit.register(lambda: applyMp.clearPools())
 class applyS(BaseCli):
     def __init__(self, f:Callable[[T], T]):
@@ -135,8 +146,6 @@ and whatnot."""
         update_wrapper(self, f)
     def __ror__(self, it:T) -> T:
         return self.f(it)
-    def all(self):
-        return apply(self.f)
 class apply(BaseCli):
     def __init__(self, f:Callable[[str], str], column:int=None):
         """Applies a function f to every line.
@@ -157,21 +166,19 @@ You can also use this as a decorator, like this::
 
 :param column: if not None, then applies the function to that column only"""
         super().__init__(fs=[f]);
-        self.f = f.f if isinstance(f, applyS) else f
-        self.column = column
+        self.f = f; self.column = column
     def __ror__(self, it:Iterator[str]):
-        super().__ror__(it); f = self.f; c = self.column
-        if isinstance(f, cli.op): f = f.ab_operate
+        super().__ror__(it); f = fastF(self.f); c = self.column
         if c is None: return (f(line) for line in it)
         else: return ([(e if i != c else f(e)) 
                        for i, e in enumerate(row)] for row in it)
-def applyMpBatched(f, bs=32, prefetch=2, timeout=5):
+def applyMpBatched(f, bs=32, prefetch=2, timeout=5, **kwargs):
     """Pretty much the same as :class:`applyMp` and has the same feel to it
 too. Iterator[A] goes in, Iterator[B] goes out, and you specify `f(A) -> B`.
 However, this will launch jobs that will execute multiple f(), instead of
 1 job per execution. All examples from :class:`applyMp` should work perfectly
 here."""
-    return cli.batched(bs, True) | applyMp(apply(f) | cli.deref(), prefetch, timeout) | cli.joinStreams()
+    return cli.batched(bs, True) | applyMp(apply(f) | cli.deref(), prefetch, timeout, **kwargs) | cli.joinStreams()
 class applyCached(BaseCli):
     def __init__(self, f, limit:int=1000):
         """Like :class:`apply`, but caches the results, so subsequent requests
@@ -188,12 +195,44 @@ enough yet. May be in a future version.
         super().__init__(fs=[f]); self.f = f
         self.limit = limit; self.lookup = dict()
     def __ror__(self, it):
-        lookup = self.lookup; f = self.f; limit = self.limit
+        lookup = self.lookup; f = fastF(self.f); limit = self.limit
         for e in it:
             if e not in lookup:
                 lookup[e] = f(e)
             yield lookup[e]
             if len(lookup) > limit: del a[next(iter(a.keys()))]
+class applySerial(BaseCli):
+    def __init__(self, f, includeFirst=False):
+        """Applies a function repeatedly. First yields input iterator ``x``. Then
+yields ``f(x)``, then ``f(f(x))``, then ``f(f(f(x)))`` and so on. Example::
+
+    # returns [4, 8, 16, 32, 64]
+    2 | applySerial(op()*2) | head(5) | deref()
+
+If the result of your operation is an iterator, you might want to
+:class:`~k1lib.cli.utils.deref` it, like this::
+
+    rs = iter(range(8)) | applySerial(rows()[::2])
+    # returns [0, 2, 4, 6]
+    next(rs) | deref()
+    # returns []. This is because all the elements are taken by the previous deref()
+    next(rs) | deref()
+
+    rs = iter(range(8)) | applySerial(rows()[::2] | deref())
+    # returns [0, 2, 4, 6]
+    next(rs)
+    # returns [0, 4]
+    next(rs)
+    # returns [0]
+    next(rs)
+
+:param f: function to apply repeatedly
+:param includeFirst: whether to include the raw input value or not"""
+        self.f = f; self.includeFirst = includeFirst
+    def __ror__(self, it):
+        f = fastF(self.f)
+        if not self.includeFirst: it = f(it)
+        while True: yield it; it = f(it)# | cli.deref()
 def replace(s:str, target:str=None, column:int=None):
     """Replaces substring `s` with `target` for each line.
 Example::
@@ -209,7 +248,7 @@ def remove(s:str, column:int=None):
     """Removes a specific substring in each line."""
     return replace(s, "", column)
 def _op(toOp, c, force, defaultValue):
-    return apply(toOp, c) | (apply(lambda x: x or defaultValue, c) if force else (~cli.isValue(None, c)))
+    return apply(toOp, c) | (apply(lambda x: x or defaultValue, c) if force else (~cli.filt(cli.op() == None, c)))
 def _toFloat(e) -> Union[float, None]:
     try: return float(e)
     except: return None
@@ -425,17 +464,26 @@ you can still combine with other cli tools as usual, for example::
     [range(10), range(10, 20)] | transpose() | filt(op() > 7, 0) | deref()
 
 Performance-wise, there are some, but not a lot of degradation, so don't worry
-about it::
+about it. Simple operations executes pretty much on par with native lambdas::
 
     n = 10_000_000
-    # takes 1.6s
+    # takes 1.48s
     for i in range(n): i**2
-    # takes 1.8s, 1.125x worse than for loop
+    # takes 1.89s, 1.28x worse than for loop
     range(n) | apply(lambda x: x**2) | ignore()
-    # takes 2.7s, 1.7x worse than for loop
+    # takes 1.86s, 1.26x worse than for loop
     range(n) | apply(op()**2) | ignore()
-    # takes 2.7s
+    # takes 1.86s
     range(n) | (op()**2).all() | ignore()
+
+More complex operations can take more of a hit::
+
+    # takes 1.66s
+    for i in range(n): i**2-3
+    # takes 2.02s, 1.22x worse than for loop
+    range(n) | apply(lambda x: x**2-3) | ignore()
+    # takes 2.81s, 1.69x worse than for loop
+    range(n) | apply(op()**2-3) | ignore()
 
 Reserved operations that are not absorbed are:
 

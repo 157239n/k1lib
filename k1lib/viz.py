@@ -132,11 +132,6 @@ element, else return the entire list."""
 def plotSegments(x:List[float], y:List[float], states:List[int], colors:List[str]=None):
     """Plots a line graph, with multiple segments with different colors.
 
-:param x: (nullable) list of x coordinate at each point
-:param y: list of y coordinates at each point
-:param states: list of color at each point
-:param colors: string colors to display for each states
-
 Idea is, you have a normal line graph, but you want to color parts of
 the graph red, other parts blue. Then, you can pass a "state" array, with
 the same length as your data, filled with ints, like this::
@@ -151,7 +146,11 @@ the same length as your data, filled with ints, like this::
     plotSegments(None, y, s, colors=["tab:blue", "tab:red"])
     
 .. image:: images/plotSegments.png
-"""
+
+:param x: (nullable) list of x coordinate at each point
+:param y: list of y coordinates at each point
+:param states: list of color at each point
+:param colors: string colors (matplotlib color strings) to display for each states"""
     if x is None: x = range(len(y))
     if colors is None: colors = ["tab:blue", "tab:red", "tab:green", "tab:orange", "tab:purple", "tab:brown"][:len(x)]
     _x = []; _y = []; state = -1; count = -1 # stretchs, and bookkeeping nums

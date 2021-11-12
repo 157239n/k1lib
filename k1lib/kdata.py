@@ -40,7 +40,7 @@ def tfImg(size:int=None, /, flip=True) -> BaseCli:
     """Get typical image transforms.
 Example::
 
-    "path/img.png" | toPIL() | kdata.imgTf(224)"""
+    "path/img.png" | toPIL() | kdata.tfImg(224)"""
     import torchvision.transforms as tf
     op = identity()
     if size: op |= aS(tf.Resize(size)) | aS(tf.CenterCrop(size))

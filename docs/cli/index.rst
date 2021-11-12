@@ -3,7 +3,8 @@
 k1lib.cli module
 =========================
 
-The main idea of this package is to emulate the terminal, but doing all of that inside Python itself. So this bash statement:
+The main idea of this package is to emulate the terminal (hence "cli", or "command
+line interface"), but doing all of that inside Python itself. So this bash statement:
 
 .. code-block:: console
 
@@ -41,6 +42,10 @@ current environment, like this::
 
    from k1lib.imports import *
 
+Because there are a lot of clis, you may sometimes unintentionally overwritten an
+exposed cli tool. No oworries, every tool is also under the ``cli`` object, meaning
+you can use ``deref()`` or ``cli.deref()``.
+
 Besides operating on string iterators alone, this package can also be extra meta,
 and operate on streams of strings, or streams of streams of anything. I think this
 is one of the most powerful concept of the cli workflow. If this interests you,
@@ -53,9 +58,10 @@ check over this:
 
 Core clis include :class:`~modifier.apply`, :class:`~modifier.applyS` (its
 multiprocessing cousins :class:`~modifier.applyMp` and :class:`~modifier.applyMpBatched`
-are great too), :class:`~modifier.op` and :class:`~utils.deref`, so start reading
-there first. Then, skim over everything to know what you can do with these
-collection of tools.
+are great too), :class:`~modifier.op`, :class:`~filt.filt` and :class:`~utils.deref`,
+so start reading there first. Then, skim over everything to know what you can do with
+these collection of tools. While you're doing that, checkout :meth:`~trace.trace`,
+for a quite powerful debugging tool.
 
 bio module
 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -128,6 +134,14 @@ init module
    - oboFile: gene ontology obo file location
    - strict: whether strict mode is on. Turning it on can help you debug stuff, but
      could also be a pain to work with
+   - svgScale: default svg scales for clis that displays graphviz graphs
+   - inf: infinity definition for many clis. Defaulted to just ``float("inf")``. Here
+     because you might want to temporarily not loop things infinitely.
+   - context: context manager to preserve old settings value. Example::
+
+      with cliSettings["context"]():
+         cliSettings["inf"] = 21
+      # old settings automatically restored
 
 .. autoclass:: k1lib.cli.init.BaseCli
    :members:
@@ -201,10 +215,20 @@ structural module
 
    .. attribute:: yieldSentinel
 
-      Object that can be yielded in a stream to ignore this stream for the moment in :class:`joinStreamsRandom`.
+      Object that can be yielded in a stream to ignore this stream for the moment in
+      :class:`joinStreamsRandom`. It will also stops :class:`~k1lib.cli.utils.deref`
+      early.
 
    .. autoclass:: joinStreamsRandom
       :members:
+
+trace module
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. automodule:: k1lib.cli.trace
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
 utils module
 ^^^^^^^^^^^^^^^^^^^^^^^^^

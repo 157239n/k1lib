@@ -8,7 +8,13 @@ from k1lib.cli.init import BaseCli, Table
 import torch, numbers, numpy as np, k1lib; from k1lib import cli
 __all__ = ["stdout", "file", "pretty", "display", "headOut", "intercept"]
 class stdout(BaseCli):
-    """Prints out all lines. If not iterable, then print out the input raw"""
+    """Prints out all lines. If not iterable, then print out the input raw.
+Example::
+
+    # prints out "0\\n1\\n2"
+    range(3) | stdout()
+    # same as above, but (maybe?) more familiar
+    range(3) > stdout()"""
     def __ror__(self, it:Iterator[str]):
         try:
             it = iter(it)
@@ -17,6 +23,19 @@ class stdout(BaseCli):
 class file(BaseCli):
     def __init__(self, fileName:str, text:bool=True):
         """Opens a new file for writing.
+Example::
+
+    # writes "0\\n1\\n2\\n" to file
+    range(3) | file("test/f.txt")
+    # same as above, but (maybe?) more familiar
+    range(3) > file("text/f.txt")
+    # returns ['0', '1', '2']
+    cat("folder/f.txt") | deref()
+
+    # writes bytes to file
+    b'5643' | file("test/a.bin", False)
+    # returns ['5643']
+    cat("test/a.bin") | deref()
 
 :param text: if True, accepts Iterator[str], and prints out each string on a
     new line. Else accepts bytes and write in 1 go."""
@@ -29,7 +48,12 @@ class file(BaseCli):
         else:
             with open(self.fileName, "wb") as f: f.write(it)
 class pretty(BaseCli):
-    """Pretty prints a table"""
+    """Pretty prints a table. Not really used directly.
+Example::
+
+    # These 2 statements are pretty much the same
+    [range(10), range(10)] | head(5) | pretty() > stdout()
+    [range(10), range(10)] | display()"""
     def __ror__(self, it:Table[Any]) -> Iterator[str]:
         table = []; widths = defaultdict(lambda: 0)
         for row in it:

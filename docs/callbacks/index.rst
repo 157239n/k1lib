@@ -20,7 +20,7 @@ callbacks module
       you can do this::
 
          from k1lib.imports import *
-         cbs = k1lib.Callbacks().append(Cbs.Beep())
+         cbs = k1lib.Callbacks().add(Cbs.Beep())
          cbs("endRun") # plays a beep sound
 
    .. autoclass:: Callback

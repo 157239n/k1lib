@@ -19,7 +19,7 @@ class batch(cli.BaseCli):
     def __ror__(self, it:List[str]):
         super().__ror__(it)
         import selenium; from selenium import webdriver
-        query = "\n".join(it | cli.strip() | ~cli.isValue(""))
+        query = "\n".join(it | cli.op().strip().all() | ~cli.filt(cli.op() == ""))
         options = selenium.webdriver.chrome.options.Options()
         if self.headless: options.add_argument("--headless")
         driver = selenium.webdriver.Chrome(options=options);

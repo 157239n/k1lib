@@ -11,6 +11,8 @@ Classes
 - :class:`k1lib.AutoIncrement`
 - :class:`k1lib.Wrapper`
 - :class:`k1lib.Every`
+- :class:`k1lib.RunOnce`
+- :class:`k1lib.MaxDepth`
 - :class:`k1lib.Absorber`
 - :class:`k1lib.CaptureStdout`
 - :class:`k1lib.ignoreWarnings`
@@ -53,6 +55,16 @@ Classes
    :members:
    :undoc-members:
    :special-members: __call__
+   :show-inheritance:
+
+.. autoclass:: k1lib.RunOnce
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. autoclass:: k1lib.MaxDepth
+   :members:
+   :undoc-members:
    :show-inheritance:
 
 .. autoclass:: k1lib.Absorber
@@ -104,6 +116,7 @@ Functions
 .. autofunction:: k1lib.dontWrap
 .. autofunction:: k1lib.positionalEncode
 .. autofunction:: k1lib.debounce
+.. autofunction:: k1lib.scaleSvg
 .. autofunction:: k1lib.perlin3d
 .. autofunction:: k1lib.graph
 .. autofunction:: k1lib.digraph
