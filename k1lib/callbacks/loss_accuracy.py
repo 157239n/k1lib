@@ -18,8 +18,12 @@ def nonEmptyList(_list):
     return [0] if _list == [] else _list
 @k1lib.patch(Cbs)
 class Loss(Callback):
-    "Records losses after each batch."
+    " "
     def __init__(self):
+        """Records losses after each batch.
+Expected variables in :class:`~k1lib.Learner`:
+
+- loss: single float value"""
         super().__init__(); self.order = 20
         self.train = []; self.valid = [] # all stats all times
         # average stats for each epoch
@@ -41,7 +45,12 @@ class Loss(Callback):
         self._trainLosses = []; self._validLosses = []
     @property
     def Landscape(self):
-        """Gets loss-landscape-plotting Callback"""
+        """Gets loss-landscape-plotting Callback.
+Example::
+
+    l = k1lib.Learner.sample()
+    l.cbs.add(Cbs.Loss())
+    l.Loss.Landscape.plot()"""
         self.cbs.add(self._landscape); return self._landscape
     def detach(self): self._landscape.detach(); return super().detach()
     def __repr__(self):
@@ -55,9 +64,12 @@ class Loss(Callback):
 accFMsg = "You have to specify how to compute the accuracy with the AccF callback first"
 @k1lib.patch(Cbs)
 class Accuracy(Callback):
-    """ """
+    " "
     def __init__(self):
-        """Records accuracies after each batch."""
+        """Records accuracies after each batch.
+Expected variables in :class:`~k1lib.Learner`:
+
+- accuracy: single float value from 0 to 1"""
         super().__init__(); self.order = 20
         self.train = [0]; self.valid = [0]
         self._landscape = k1lib.callbacks.Landscape(lambda l: l.accuracy, "_AccuracyLandscape")
@@ -86,7 +98,15 @@ class Accuracy(Callback):
         return k1lib.viz.SliceablePlot(plotF)
     @property
     def Landscape(self):
-        """Gets accuracy-landscape-plotting Callback"""
+        """Gets accuracy-landscape-plotting Callback.
+Example::
+
+    l = k1lib.Learner.sample()
+    l.add(Cbs.Accuracy())
+    l.Accuracy.Landscape.plot()
+
+This exact example won't work, as the sample :class:`~k1lib.Learner` task is not
+categorical, but the general idea still stands"""
         if self.hasAccF:
             self._landscape.parent = self
             self.cbs.add(self._landscape); return self._landscape

@@ -14,9 +14,11 @@ automatically."""
     """The recorded confusion matrix."""
     def __init__(self, categories:List[str]=None):
         """Records what categories the network is confused the most. Expected
-variable ``preds`` to be set in :class:`k1lib.Learner` before checkpoint ``endLoss``.
-This is automatically included when you add a :class:`~k1lib.callbacks.lossFunctions.accuracy.AccF`,
-or when it's added automatically when using :class:`~k1lib.callbacks.lossFunctions.shorts.LossNLLCross`.
+variables in :class:`~k1lib.Learner`:
+
+- preds: long tensor with categories id of batch before checkpoint ``endLoss``.
+  Auto-included in :class:`~k1lib.callbacks.lossFunctions.accuracy.AccF` and
+  :class:`~k1lib.callbacks.lossFunctions.shorts.LossNLLCross`.
 
 :param categories: optional list of category names"""
         super().__init__(); self.categories = categories

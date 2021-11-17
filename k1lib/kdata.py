@@ -36,7 +36,7 @@ Example::
     @staticmethod
     def sin(bs, epochs): return FunctionData.main(torch.sin, bs, epochs)
 aS = applyS
-def tfImg(size:int=None, /, flip=True) -> BaseCli:
+def tfImg(size:int=None, flip=True) -> BaseCli:
     """Get typical image transforms.
 Example::
 

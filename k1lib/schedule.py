@@ -36,7 +36,8 @@ Example::
         """Get the current value."""
         return self.f(x)
     def _startBatch(self, paramGroup:dict, progress:float):
-        self.progress = paramGroup[self.param] = self(progress)
+        self.progress = progress
+        paramGroup[self.param] = self(progress)
     @property
     def value(self): return self.f(self.progress)
     def __mul__(self, x): self.domain *= x; return self
@@ -130,7 +131,7 @@ class ParamScheduler(Callback):
     def startBatch(self):
         if self.l.model.training and self.groupId is not None:
             paramGroup = self.l.opt.param_groups[self.groupId]
-            progress = self.l.ProgressBar.progress
+            progress = self.l.progress
             for schedule in self.schedules.values():
                 schedule._startBatch(paramGroup, progress)
     def __repr__(self):
@@ -172,6 +173,3 @@ def _startRun(self):
             def applyF(mS):
                 mS.displayF = lambda s: "*" if any(p in params for p in s.directParams.values()) else ""
             ps.selector.apply(applyF)
-@k1lib.patch(k1lib.Callbacks, docs=ParamScheduler, name="withParamScheduler")
-def _withParamScheduler(self, css:str, schedules:list, name:str=None):
-    return self.append(ParamScheduler(css, schedules), name=name)

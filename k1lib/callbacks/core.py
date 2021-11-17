@@ -6,13 +6,24 @@ from typing import List, Tuple, Dict, Iterator, Union, Any, Callable
 __all__ = ["CoreNormal", "CoreRNN"]
 @k1lib.patch(Cbs)
 class CoreNormal(Callback):
-    """Just a normal, typical feed forward pass"""
+    """Just a normal, typical feed forward pass.
+Deposits variables into :class:`~k1lib.Learner` at checkpoint ``inPass``:
+
+- y: attached result tensor after passing through model"""
     def inPass(self):
         self.l.y = self.l.model(self.l.xb)
 @k1lib.patch(Cbs)
 class CoreRNN(Callback):
-    """RNN forward pass. Expected model to have the ``initHidden(bs) -> torch.Tensor``
-method."""
+    """RNN forward pass.
+Expected variables from :attr:`k1lib.Learner.model`:
+
+- initHidden: function takes in batch size, returns init hidden tensor
+
+Deposits variables into :class:`~k1lib.Learner` at checkpoint ``inPass``, more
+specifically ``rnnPass``:
+
+- y: attached result tensor after pass (``inPass``), after character pass (``rnnPass``)
+"""
     def startBatch(self):
         self.hx = self.l.model.initHidden(self.l.xb.shape[-2])
     def inPass(self):

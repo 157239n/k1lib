@@ -10,7 +10,7 @@ import torch.nn.functional as F, torch.utils.data as data
 import matplotlib.pyplot as plt, matplotlib as mpl
 import numpy as np, dill as pickle, multiprocessing as mp, concurrent.futures as futures
 import math, os, time, sys, random, logging, traceback, re, typing, glob, warnings
-import functools; from functools import partial
+import functools; from functools import partial, lru_cache
 import contextlib; from contextlib import contextmanager
 from typing import List, Tuple, Callable, Union, Iterator, Set, Dict, Any
 import k1lib; from k1lib import schedule, graphEqn, mo, kdata, knn, fmt, selector, viz, Cbs

@@ -102,7 +102,7 @@ continue. Could be useful in active learning. Example::
         try:
             for streamIdx in rand(len(streams)):
                 o = next(streams[streamIdx])
-                if o != yieldSentinel: yield o
+                if not o is yieldSentinel: yield o # "not is" to fix numpy `==`
         except StopIteration: pass
 class activeSamples(BaseCli):
     def __init__(self, limit:int=100, p:float=0.95):

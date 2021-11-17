@@ -40,7 +40,7 @@ architecture is required, then create a new one. Example::
     l.cbs.add(Cbs.Profiler())
     # views graph and table
     l.Profiler.memory
-    # views graph and table with selected modules highlighted
+    # views graph and table highlighted
     l.Profiler.memory.css("Linear")"""
     def startRun(self):
         if not hasattr(self, "selector"):
@@ -52,7 +52,7 @@ architecture is required, then create a new one. Example::
         self.startBackwardPoint = None
     def startStep(self): return True
     def endRun(self): self._updateLinState()
-    def run(self):
+    def _run(self):
         """Runs everything"""
         with self.cbs.context(), self.cbs.suspendEval(), self.l.model.deviceContext():
             self.cbs.add(Cbs.Cuda()); self.l.run(1, 1)
@@ -64,7 +64,7 @@ architecture is required, then create a new one. Example::
             for step in self.stepData:
                 if step[2] == mS.idx: step[1] = "_memProf_" in mS
     def css(self, css:str):
-        """Selects a small part of the network to highlight"""
+        """Selects a small part of the network to highlight. See also: :mod:`k1lib.selector`."""
         self.selector.parse(k1lib.selector.preprocess(css, "_memProf_"))
         self._updateLinState(); print(self.__repr__())
         self.selector.clearProps(); self._updateLinState()

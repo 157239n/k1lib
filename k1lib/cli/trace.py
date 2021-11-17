@@ -2,26 +2,25 @@
 import k1lib
 from k1lib.cli import *
 __all__ = ["trace"]
-traceIdxAuto = k1lib.AutoIncrement()
+traceIdxAuto = k1lib.AutoIncrement(prefix="TD_")
 class TraceData:
     def __init__(self, _cli, inS, outS, name=None):
         """
 :param inS: in and out strings to be displayed in the edges"""
-        self.idx = f"{traceIdxAuto()}"
+        self.idx = traceIdxAuto()
         self.inS = inS; self.outS = outS; self.cli = _cli
         self.name = name or _cli.__class__.__name__
     def __str__(self):
         return f"<TraceData idx='{self.idx}' inS='{self.inS}' outS='{self.outS}' name='{self.name}' cli='{self.cli}'>"
 def isMTM(c):
     if not isinstance(c, BaseCli): return False
-    if isinstance(c, manyToMany): return True
-    if isinstance(c, applyMp): return True
+    if isinstance(c, (manyToMany, applyMp, applyTh)): return True
     if isinstance(c, apply) and isinstance(c.f, BaseCli) and c.column is None: return True
     return False
 class TraceException(Exception): pass
 clusterAuto = k1lib.AutoIncrement()
 emptyInputSentinel = object()
-class _trace(BaseCli): # "I" for extra internal. Can't use double underscores due to convention
+class _trace(BaseCli):
     def __init__(self, inp, f, g=None, depth=None):
         """
 Some notes. startTd will always tries to grab the first thing, lastTd will only
@@ -39,14 +38,14 @@ grab the last thing at the end of __ror__, hence "last" and not "end".
         else: self.g = g; self.lastTd = None
         self.firstTime = True # every other time other than the first should not record any data. It should just pass data through
     def _formNode(self, td:TraceData, g=None): (g or self.g).node(td.idx, td.name)
-    def _formEdge(self, td1:TraceData, td2:TraceData, g=None):
+    def _formEdge(self, td1:TraceData, td2:TraceData, g=None, label:str=None):
         if td1 is None or td2 is None: return
-        (g or self.g).edge(td1.idx, td2.idx, label=f"   {td2.inS or td1.outS}")
-    def _run(self, c, inp):
+        (g or self.g).edge(td1.idx, td2.idx, label=f" {label or td2.inS or td1.outS}")
+    def _run(self, c, inp, cliName=None):
         """Takes in cli tool and input, runs it, and get trace data and output"""
         if isinstance(c, op): c.op_solidify()
         out = c(inp) | deref() # why not "inp | c"? Cause we want to serve plain old functions inside apply too
-        return TraceData(c, f"{self.f(inp)}", f"{self.f(out)}", None), out
+        return TraceData(c, f"{self.f(inp)}", f"{self.f(out)}", cliName), out
     def __repr__(self):
         try: from IPython.core import display as dis
         except: raise RuntimeError("You have to install IPython/execute in a notebook first!")
@@ -62,7 +61,10 @@ grab the last thing at the end of __ror__, hence "last" and not "end".
     def __iter__(self): return self.inp
 @k1lib.patch(_trace)
 def __or__(self, c):
-    if self.inp is emptyInputSentinel: return super(_trace, self).__or__(c)
+    if self.inp is emptyInputSentinel:
+        # do this to separate out potentially a serial right after this, so that trace() is actually in control, and not merge with the outside serial
+        if isinstance(c, serial): return serial(self, c)
+        return super(_trace, self).__or__(c)
     if not isinstance(c, BaseCli): return NotImplemented
     if self._reprRO.value: raise RuntimeError("Can't pipe this trace() into another cli tool, as it is used! Make a new trace instead.")
     td, out = self._run(c, self.inp) # runs through the entire thing, then decides whether to go into the details or not
@@ -112,6 +114,32 @@ def __or__(self, c):
                 self._formEdge(o1Td, t.startTd); self._formEdge(t.lastTd, o2Td)
         self._formEdge(self.lastTd, o1Td); self.lastTd = o2Td; o2Td.outS = self.f(out)
         if startTdSet: self.startTd = o1Td
+    elif self.depth and isinstance(c, apply) and isinstance(c.f, BaseCli) and c.column is not None:
+        try: singleInp = self.inp | item()
+        except StopIteration: bypass()
+        else:
+            with self.g.subgraph(name=f"cluster_{clusterAuto()}") as subG:
+                subG.attr(label=f"apply (column: {c.column})")
+                singleInp = singleInp[c.column]
+                t = _trace(singleInp, self.f, subG, self.depth.enter()) | c.f
+                o1Td = TraceData(None, self.f(self.inp), None, "*"); self._formNode(o1Td, g=subG)
+                o2Td = TraceData(None, self.f(t.inp),    None, "*"); self._formNode(o2Td, g=subG)
+                t._formEdge(o1Td, t.startTd); t._formEdge(t.lastTd, o2Td); o2Td.outS = self.f(out)
+            self._formEdge(self.lastTd, o1Td); self.lastTd = o2Td
+            if startTdSet: self.startTd = o1Td
+    elif self.depth and isinstance(c, filt) and isinstance(c.predicate, BaseCli):
+        try: singleInp = self.inp | item()
+        except StopIteration: bypass()
+        else:
+            with self.g.subgraph(name=f"cluster_{clusterAuto()}") as subG:
+                subG.attr(label=f"filt (column: {c.column})")
+                self._formNode(td, g=subG); self._formEdge(self.lastTd, td) # main filt node
+                if c.column is not None: singleInp = singleInp[c.column]
+                t = _trace(singleInp, self.f, subG, self.depth.enter()) | c.predicate
+                tdEndFilt = td; #tdEndFilt = TraceData(None, None, None, "*"); self._formNode(tdEndFilt, g=subG) # can switch between styles
+                self._formEdge(td, t.startTd); self._formEdge(t.lastTd, tdEndFilt, label=f"{t.lastTd.outS}")
+                self.lastTd = td
+            if startTdSet: self.startTd = td
     else: bypass()
     self.inp = out; return self
 class trace(_trace):
@@ -125,9 +153,6 @@ Example::
     range(1, 5) | apply(lambda x: x**2) | deref()
     # traced command, will display how the shapes evolve through cli tools
     range(1, 5) | trace() | apply(lambda x: x**2) | deref()
-
-Essentially, this :class:`~k1lib.cli.utils.deref` every stream before and after every
-cli tool, and then displays the clis and streams in a graph for visualization.
 
 There're a lot more instructions and code examples over the tutorial section. Go check it out!
 

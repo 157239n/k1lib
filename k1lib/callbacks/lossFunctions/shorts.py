@@ -10,8 +10,18 @@ LossFSig = Callable[[Tuple[torch.Tensor, torch.Tensor]], float]
 class LossF(Callback):
     " "
     def __init__(self, lossF:LossFSig):
-        """Creates a generic loss function that takes in ``y`` and
-correct y ``yb`` and return a single loss float (still attached to graph)."""
+        """Generic loss function.
+Expected variables in :class:`~k1lib.Learner`:
+
+- y: result of model. Auto-included in :class:`~k1lib.callbacks.core.CoreNormal`
+  and :class:`~k1lib.callbacks.core.CoreRNN`.
+
+Deposits variables into :class:`~k1lib.Learner` at checkpoint ``inLoss``:
+
+- lossG: single float tensor value, attached to graph
+- loss: lossG, but single float value
+
+:param lossF: takes in ``(y, yb)`` and returns ``lossG``"""
         super().__init__()
         self.lossF = lossF
     def inLoss(self):
@@ -27,7 +37,7 @@ class LossNLLCross(Callback):
         super().__init__(); self.integrations = integrations; self.ownsAccCb = False
         self.order = 11 # to make sure it's after AccF
         self.lossF = torch.nn.NLLLoss() if nll else torch.nn.CrossEntropyLoss()
-    def appended(self): # delayed initialization, so that learner and cbs has already been attached
+    def attached(self): # delayed initialization, so that learner and cbs has already been attached
         if self.integrations:
             if "AccF" not in self.cbs:
                 self.accuracyCb = Cbs.AccF()
@@ -46,9 +56,13 @@ class LossNLLCross(Callback):
 @k1lib.patch(Callback.lossCls)
 class LossCrossEntropy(LossNLLCross):
     def __init__(self, integrations:bool=True):
+        """Cross entropy loss function. Deposits into :class:`~k1lib.Learner`
+the same variables as in :class:`LossF`."""
         super().__init__(False, integrations)
 @k1lib.patch(Cbs)
 @k1lib.patch(Callback.lossCls)
 class LossNLL(LossNLLCross):
     def __init__(self, integrations:bool=True):
+        """Negative log loss function. Deposits into :class:`~k1lib.Learner`
+the same variables as in :class:`LossF`."""
         super().__init__(True, integrations)

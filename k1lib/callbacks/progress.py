@@ -4,15 +4,18 @@ from .callbacks import Callback, Callbacks, Cbs
 __all__ = ["ProgressBar"]
 @k1lib.patch(Cbs)
 class ProgressBar(Callback):
-    """Displays the current progress, epoch and batch while running."""
+    """Displays the current progress, epoch and batch while running.
+Deposits variables into :class:`~k1lib.Learner` at checkpoint ``startBatch``:
+
+- progress: single float from 0 to 1"""
     def startRun(self):
-        self.startTime = time.time(); self.step = 0; self.progress = 0
+        self.startTime = time.time(); self.step = 0; self.l.progress = 0
         self.l.loss = float("inf") # to make sure this variable exist
     def startBatch(self):
         self.elapsedTime = time.time() - self.startTime
-        if self.l.batches is None: self.progress = self.l.epoch / self.l.epochs
-        else: self.progress = (self.l.batch / self.l.batches + self.l.epoch) / self.l.epochs
-        a = str(round(100 * self.progress)).rjust(3)
+        if self.l.batches is None: self.l.progress = self.l.epoch / self.l.epochs
+        else: self.l.progress = (self.l.batch / self.l.batches + self.l.epoch) / self.l.epochs
+        a = str(round(100 * self.l.progress)).rjust(3)
         b = f"{self.l.epoch}/{self.l.epochs}".rjust(k1lib.numDigits(self.l.epochs) * 2 + 1)
         c = f"{self.l.batch}/{self.l.batches}".rjust(k1lib.numDigits(self.l.batches) * 2 + 1)
         d = f"{round(self.elapsedTime, 2)}".rjust(6)

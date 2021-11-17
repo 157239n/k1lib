@@ -7,6 +7,7 @@ module name, like this::
 """
 from k1lib import cli
 import csv
+__all__ = ["cat"]
 def cat(file:str) -> cli.Table[str]:
     """Opens a csv file, and turns them into nice row elements"""
     with open(file) as f:

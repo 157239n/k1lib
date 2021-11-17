@@ -23,37 +23,37 @@ class Profiler(Callback):
         if self._mpCache != None: return self._mpCache
         with self.cbs.context():
             mp = MemoryProfiler(); self.cbs.add(mp)
-            mp.run(); self._mpCache = mp; return mp
+            mp._run(); self._mpCache = mp; return mp
     @property
     def memory(self) -> MemoryProfiler:
-        """Gets the memory profiler"""
+        """Gets :class:`~k1lib.callbacks.profilers.memory.MemoryProfiler`"""
         return self._memory()
     def _computation(self):
         if self._cpCache != None: return self._cpCache
         with self.cbs.context():
             cp = ComputationProfiler(self); self.cbs.add(cp)
-            cp.run(); self._cpCache = cp; return cp
+            cp._run(); self._cpCache = cp; return cp
     @property
     def computation(self) -> ComputationProfiler:
-        """Gets the computation profiler"""
+        """Gets :class:`~k1lib.callbacks.profilers.computation.ComputationProfiler`"""
         return self._computation()
     def _time(self):
         if self._tpCache != None: return self._tpCache
         with self.cbs.context():
             tp = TimeProfiler(); self.cbs.add(tp)
-            tp.run(); self._tpCache = tp; return tp
+            tp._run(); self._tpCache = tp; return tp
     @property
     def time(self) -> TimeProfiler:
-        """Gets the time profiler"""
+        """Gets :class:`~k1lib.callbacks.profilers.time.TimeProfiler`"""
         return self._time()
     def _io(self):
         if self._ioCache != None: return self._ioCache
         with self.cbs.context():
             io = IOProfiler(); self.cbs.add(io)
-            io.run(); self._ioCache = io; return io
+            io._run(); self._ioCache = io; return io
     @property
     def io(self) -> IOProfiler:
-        """Gets the IO profiler"""
+        """Gets :class:`~k1lib.callbacks.profilers.io.IOProfiler`"""
         return self._io()
     def __repr__(self):
         return f"""{self._reprHead}, can...

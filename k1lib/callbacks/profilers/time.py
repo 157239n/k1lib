@@ -30,7 +30,14 @@ class TimeData:
         return f"{a}{b}{c}"
 class TimeProfiler(Callback):
     """Profiles execution time. Only measures forward times, as
-backward times can't really be measured"""
+backward times can't really be measured. Example::
+
+    l = k1lib.Learner.sample()
+    l.cbs.add(Cbs.Profiler())
+    # views table
+    l.Profiler.time
+    # views table highlighted
+    l.Profiler.time.css("#lin1")"""
     def startRun(self):
         if not hasattr(self, "selector"): # if no selectors found
             self.selector = self.l.model.select("")
@@ -38,7 +45,7 @@ backward times can't really be measured"""
         self.selector.displayF = lambda m: (fmt.txt.red if "_timeProf_" in m else fmt.txt.identity)(m.data)
         self.totalTime = 0; self.selectedMaxTime = None
     def startStep(self): return True
-    def run(self):
+    def _run(self):
         """Runs everything"""
         with self.cbs.context(), self.cbs.suspendEval():
             self.is_cuda = next(self.l.model.parameters()).is_cuda
@@ -47,7 +54,7 @@ backward times can't really be measured"""
             self.l.run(1, 1)
         for m in self.selector.modules(): m.data.unhook()
     def css(self, css:str):
-        """Selects a small part of the network to highlight"""
+        """Selects a small part of the network to highlight. See also: :mod:`k1lib.selector`."""
         self.selector.parse(k1lib.selector.preprocess(css, "_timeProf_"))
         self.selectedMaxTime = 0
         for m in self.selector.modules():

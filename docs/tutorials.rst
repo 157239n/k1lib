@@ -24,3 +24,6 @@ Others:
 
 Also note that all tutorials are versioned, and they will change if features in
 previous versions got removed and whatnot.
+
+Besides written ones here, I've also made some `video tutorials <https://www.youtube.com/channel/UCgIXHhl-rRafTh5i3gT2X8g>`_
+as well, so go check that out.

@@ -5,7 +5,7 @@ This is for functions that cuts out specific parts of the table
 from typing import Callable, Union, List, overload, Iterator, Any, Set, Tuple
 from k1lib.cli.init import BaseCli, Table, T, fastF
 import k1lib.cli as cli
-import k1lib, os
+import k1lib, os, torch
 from collections import deque
 __all__ = ["filt", "isFile", "inSet", "contains", "empty",
            "isNumeric", "instanceOf", "inRange",
@@ -306,8 +306,11 @@ class mask(BaseCli):
 Example::
 
     # returns [0, 1, 3]
-    range(5) | mask([True, True, False, True, False]) | deref()"""
+    range(5) | mask([True, True, False, True, False]) | deref()
+    # returns torch.tensor([0, 1, 3])
+    torch.tensor(range(5)) | mask([True, True, False, True, False])"""
         super().__init__(); self.mask = mask
     def __ror__(self, it):
-        for e, m in zip(it, self.mask):
-            if m: yield e
+        if isinstance(it, torch.Tensor):
+            return it[list(self.mask)]
+        return (e for e, m in zip(it, self.mask) if m)

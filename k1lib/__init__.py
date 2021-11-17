@@ -5,6 +5,7 @@ from ._hidden.hiddenFile import hiddenF
 from ._basics import *
 from ._perlin import *
 from ._baseClasses import *
+from ._context import *
 from . import cli
 from ._higher import *
 from ._monkey import *

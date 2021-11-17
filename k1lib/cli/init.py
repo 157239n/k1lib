@@ -18,7 +18,7 @@ from typing import List, Iterator, Any, NewType, TypeVar, Generic
 import k1lib.cli as cli; from numbers import Number
 import itertools, copy, torch; import numpy as np
 
-__all__ = ["cliSettings", "BaseCli", "Table", "T",
+__all__ = ["cliSettings", "BaseCli", "Table", "T", "fastF",
            "serial", "oneToMany", "manyToMany", "manyToManySpecific"]
 from contextlib import contextmanager
 @contextmanager
@@ -141,16 +141,13 @@ argument list is passed to cli instead of just the first element. Example::
         if len(args) == 0: return self.__ror__(it)
         else: return self.__ror__([it, *args])
 def fastF(c):
-    """Tries to figure out what's going on, is it a normal function, or an applyS, or a
-BaseCli, etc., and return a really fast function for execution."""
-    if isinstance(c, cli.op):
-        l = len(c._ab_steps)
-        if l == 1: return c._ab_steps[0][1]
-        elif l == 0: return lambda x: x
-        elif l == 2:
-            a, b = c._ab_steps[0][1], c._ab_steps[1][1]
-            return lambda x: b(a(x))
-        return c.ab_operate
+    """Tries to figure out what's going on, is it a normal function, or an applyS,
+or a BaseCli, etc., and return a really fast function for execution. Example::
+
+    # both returns 16, fastF returns "lambda x: x**2", so it's really fast
+    fastF(op()**2)(4)
+    fastF(applyS(lambda x: x**2))(4)"""
+    if isinstance(c, cli.op): return c.ab_fastF()
     if isinstance(c, cli.applyS): return fastF(c.f)
     if isinstance(c, BaseCli): return c.__ror__
     return c
@@ -165,7 +162,7 @@ fails to run::
         super().__init__(fs=clis); self.clis = list(clis)
     def __ror__(self, it:Iterator[Any]) -> Iterator[Any]:
         super().__ror__(it); clis = self.clis#iter(self.clis)
-        for cli in clis: it = it | cli
+        for cli in clis: it = cli.__ror__(it)
         return it
 class oneToMany(BaseCli):
     def __init__(self, *clis:List[BaseCli]):

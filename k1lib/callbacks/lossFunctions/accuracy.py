@@ -10,26 +10,24 @@ PredFSig = Callable[[torch.Tensor], torch.Tensor]
 class AccF(Callback):
     " "
     def __init__(self, predF:PredFSig=None, accF:AccFSig=None, integrations:bool=True):
-        """Creates a generic Callback accuracy function.
+        """Generic accuracy function.
 
-Built in default accuracies functions are fine, if you don't do
-something too dramatic/different. It expects:
+Built in default accuracies functions are fine, if you don't do something too
+dramatic/different. Expected variables in :class:`~k1lib.Learner`:
 
-- y:  to have shape (\*N, C)
-- yb: to have shape (\*N,)
+- y:  :class:`~torch.Tensor` of shape (\*N, C)
+- yb: :class:`~torch.Tensor` of shape (\*N,)
+
+Deposits variables into :class:`~k1lib.Learner`:
+
+- preds:      detached, batched tensor output of ``predF``
+- accuracies: detached, batched tensor output of ``accF``
+- accuracy:   detached, single float, mean of ``accuracies``
 
 Where:
 
 - N is the batch size. Can be multidimensional, but has to agree between ``y`` and ``yb``
 - C is the number of categories
-
-If these are not your system requirements
-
-Deposits these variables into :class:`~k1lib.Learner`:
-
-- preds:      detached, batched tensor output of ``predF``
-- accuracies: detached, batched tensor output of ``accF``
-- accuracy:   detached, single float, mean of ``accuracies``
 
 :param predF: takes in ``y``, returns predictions (tensor with int elements indicating the categories)
 :param accF: takes in ``(predictions, yb)``, returns accuracies (tensor with 0 or 1 elements)
@@ -37,7 +35,7 @@ Deposits these variables into :class:`~k1lib.Learner`:
         super().__init__(); self.order = 10; self.integrations = integrations; self.ownsConMat = False
         self.predF = predF or (lambda y: y.argmax(-1))
         self.accF = accF or (lambda p, yb: (p == yb)+0)
-    def appended(self):
+    def attached(self):
         if self.integrations:
             if "ConfusionMatrix" not in self.cbs:
                 self.conMatCb = Cbs.ConfusionMatrix()

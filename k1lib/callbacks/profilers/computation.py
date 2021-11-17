@@ -28,7 +28,7 @@ class ComputationData:
         a = _spacing(f"{k1lib.fmt.comp(self.flop)}".ljust(_lcomp))
         b = _spacing(f"{round(100 * self.flop / self.cProfiler.totalFlop)}%".rjust(_lp1))
         c = ""
-        if self.cProfiler.tpAvailable:
+        if self.cProfiler._tpAvailable:
             self.flops = self.flop / self.tS.data.time
             c = _spacing(f"{k1lib.fmt.compRate(self.flops)}".ljust(_lp2))
         d = ""
@@ -39,7 +39,15 @@ class ComputationData:
         return f"{a}{b}{c}{d}"
 class ComputationProfiler(Callback):
     """Profiles computation. Only provide reports on well known
-layers only, and thus can't really be universal"""
+layers only, and thus can't really be universal. Example::
+
+    l = k1lib.Learner.sample()
+    l.cbs.add(Cbs.Profiler())
+    # views table
+    l.Profiler.computation
+    # views table highlighted
+    l.Profiler.computation.css("#lin1 > #lin")
+"""
     def __init__(self, profiler:"Profiler"):
         super().__init__(); self.profiler = profiler
     def startRun(self):
@@ -51,22 +59,22 @@ layers only, and thus can't really be universal"""
     @property
     def selected(self): return self.selectedTotalFlop != None
     @property
-    def tpAvailable(self) -> bool:
+    def _tpAvailable(self) -> bool:
         """Whether TimeProfiler's results are available"""
         try: self.profiler._time(); return True
         except Exception as e: return False
     def startStep(self): return True
-    def run(self):
+    def _run(self):
         """Runs everything"""
         with self.cbs.context(), self.cbs.suspendEval():
             self.cbs.add(Cbs.Cpu()); self.l.run(1, 1)
         for m in self.selector.modules(): m.data.unhook()
     def detached(self): # time profiler integration, so that flops can be displayed
-        if self.tpAvailable:
+        if self._tpAvailable:
             for cS, tS in zip(self.selector.modules(), self.profiler.time.selector.modules()):
                 cS.data.tS = tS # injecting dependency
     def css(self, css:str):
-        """Selects a small part of the network to highlight"""
+        """Selects a small part of the network to highlight. See also: :mod:`k1lib.selector`."""
         self.selector.parse(k1lib.selector.preprocess(css, "_compProf_"))
         self.selectedTotalFlop = 0
         for m in self.selector.modules():
@@ -77,11 +85,11 @@ layers only, and thus can't really be universal"""
     def __repr__(self):
         header = _spacing("computation".ljust(_lcomp))
         header += _spacing("% total".rjust(_lp1))
-        header += _spacing("rate".ljust(_lp2)) if self.tpAvailable else ""
+        header += _spacing("rate".ljust(_lp2)) if self._tpAvailable else ""
         header += _spacing("% selected".rjust(_lp3)) if self.selected else ""
         footer = _spacing(f"{k1lib.fmt.comp(self.totalFlop)}".ljust(_lcomp))
         footer += _spacing("".rjust(_lp1))
-        footer += _spacing("".ljust(_lp2)) if self.tpAvailable else ""
+        footer += _spacing("".ljust(_lp2)) if self._tpAvailable else ""
         footer += _spacing(f"{k1lib.fmt.comp(self.selectedTotalFlop)}".rjust(_lp3)) if self.selected else ''
         footer = ("Total", footer)
         return f"""ComputationProfiler:

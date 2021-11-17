@@ -2,23 +2,80 @@
 """
 This is for quick modifiers, think of them as changing formats
 """
-__all__ = ["apply", "applyMp", "applyMpBatched", "applyS",
-           "applyCached", "applySerial",
+__all__ = ["applyS", "apply", "applyMp", "applyTh", "applySerial",
            "replace", "remove", "toFloat", "toInt",
            "sort", "sortF", "consume", "randomize", "stagger", "op"]
 from typing import Callable, Iterator, Any, Union, List
 from k1lib.cli.init import patchDefaultDelim, BaseCli, T, fastF
-import k1lib.cli as cli, numpy as np, torch
+import k1lib.cli as cli, numpy as np, torch, threading
 import torch.multiprocessing as mp; from collections import deque
-from functools import partial, update_wrapper
+from functools import partial, update_wrapper, lru_cache
 import dill, pickle, k1lib, warnings, atexit, signal
+class applyS(BaseCli):
+    def __init__(self, f:Callable[[T], T]):
+        """Like :class:`apply`, but much simpler, just operating on the entire input
+object, essentially. The "S" stands for "single". Example::
+
+    # returns 5
+    3 | applyS(lambda x: x+2)
+
+Like :class:`apply`, you can also use this as a decorator like this::
+
+    @applyS
+    def f(x):
+        return x+2
+    # returns 5
+    3 | f
+
+This also decorates the returned object so that it has same qualname, docstring
+and whatnot."""
+        super().__init__(fs=[f]); self.f = f
+        update_wrapper(self, f)
+    def __ror__(self, it:T) -> T:
+        return self.f(it)
+class apply(BaseCli):
+    def __init__(self, f:Callable[[str], str], column:int=None, cache:int=0):
+        """Applies a function f to every line.
+Example::
+
+    # returns [0, 1, 4, 9, 16]
+    range(5) | apply(lambda x: x**2) | deref()
+    # returns [[3.0, 1.0, 1.0], [3.0, 1.0, 1.0]]
+    torch.ones(2, 3) | apply(lambda x: x+2, 0) | deref()
+
+You can also use this as a decorator, like this::
+
+    @apply
+    def f(x):
+        return x**2
+    # returns [0, 1, 4, 9, 16]
+    range(5) | f | deref()
+
+You can also adds a cache, like this::
+
+    def calc(i): time.sleep(0.5); return i**2
+    # takes 2.5s
+    range(5) | repeatFrom(2) | apply(calc, cache=10) | deref()
+    # takes 5s
+    range(5) | repeatFrom(2) | apply(calc) | deref()
+
+:param column: if not None, then applies the function to that column only
+:param cache: if specified, then caches this much number of values"""
+        super().__init__(fs=[f]);
+        self.f = f; self.column = column; self.cache = cache
+    def __ror__(self, it:Iterator[str]):
+        super().__ror__(it); f = fastF(self.f); c = self.column
+        if self.cache > 0: f = lru_cache(self.cache)(f)
+        if c is None: return (f(line) for line in it)
+        else: return ([(e if i != c else f(e)) 
+                       for i, e in enumerate(row)] for row in it)
 def executeFunc(common, line):
     import dill
     f, kwargs = dill.loads(common)
     return f(dill.loads(line), **kwargs)
 class applyMp(BaseCli):
     _pools = set()
-    def __init__(self, f:Callable[[T], T], prefetch:int=None, timeout:float=2, **kwargs):
+    def __init__(self, f:Callable[[T], T], prefetch:int=None, timeout:float=8, utilization:float=0.8, bs:int=1, **kwargs):
         """Like :class:`apply`, but execute ``f(row)`` of each row in
 multiple processes. Example::
 
@@ -67,31 +124,37 @@ away.
     Also remember that the return result of ``f`` should not be a generator.
     That's why in the example above, there's a ``deref()`` inside f.
 
-Most of the time, you'd probably want to use :class:`applyMpBatched` instead.
-That cli tool has the same look and feel as this, but executes ``f`` multiple
-times in a single job, instead of executing ``f`` only 1 time per job here, so
-should dramatically improve performance for most workloads.
+Most of the time, you would probably want to specify ``bs`` to something bigger than 1
+(may be 32 or sth like that). This will executes ``f`` multiple times in a single job,
+instead of executing ``f`` only once per job. Should reduce overhead of process
+creation dramatically.
 
-One last thing. Remember to close all pools (using :meth:`clearPools`) before
-exiting the script so that all child processes are terminated, and that
-resources are freed. Let's say if you use CUDA tensors, but have not close all
-pools yet, then it is possible that CUDA memory is not freed. I learned this
-the hard way. I've tried to use :mod:`atexit` to close pools automatically, but
-it doesn't seem to work with notebooks.
+If you encounter strange errors not seen on :class:`apply`, you can try to clear all
+pools (using :meth:`clearPools`), to terminate all child processes and thus free
+resources. On earlier versions, you have to do this manually before exiting, but now
+:class:`applyMp` is much more robust.
 
 :param prefetch: if not specified, schedules all jobs at the same time. If
     specified, schedules jobs so that there'll only be a specified amount of
     jobs, and will only schedule more if results are actually being used.
 :param timeout: seconds to wait for job before raising an error
+:param utilization: how many percent cores are we running? 0 for no cores, 1 for
+    all the cores. Defaulted to 0.8
+:param bs: if specified, groups ``bs`` number of transforms into 1 job to be more
+    efficient.
 :param kwargs: extra arguments to be passed to the function. ``args`` not
     included as there're a couple of options you can pass for this cli."""
         super().__init__(fs=[f]); self.f = fastF(f)
         self.prefetch = prefetch or 1_000_000
-        self.timeout = timeout; self.kwargs = kwargs
+        self.timeout = timeout; self.utilization = utilization
+        self.bs = bs; self.kwargs = kwargs
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
         super().__ror__(it); it = iter(it) # really make sure it's an iterator, for prefetch
-        self.p = p = mp.Pool(mp.cpu_count()*4//5, lambda: signal.signal(signal.SIGINT, signal.SIG_IGN))
-        applyMp._pools.add(p); timeout = self.timeout
+        bs = self.bs; timeout = self.timeout
+        if bs > 1:
+            return it | cli.batched(bs, True) | applyMp(apply(self.f) | cli.deref(), self.prefetch, timeout, **self.kwargs) | cli.joinStreams()
+        self.p = p = mp.Pool(int(mp.cpu_count()*self.utilization), lambda: signal.signal(signal.SIGINT, signal.SIG_IGN))
+        applyMp._pools.add(p)
         common = dill.dumps([self.f, self.kwargs])
         def gen():
             try:
@@ -104,14 +167,18 @@ it doesn't seem to work with notebooks.
                 for f in fs: yield f.get(timeout)
             except KeyboardInterrupt as e:
                 print("applyMp interrupted. Terminating pool now")
-                self.p.terminate(); applyMp._pools.remove(self.p)
-                raise e
+                self.p.terminate(); applyMp._pools.remove(self.p); raise e
+            except Exception as e:
+                print("applyMp encounter errors. Terminating pool now")
+                self.p.terminate(); applyMp._pools.remove(self.p); raise e
             else: self.p.terminate(); applyMp._pools.remove(self.p)
         return gen()
     @staticmethod
     def clearPools():
         """Terminate all existing pools. Do this before restarting/quitting the
-script/notebook to make sure all resources (like GPU) are freed."""
+script/notebook to make sure all resources (like GPU) are freed. **Update**:
+you probably won't have to call this manually anymore since version 0.9, but
+if you run into problems, try doing this."""
         for p in applyMp._pools:
             try: p.terminate()
             except: pass
@@ -121,86 +188,54 @@ script/notebook to make sure all resources (like GPU) are freed."""
         """Get set of all pools. Meant for debugging purposes only."""
         return applyMp._pools
     def __del__(self):
-        self.p.terminate();
-        if self.p in applyMp._pools: applyMp._pools.remove(self.p)
+        if hasattr(self, "p"):
+            self.p.terminate();
+            if self.p in applyMp._pools: applyMp._pools.remove(self.p)
+# apparently, this doesn't do anything, at least in jupyter environment
 atexit.register(lambda: applyMp.clearPools())
-class applyS(BaseCli):
-    def __init__(self, f:Callable[[T], T]):
-        """Like :class:`apply`, but much simpler, just operating on the entire input
-object, essentially. The "S" stands for "single". Example::
+thEmptySentinel = object()
+class applyTh(BaseCli):
+    def __init__(self, f, prefetch:int=2, timeout:float=5, bs:int=1):
+        """Kinda like the same as :class:`applyMp`, but executes ``f`` on multiple
+threads, instead of on multiple processes. Advantages:
 
-    # returns 5
-    3 | applyS(lambda x: x+2)
+- Relatively low overhead for thread creation
+- Fast, if ``f`` is io-bound
+- Does not have to serialize and deserialize the result, meaning iterators can be
+  exchanged
 
-Like :class:`apply`, you can also use this as a decorator like this::
+Disadvantages:
 
-    @applyS
-    def f(x):
-        return x+2
-    # returns 5
-    3 | f
+- Still has thread creation overhead, so it's still recommended to specify ``bs``
+- Is slow if ``f`` has to obtain the GIL to be able to do anything
 
-This also decorates the returned object so that it has same qualname, docstring
-and whatnot."""
-        super().__init__(fs=[f]); self.f = f
-        update_wrapper(self, f)
-    def __ror__(self, it:T) -> T:
-        return self.f(it)
-class apply(BaseCli):
-    def __init__(self, f:Callable[[str], str], column:int=None):
-        """Applies a function f to every line.
-Example::
-
-    # returns [0, 1, 4, 9, 16]
-    range(5) | apply(lambda x: x**2) | deref()
-    # returns [[3.0, 1.0, 1.0], [3.0, 1.0, 1.0]]
-    torch.ones(2, 3) | apply(lambda x: x+2, 0) | deref()
-
-You can also use this as a decorator, like this::
-
-    @apply
-    def f(x):
-        return x**2
-    # returns [0, 1, 4, 9, 16]
-    range(5) | f | deref()
-
-:param column: if not None, then applies the function to that column only"""
-        super().__init__(fs=[f]);
-        self.f = f; self.column = column
-    def __ror__(self, it:Iterator[str]):
-        super().__ror__(it); f = fastF(self.f); c = self.column
-        if c is None: return (f(line) for line in it)
-        else: return ([(e if i != c else f(e)) 
-                       for i, e in enumerate(row)] for row in it)
-def applyMpBatched(f, bs=32, prefetch=2, timeout=5, **kwargs):
-    """Pretty much the same as :class:`applyMp` and has the same feel to it
-too. Iterator[A] goes in, Iterator[B] goes out, and you specify `f(A) -> B`.
-However, this will launch jobs that will execute multiple f(), instead of
-1 job per execution. All examples from :class:`applyMp` should work perfectly
-here."""
-    return cli.batched(bs, True) | applyMp(apply(f) | cli.deref(), prefetch, timeout, **kwargs) | cli.joinStreams()
-class applyCached(BaseCli):
-    def __init__(self, f, limit:int=1000):
-        """Like :class:`apply`, but caches the results, so subsequent requests
-are faster. All examples from :class:`apply` should work. Example::
-
-    # returns [0, 1, 4, 9, 16, 0, 1, 4, 9, 16]
-    [*range(5), *range(5)] | applyCached(lambda x: x**2) | cli.deref()
-
-I'm thinking about just adding a ``cacheLimit`` argument to :class:`apply`, and
-have it integrate with everything. However, this feature doesn't seem useful
-enough yet. May be in a future version.
-
-:param limit: max cache size"""
-        super().__init__(fs=[f]); self.f = f
-        self.limit = limit; self.lookup = dict()
+All examples from :class:`applyMp` should work perfectly here."""
+        super().__init__(fs=[f]); self.f = f; self.bs = bs
+        self.prefetch = prefetch; self.timeout = timeout
     def __ror__(self, it):
-        lookup = self.lookup; f = fastF(self.f); limit = self.limit
-        for e in it:
-            if e not in lookup:
-                lookup[e] = f(e)
-            yield lookup[e]
-            if len(lookup) > limit: del a[next(iter(a.keys()))]
+        if self.bs > 1:
+            yield from (it | cli.batched(self.bs, True) | applyTh(apply(self.f), self.prefetch, self.timeout) | cli.joinStreams()); return
+        datas = deque(); it = iter(it)
+        innerF = fastF(self.f); timeout = self.timeout
+        def f(line, wrapper): wrapper.value = innerF(line)
+        for _, line in zip(range(self.prefetch), it):
+            w = k1lib.Wrapper(thEmptySentinel)
+            t = threading.Thread(target=f, args=(line,w))
+            t.start(); datas.append((t, w))
+        for line in it:
+            data = datas.popleft(); data[0].join(timeout)
+            if data[1].value is thEmptySentinel:
+                for data in datas: data[0].join(0.01)
+                raise RuntimeError("Thread timed out!")
+            yield data[1].value; w = k1lib.Wrapper(thEmptySentinel)
+            t = threading.Thread(target=f, args=(line,w))
+            t.start(); datas.append((t, w))
+        for i in range(len(datas)): # do it this way so that python can remove threads early, due to ref counting
+            data = datas.popleft(); data[0].join(timeout)
+            if data[1].value is thEmptySentinel:
+                for data in datas: data[0].join(0.01)
+                raise RuntimeError("Thread timed out!")
+            yield data[1].value
 class applySerial(BaseCli):
     def __init__(self, f, includeFirst=False):
         """Applies a function repeatedly. First yields input iterator ``x``. Then
@@ -247,8 +282,8 @@ Example::
 def remove(s:str, column:int=None):
     """Removes a specific substring in each line."""
     return replace(s, "", column)
-def _op(toOp, c, force, defaultValue):
-    return apply(toOp, c) | (apply(lambda x: x or defaultValue, c) if force else (~cli.filt(cli.op() == None, c)))
+def _toop(toOp, c, force, defaultValue):
+    return apply(toOp, c) | (apply(lambda x: x or defaultValue, c) if force else cli.filt(cli.op() != None, c))
 def _toFloat(e) -> Union[float, None]:
     try: return float(e)
     except: return None
@@ -271,8 +306,8 @@ With weird rows::
     convert all the specified columns
 :param force: if True, forces weird values to 0.0, else filters out all weird rows"""
     if len(columns) > 0:
-        return cli.init.serial(*(_op(_toFloat, c, force, 0.0) for c in columns))
-    else: return _op(_toFloat, None, force, 0.0)
+        return cli.init.serial(*(_toop(_toFloat, c, force, 0.0) for c in columns))
+    else: return _toop(_toFloat, None, force, 0.0)
 def _toInt(e) -> Union[int, None]:
     try: return int(float(e))
     except: return None
@@ -288,8 +323,8 @@ def toInt(*columns:List[int], force=False):
 
 See also: :meth:`toFloat`"""
     if len(columns) > 0:
-        return cli.init.serial(*(_op(_toInt, c, force, 0) for c in columns))
-    else: return _op(_toInt, None, force, 0)
+        return cli.init.serial(*(_toop(_toInt, c, force, 0) for c in columns))
+    else: return _toop(_toInt, None, force, 0)
 class sort(BaseCli):
     def __init__(self, column:int=0, numeric=True, reverse=False):
         """Sorts all lines based on a specific `column`.
@@ -462,6 +497,9 @@ you can still combine with other cli tools as usual, for example::
     
     # returns [[8, 18], [9, 19]], demonstrating you can treat `op()` as a regular function
     [range(10), range(10, 20)] | transpose() | filt(op() > 7, 0) | deref()
+
+This can only deal with simple operations only. For complex operations, resort
+to the longer version ``applyS(lambda x: ...)`` instead!
 
 Performance-wise, there are some, but not a lot of degradation, so don't worry
 about it. Simple operations executes pretty much on par with native lambdas::

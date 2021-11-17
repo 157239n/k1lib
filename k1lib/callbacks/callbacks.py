@@ -154,6 +154,10 @@ for more."""
     def __call__(self, checkpoint):
         if not self.suspended and hasattr(self, checkpoint):
             return getattr(self, checkpoint)() != None
+    def attached(self):
+        """Called when this is added to a :class:`Callback`. Overrides this to
+do custom stuff when this happens."""
+        pass
     def detach(self):
         """Detaches from the parent :class:`Callbacks`"""
         self.cbs.remove(self.name); return self
@@ -242,8 +246,10 @@ you set :attr:`k1lib.Learner.cbs` to this :class:`Callbacks`"""
             while f"{name}{i}" in self.cbsDict: i += 1
             name = f"{name}{i}"
         cb.name = name; self.cbsDict[name] = cb; self._sort()
-        self._appendContext_append(cb); cb("appended"); return self
-    def __contains__(self, e:str) -> bool: return e in self.cbsDict
+        self._appendContext_append(cb); cb("attached"); return self
+    def __contains__(self, e:str) -> bool:
+        """Whether a specific Callback name is in this :class:`Callback`."""
+        return e in self.cbsDict
     def remove(self, *names:List[str]):
         """Removes a callback from the collection."""
         for name in names:
@@ -266,10 +272,17 @@ Returns True if any of the checkpoints return anything at all"""
             self._timings[checkpoint] += _time() - beginTime
         return answer
     def __getitem__(self, idx:Union[int, str]) -> Callback:
+        """Get specific cbs.
+
+:param idx: if :class:`str`, then get the Callback with this specific name,
+    if :class:`int`, then get the Callback in that index."""
         return self.cbs[idx] if isinstance(idx, int) else self.cbsDict[idx]
     def __iter__(self) -> Iterator[Callback]:
+        """Iterates through all :class:`Callback`."""
         for cb in self.cbsDict.values(): yield cb
-    def __len__(self): return len(self.cbsDict)
+    def __len__(self):
+        """How many :class:`Callback` are there in total?"""
+        return len(self.cbsDict)
     def __getattr__(self, attr):
         if attr == "cbsDict": raise AttributeError(attr)
         if attr in self.cbsDict: return self.cbsDict[attr]

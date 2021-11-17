@@ -8,7 +8,7 @@ from typing import overload, Iterator, Any, List, Set, Union
 import k1lib
 __all__ = ["size", "shape", "item", "identity", "iden",
            "toStr", "join", "toNumpy", "toTensor",
-           "toList", "wrapList", "toSet", "toIter", "toRange",
+           "toList", "wrapList", "toSet", "toIter", "toRange", "toType",
            "equals", "reverse", "ignore",
            "toSum", "toAvg", "toMean", "toMax", "toMin",
            "lengths", "headerIdx", "deref"]
@@ -17,7 +17,7 @@ def exploreSize(it):
     if isinstance(it, str): raise TypeError("Just here to terminate shape()")
     sentinel = object(); it = iter(it)
     o = next(it, sentinel); count = 1
-    if o == sentinel: return None, 0
+    if o is sentinel: return None, 0
     try:
         while True:
             next(it)
@@ -47,6 +47,14 @@ Example::
     ["abc"] | size()
     # returns (1, 2, 3)
     [torch.randn(2, 3)] | size()
+    # returns (2, 3, 5)
+    size()(np.random.randn(2, 3, 5))
+
+There's also :class:`lengths`, which is sort of a simplified/faster version of
+this, but only use it if you are sure that ``len(it)`` can be called.
+
+If encounter PyTorch tensors or Numpy arrays, then this will just get the shape
+instead of actually looping over them.
 
 :param idx: if idx is None return (rows, columns). If 0 or 1, then rows or
     columns"""
@@ -57,7 +65,7 @@ Example::
             answer = []
             try:
                 while True:
-                    if isinstance(it, torch.Tensor):
+                    if isinstance(it, (torch.Tensor, np.ndarray)):
                         tuple(answer + list(it.shape))
                     it, s = exploreSize(it)
                     answer.append(s)
@@ -166,6 +174,14 @@ class toRange(BaseCli):
     """Returns iter(range(len(it))), effectively"""
     def __ror__(self, it:Iterator[Any]) -> Iterator[int]:
         for i, _ in enumerate(it): yield i
+class toType(BaseCli):
+    """Converts object to its type.
+Example::
+
+    # returns [int, float, str, torch.Tensor]
+    [2, 3.5, "ah", torch.randn(2, 3)] | toType() | deref()"""
+    def __ror__(self, it:Iterator[T]) -> Iterator[type]:
+        for e in it: yield type(e)
 class _EarlyExp(Exception): pass
 class equals:
     """Checks if all incoming columns/streams are identical"""
@@ -260,7 +276,7 @@ Example::
     ["abc"] | headerIdx() | deref()"""
     return item() | cli.wrapList() | cli.transpose() | cli.insertIdColumn(True)
 Tensor = torch.Tensor
-atomicTypes = (numbers.Number, np.number, str, torch.nn.Module)
+atomicTypes = (numbers.Number, np.number, str, dict, torch.nn.Module)
 class inv_dereference(BaseCli):
     def __init__(self, ignoreTensors=False):
         """Kinda the inverse to :class:`dereference`"""
@@ -319,8 +335,8 @@ You can also specify a ``maxDepth``::
         except: return it
         self.depth += 1; answer = []
         for e in it:
-            if e == cli.yieldSentinel: return answer
-            answer.append(e | self)
+            if e is cli.yieldSentinel: return answer
+            answer.append(self.__ror__(e))
         self.depth -= 1
         return answer
     def __invert__(self) -> BaseCli:

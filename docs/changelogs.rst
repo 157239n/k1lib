@@ -2,6 +2,37 @@
 Changelogs
 ==========
 
+`0.10 </0.10>`_
+---------------
+
+.. currentmodule:: k1lib.callbacks
+
+DL:
+
+- Added :meth:`~k1lib.nbCells`, :meth:`~k1lib.timer`
+- Changed :class:`~k1lib.Absorber` methods so that it won't use special words like
+  ``int``, ``float``, ``len``, ``str`` and added :meth:`~k1lib.Absorber.ab_contains`
+  and :meth:`~k1lib.Absorber.ab_fastF`.
+- Revamped lots of Callbacks docs
+- Renamed :class:`~k1lib.CaptureStdout` to :class:`~k1lib.captureStdout`, to match
+  context manager's styles.
+
+.. currentmodule:: k1lib.cli
+
+Cli:
+
+- Added ``utilization`` parameter to :class:`~modifier.applyMp`.
+- Added :meth:`~init.fastF`
+- Added tensor mode to :class:`~filt.mask`.
+- Added ``filt`` and ``apply`` modes with columns to :class:`~trace.trace`.
+- Made :class:`~utils.deref` so that it ignores dictionaries.
+- Added some compatibility with numpy arrays across clis.
+- Added ``cacheLimit`` parameter to :class:`~modifier.apply` and as a consequence,
+  removed :class:`~modifier.applyCached`.
+- Added :class:`~utils.toType` and :class:`~modifier.applyTh`.
+- Added ``bs`` parameter to :class:`~modifier.applyMp` and as a consequence, removed
+  :meth:`~modifier.applyMpBatched`.
+
 `0.9 </0.9>`_
 -------------
 

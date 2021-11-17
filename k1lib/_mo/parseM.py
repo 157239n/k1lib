@@ -25,8 +25,10 @@ bMids = mids + ["fluoro", "chloro", "bromo", "iodo", "nitro", "phenyl", "perfluo
 branch_mid = "(?P<branch_mid>" + join(bMids) + ")"
 branch_suf = "(?P<branch_suf>yl)"
 branch = f"(?P<branch>{branch_pre}?{branch_mid}{branch_suf}?[ ]?)"; branchC = re.compile(f"^{branch}$")
-fullStrictC = re.compile(fullStrict := f"^{branch}*{main}")
-fullC = re.compile(full := f"{branch}*{main}")
+fullStrict = f"^{branch}*{main}"
+fullStrictC = re.compile(fullStrict)
+full = f"{branch}*{main}"
+fullC = re.compile(full)
 def recognizeInit(ogS:str) -> Union[Tuple[List[str], List[str]], str]:
     """Tries to recognize the input sequence. Returns the sequence if can't understand, else
 returns tuple (mainParts, branches)."""

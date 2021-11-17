@@ -3,12 +3,17 @@
 profilers module
 =================================
 
-This package is not supposed to be used by the end user though. These are
-just helpful modules used by :mod:`k1lib.callbacks.profiler`
+These are subcallbacks reachable by :class:`~k1lib.callbacks.profiler.Profiler`.
+When you try to access a subcallback (like ``computation``), like this::
 
-Documenting everything here is kinda awkward, as just using it, you'll get a better
-idea of what's happening. If you want to dive deeper, then by all means, check out
-the source codes
+   l = k1lib.Learner.sample()
+   l.cbs.add(Cbs.Profiler())
+   l.Profiler.computation # accessing the field
+
+\.\.\.Profiler will temporarily attaches a specific subcallback, runs it, stores
+data, and then detachs it, so that you can only access it via ``l.Profiler.computation``
+later on. Subsequent accesses don't actually run the subcallback again, but just
+displays the cached value.
 
 computation module
 ^^^^^^^^^^^^^^^^^^^^^^^^^

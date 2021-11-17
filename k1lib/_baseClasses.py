@@ -4,7 +4,7 @@
 """
 from typing import Callable, Iterator, Tuple, Union, Dict, Any, List
 from k1lib import isNumeric; import k1lib
-import random, torch, math, numpy as np
+import random, torch, math, sys, io, numpy as np
 __all__ = ["Object", "Range", "Domain", "AutoIncrement", "Wrapper", "Every",
            "RunOnce", "MaxDepth", "Absorber"]
 class Object:
@@ -534,9 +534,35 @@ source code."""
         self._ab_sentinel = False
     def ab_operate(self, x):
         """Special method to actually operate on an object and get the result. Not
-absorbed."""
+absorbed. Example::
+
+    # returns 6
+    (op() * 2).ab_operate(3)"""
         for desc, step in self._ab_steps: x = step(x)
         return x
+    def ab_fastF(self):
+        """Returns a function that operates on the input (just like :meth:`ab_operate`),
+but much faster, suitable for high performance tasks. Example::
+
+    f = (k1lib.Absorber() * 2).ab_fastF()
+    # returns 6
+    f(3)"""
+        s = self._ab_steps; l = len(s)
+        if l == 0: return lambda x: x
+        if l == 1: return s[0][1]
+        if l == 2:
+            a, b = s[0][1], s[1][1]
+            return lambda x: b(a(x))
+        if l == 3:
+            a, b, c = s[0][1], s[1][1], s[2][1]
+            return lambda x: c(b(a(x)))
+        if l == 4:
+            a, b, c, d = s[0][1], s[1][1], s[2][1], s[3][1]
+            return lambda x: d(c(b(a(x))))
+        if l == 5:
+            a, b, c, d, e = s[0][1], s[1][1], s[2][1], s[3][1], s[4][1]
+            return lambda x: e(d(c(b(a(x)))))
+        return self.ab_operate
     def __getattr__(self, idx):
         if isinstance(idx, str) and idx.startswith("_"): raise AttributeError()
         self._ab_steps.append([["__getattr__", idx], lambda x: getattr(x, idx)]); return self
@@ -594,17 +620,20 @@ operations if it's False."""
     def __pos__(self):    self._ab_steps.append([["__pos__"],    lambda x: +x      ]); return self
     def __abs__(self):    self._ab_steps.append([["__abs__"],    lambda x: abs(x)  ]); return self
     def __invert__(self): self._ab_steps.append([["__invert__"], lambda x: ~x      ]); return self
-    def int(self):
+    def ab_int(self):
         """Replacement for ``int(ab)``, as that requires returning an actual :class:`int`."""
         self._ab_steps.append([["__int__"],    lambda x: int(x)  ]); return self
     def __int__(self):    return self.int()
-    def float(self):
+    def ab_float(self):
         """Replacement for ``float(ab)``, as that requires returning an actual :class:`float`."""
         self._ab_steps.append([["__float__"],  lambda x: float(x)]); return self
     def __float__(self):  return self.float()
-    def str(self):
+    def ab_str(self):
         """Replacement for ``str(ab)``, as that requires returning an actual :class:`str`."""
         self._ab_steps.append([["__str__"],    lambda x: str(x)  ]); return self
-    def len(self):
+    def ab_len(self):
         """Replacement for ``len(ab)``, as that requires returning an actual :class:`int`."""
         self._ab_steps.append([["__len__"],    lambda x: len(x)  ]); return self
+    def ab_contains(self, key):
+        """Replacement for ``key in ab``, as that requires returning an actual :class:`int`."""
+        self._ab_steps.append([["__contains__", key], lambda x: key in x]); return self

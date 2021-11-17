@@ -1,7 +1,7 @@
 .. module:: k1lib.cli
 
 k1lib.cli module
-=========================
+================
 
 The main idea of this package is to emulate the terminal (hence "cli", or "command
 line interface"), but doing all of that inside Python itself. So this bash statement:
@@ -56,15 +56,36 @@ check over this:
 
    streams
 
+All clis tools should work totally fine with PyTorch tensors, but not numpy arrays.
+This is because numpy arrays actually implements ``__or__`` operator, which overrides
+cli tools' ``__ror__`` operator. Workarounds might look like this::
+
+   # returns (2, 3, 5), works fine
+   torch.randn(2, 3, 5) | shape()
+   # will not work, returns weird numpy array of shape (2, 3, 5)
+   np.random.randn(2, 3, 5) | shape()
+   # returns (2, 3, 5), mitigation strategy #1
+   shape()(np.random.randn(2, 3, 5))
+   # returns (2, 3, 5), mitigation strategy #2
+   [np.random.randn(2, 3, 5)] | (item() | shape())
+
+Where to start?
+-------------------------
+
 Core clis include :class:`~modifier.apply`, :class:`~modifier.applyS` (its
 multiprocessing cousins :class:`~modifier.applyMp` and :class:`~modifier.applyMpBatched`
-are great too), :class:`~modifier.op`, :class:`~filt.filt` and :class:`~utils.deref`,
-so start reading there first. Then, skim over everything to know what you can do with
-these collection of tools. While you're doing that, checkout :meth:`~trace.trace`,
-for a quite powerful debugging tool.
+are great too), :class:`~modifier.op`, :class:`~filt.filt`, :class:`~utils.deref`,
+:class:`~utils.item`, :class:`~utils.shape`, :class:`~utils.iden`, so start reading
+there first. Then, skim over everything to know what you can do with these
+collection of tools. While you're doing that, checkout :meth:`~trace.trace`, for a
+quite powerful debugging tool.
+
+There are several `written tutorials <../tutorials.html>`_ about cli here, and I
+also made some `video tutorials <https://www.youtube.com/playlist?list=PLP1sw-g877osNI_dMXwR72kVDREeHsYnt>`_
+as well, so go check those out.
 
 bio module
-^^^^^^^^^^^^^^^^^^^^^^^^^
+-------------------------
 
 .. automodule:: k1lib.cli.bio
    :members:
@@ -72,7 +93,7 @@ bio module
    :show-inheritance:
 
 entrez module
-^^^^^^^^^^^^^^^^^^^^^^^^^
+-------------------------
 
 .. automodule:: k1lib.cli.entrez
    :members:
@@ -80,7 +101,7 @@ entrez module
    :show-inheritance:
 
 mgi module
-^^^^^^^^^^^^^^^^^^^^^^^^^
+-------------------------
 
 .. automodule:: k1lib.cli.mgi
    :members:
@@ -88,7 +109,7 @@ mgi module
    :show-inheritance:
 
 filt module
-^^^^^^^^^^^^^^^^^^^^^^^^^
+-------------------------
 
 .. automodule:: k1lib.cli.filt
    :members:
@@ -96,7 +117,7 @@ filt module
    :show-inheritance:
 
 gb module
-^^^^^^^^^^^^^^^^^^^^^^^^^
+-------------------------
 
 .. automodule:: k1lib.cli.gb
    :members:
@@ -104,7 +125,7 @@ gb module
    :show-inheritance:
 
 grep module
-^^^^^^^^^^^^^^^^^^^^^^^^^
+-------------------------
 
 .. automodule:: k1lib.cli.grep
    :members:
@@ -112,7 +133,7 @@ grep module
    :show-inheritance:
 
 init module
-^^^^^^^^^^^^^^^^^^^^^^^^^
+-------------------------
 
 .. autoattribute:: k1lib.cli.cliSettings
 
@@ -150,12 +171,12 @@ init module
    :show-inheritance:
 
 .. automodule:: k1lib.cli.init
-   :members: serial, oneToMany, manyToMany, manyToManySpecific
+   :members: serial, oneToMany, manyToMany, manyToManySpecific, fastF
    :undoc-members:
    :show-inheritance:
 
 inp module
-^^^^^^^^^^^^^^^^^^^^^^^^^
+-------------------------
 
 .. automodule:: k1lib.cli.inp
    :members:
@@ -163,7 +184,7 @@ inp module
    :show-inheritance:
 
 kcsv module
-^^^^^^^^^^^^^^^^^^^^^^^^^
+-------------------------
 
 .. automodule:: k1lib.cli.kcsv
    :members:
@@ -171,7 +192,7 @@ kcsv module
    :show-inheritance:
 
 kxml module
-^^^^^^^^^^^^^^^^^^^^^^^^^
+-------------------------
 
 .. automodule:: k1lib.cli.kxml
    :members:
@@ -179,7 +200,7 @@ kxml module
    :show-inheritance:
 
 modifier module
-^^^^^^^^^^^^^^^^^^^^^^^^^
+-------------------------
 
 .. automodule:: k1lib.cli.modifier
    :members:
@@ -187,7 +208,7 @@ modifier module
    :show-inheritance:
 
 output module
-^^^^^^^^^^^^^^^^^^^^^^^^^
+-------------------------
 
 .. automodule:: k1lib.cli.output
    :members:
@@ -195,7 +216,7 @@ output module
    :show-inheritance:
 
 sam module
-^^^^^^^^^^^^^^^^^^^^^^^^^
+-------------------------
 
 .. automodule:: k1lib.cli.sam
    :members:
@@ -203,7 +224,7 @@ sam module
    :show-inheritance:
 
 structural module
-^^^^^^^^^^^^^^^^^^^^^^^^^
+-------------------------
 
 .. currentmodule:: k1lib.cli.structural
 
@@ -223,7 +244,7 @@ structural module
       :members:
 
 trace module
-^^^^^^^^^^^^^^^^^^^^^^^^^
+-------------------------
 
 .. automodule:: k1lib.cli.trace
    :members:
@@ -231,7 +252,7 @@ trace module
    :show-inheritance:
 
 utils module
-^^^^^^^^^^^^^^^^^^^^^^^^^
+-------------------------
 
 .. automodule:: k1lib.cli.utils
    :members:
@@ -239,7 +260,7 @@ utils module
    :show-inheritance:
 
 others module
-^^^^^^^^^^^^^^^^^^^^^^^^^
+-------------------------
 
 .. automodule:: k1lib.cli.others
    :members:
@@ -251,7 +272,7 @@ There are a couple monkey-patched clis:
 .. automethod:: torch.stack
 
 Elsewhere in the library
-^^^^^^^^^^^^^^^^^^^^^^^^^
+-------------------------
 
 There might still be more cli tools scattered around the library. These are pretty
 rare, quite dynamic and most likely a cool extra feature, not a core functionality,

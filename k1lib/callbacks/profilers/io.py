@@ -21,19 +21,28 @@ class IOData:
         a = f"{self.iS}".ljust(_li); b = f"{self.oS}".ljust(_li)
         return f"{a}{b}"
 class IOProfiler(Callback):
-    """Gets input and output shapes of each layer"""
+    """Gets input and output shapes of each layer.
+Example::
+    
+    l = k1lib.Learner.sample()
+    l.cbs.add(Cbs.Profiler())
+    # views table
+    l.Profiler.io
+    # views table highlighted
+    l.Profiler.io.css("#lin1")
+"""
     def startRun(self):
         if not hasattr(self, "selector"): # if no selectors found
             self.selector = self.l.model.select("")
         for m in self.selector.modules(): m.data = IOData(self, m)
         self.selector.displayF = lambda m: (k1lib.fmt.txt.red if "_ioProf_" in m else k1lib.fmt.txt.identity)(m.data)
     def startStep(self): return True
-    def run(self):
+    def _run(self):
         """Runs everything"""
         with self.cbs.suspendEval(): self.l.run(1, 1)
         for m in self.selector.modules(): m.data.unhook()
     def css(self, css:str):
-        """Selects a small part of the network to highlight"""
+        """Selects a small part of the network to highlight. See also: :mod:`k1lib.selector`."""
         self.selector.parse(k1lib.selector.preprocess(css, "_ioProf_"))
         print(self.__repr__()); self.selector.clearProps()
     def __repr__(self):
