@@ -51,7 +51,7 @@ templates_path = ['_templates']
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', '**/.ipynb_checkpoints', '.ipynb_checkpoints', '**/_*', '_*']
+exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', '**/.ipynb_checkpoints', '.ipynb_checkpoints', '**/_*', '_*', "literals/*", "literals/**/*"]
 
 
 # -- Options for HTML output -------------------------------------------------
@@ -73,3 +73,9 @@ intersphinx_mapping = {
     'PIL': ('https://pillow.readthedocs.io/en/stable/', None),
 }
 
+# generating literals
+
+with open("literals/settings.rst", "w") as f:
+    with k1lib.captureStdout() as out:
+        print(k1lib.settings.__repr__())
+    f.write(".. code-block:: text\n\n" + "\n".join([f"   {e}" for e in out]))

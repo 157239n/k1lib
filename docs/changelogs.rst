@@ -2,6 +2,39 @@
 Changelogs
 ==========
 
+`0.11 </0.11>`_
+---------------
+
+.. currentmodule:: k1lib.callbacks
+
+DL:
+
+- Added :class:`~k1lib.Settings`, and the centralized :attr:`~k1lib.settings` for the
+  entire library. As a consequence, moved :attr:`k1lib.cli.cliSettings` to
+  :attr:`~k1lib.settings` under name "cli".
+- Added :class:`~limits.TrainOnly`, :class:`~limits.ValidOnly`.
+- Removed "pause" concept from :class:`~callbacks.Callback`.
+- Patched :meth:`torch.Tensor.positionalEncode`, and removed procedural version
+  (:meth:`k1lib.positionalEncode`).
+- Added :class:`knn.MultiheadAttention`.
+
+.. currentmodule:: k1lib.cli
+
+Cli:
+
+- Added multidimensional mode to :class:`~structural.transpose`.
+- Changed param position of :class:`~utils.deref` so that it's more convenient.
+- Moved :class:`inp.toPIL` to :class:`utils.toPIL`, to be more consistent.
+- Added :mod:`~k1lib.cli.nb`. As a consequence, removed :meth:`~k1lib.nbCells` and
+  :meth:`~k1lib.executeNb`.
+- Added temporary file and append features to :meth:`~output.file`.
+- Added immediate resolve option to :class:`~inp.cmd`.
+- Added ``N`` option (max sections) and changed :meth:`~grep.grep.till` mechanics
+  in :class:`~grep.grep`. Also added ``sep`` option and as a consequence, removed
+  :class:`~grep.grepToTable`.
+- Added home directory support for :class:`~output.file`, :meth:`~inp.cat` and
+  :meth:`~inp.ls`.
+
 `0.10 </0.10>`_
 ---------------
 

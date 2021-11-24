@@ -3,10 +3,10 @@
 .. module:: k1lib
 """
 from typing import Callable, Iterator, Tuple, Union, Dict, Any, List
-from k1lib import isNumeric; import k1lib
-import random, torch, math, sys, io, numpy as np
+from k1lib import isNumeric; import k1lib, contextlib
+import random, torch, math, sys, io, os, numpy as np
 __all__ = ["Object", "Range", "Domain", "AutoIncrement", "Wrapper", "Every",
-           "RunOnce", "MaxDepth", "Absorber"]
+           "RunOnce", "MaxDepth", "Absorber", "Settings", "settings"]
 class Object:
     """Convenience class that acts like :class:`~collections.defaultdict`. You
 can use it like a normal object::
@@ -409,6 +409,8 @@ it gets incremented by 1 automatically. Example::
         if self._value >= self.n: self._value = 0
         return self.value
 class Wrapper:
+    value:Any
+    """Internal value of this :class:`Wrapper`"""
     def __init__(self, value):
         """Creates a wrapper for some value and get it by calling it.
 Example::
@@ -418,7 +420,14 @@ Example::
     a()[:10]
 
 This exists just so that Jupyter Lab's contextual help won't automatically
-display the (possibly humongous) value."""
+display the (possibly humongous) value. Could be useful if you want to pass a
+value by reference everywhere like this::
+
+    o = k1lib.Wrapper(None)
+    def f(obj):
+        obj.value = 3
+    f(o)
+    o() # returns 3"""
         self.value = value
     def __call__(self): return self.value
 class Every:
@@ -637,3 +646,81 @@ operations if it's False."""
     def ab_contains(self, key):
         """Replacement for ``key in ab``, as that requires returning an actual :class:`int`."""
         self._ab_steps.append([["__contains__", key], lambda x: key in x]); return self
+sep = "\u200b" # weird separator, guaranteed (mostly) to not appear anywhere in the
+# settings, so that I can pretty print it
+class Settings:
+    def __init__(self, **kwargs):
+        """Creates a new settings object. Basically fancy version of :class:`dict`.
+Example::
+
+    s = Settings(a=3, b="42")
+    s.c = Settings(d=8)
+    
+    s.a # returns 3
+    s.b # returns "42"
+    s.c.d # returns 8
+    print(s) # prints nested settings nicely"""
+        self._setattr_sentinel = True
+        for k, v in kwargs.items(): setattr(self, k, v)
+        self._docs = dict(); self._cbs = dict()
+        self._setattr_sentinel = False
+    @contextlib.contextmanager
+    def context(self, **kwargs):
+        """Context manager to temporarily modify some settings. Applies
+to all sub-settings. Example::
+
+    s = Settings(a=3, b="42", c=Settings(d=8))
+    with s.context(a=4):
+        s.c.d = 20
+        s.a # returns 4
+        s.c.d # returns 20
+    s.a # returns 3
+    s.c.d # returns 8"""
+        oldValues = dict(self.__dict__)
+        with contextlib.ExitStack() as stack:
+            for _, sub in self._subSettings():
+                stack.enter_context(sub.context())
+            for k, v in kwargs.items(): setattr(self, k, v)
+            yield
+        for k, v in oldValues.items(): setattr(self, k, v)
+    def add(self, k:str, v:Any, docs:str="", cb:Callable[[Any], None]=None) -> "Settings":
+        """Long way to add a variable. Advantage of this is that you can slip in extra
+documentation for the variable. Example::
+
+    s = k1lib.Settings()
+    s.add("a", 3, "some docs")
+    print(s) # displays the extra docs
+
+:param cb: callback if any property changes"""
+        setattr(self, k, v); self._docs[k] = docs
+        self._cbs[k] = cb; return self
+    def _docsOf(self, k:str):
+        return f"{self._docs[k]}" if k in self._docs else ""
+    def _subSettings(self) -> List[Tuple[str, "Settings"]]:
+        return [(k, v) for k, v in self.__dict__.items() if isinstance(v, Settings) and not k.startswith("_")]
+    def _simpleSettings(self) -> List[Tuple[str, Any]]:
+        return [(k, v) for k, v in self.__dict__.items() if not isinstance(v, Settings) and not k.startswith("_")]
+    def __setattr__(self, k, v):
+        self.__dict__[k] = v
+        if k != "_setattr_sentinel" and not self._setattr_sentinel:
+            if k in self._cbs and self._cbs[k] is not None: self._cbs[k](v)
+    def __repr__(self):
+        """``includeDocs`` mainly used internally when generating docs in sphinx."""
+        ks = list(k for k in self.__dict__ if not k.startswith("_"))
+        kSpace = max([1, *(ks | k1lib.cli.lengths())]); s = "Settings:\n"
+        for k, v in self._simpleSettings():
+            s += f"- {k.ljust(kSpace)} = {k1lib.limitChars(str(v), 50)}{sep}{self._docsOf(k)}\n"
+        for k, v in self._subSettings():
+            sub = k1lib.tab("\n".join(v.__repr__().split("\n")[1:-1]), "  ")
+            s += f"- {k.ljust(kSpace)} = <Settings>{sep}{self._docsOf(k)}\n" + sub + "\n"
+        return s.split("\n") | k1lib.cli.op().split(sep).all() | k1lib.cli.pretty(sep) | k1lib.cli.join("\n")
+settings = Settings().add("svgScale", 0.7, "default svg scales for clis that displays graphviz graphs")
+def _cb_wd(p):
+    if p != None:
+        p = os.path.abspath(os.path.expanduser(p)); os.chdir(p)
+    settings.__dict__["wd"] = p
+def _cb_blast(p):
+    if p != None: p = os.path.abspath(os.path.expanduser(p))
+    settings.bio.__dict__["blast"] = p
+settings.add("wd", os.getcwd(), "default working directory, will get from `os.getcwd()`. Will update using `os.chdir()` automatically when changed", _cb_wd)
+settings.add("bio", Settings().add("blast", None, "location of BLAST database", _cb_blast), "everything related to biology")

@@ -24,9 +24,8 @@ class feats(cli.BaseCli):
 are multiple terms, then filters for first term, then second, then third,
 so the term's order might matter to you"""
         if len(terms) == 0: return cli.identity()
-        if len(terms) > 1: return cli.init.serial(*(feats.filt(term) for term in terms))
-        return ((cli.grep(*terms) | cli.shape(0)) & cli.identity()).all()\
-        | ~cli.filt(cli.op() == 0, 0) | cli.cut(1)
+        if len(terms) > 1: return cli.deref() | cli.init.serial(*(feats.filt(term) for term in terms))
+        return cli.toList().all() | cli.filt(lambda F: F | cli.grep(terms[0]) | cli.shape(0) > 0)
     @staticmethod
     def tag(tag:str) -> cli.BaseCli:
         """Gets a single tag out. Applies this on a single feature only"""

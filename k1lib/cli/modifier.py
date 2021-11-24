@@ -34,7 +34,7 @@ and whatnot."""
     def __ror__(self, it:T) -> T:
         return self.f(it)
 class apply(BaseCli):
-    def __init__(self, f:Callable[[str], str], column:int=None, cache:int=0):
+    def __init__(self, f:Callable[[T], T], column:int=None, cache:int=0):
         """Applies a function f to every line.
 Example::
 
@@ -51,7 +51,7 @@ You can also use this as a decorator, like this::
     # returns [0, 1, 4, 9, 16]
     range(5) | f | deref()
 
-You can also adds a cache, like this::
+You can also add a cache, like this::
 
     def calc(i): time.sleep(0.5); return i**2
     # takes 2.5s
@@ -73,6 +73,7 @@ def executeFunc(common, line):
     import dill
     f, kwargs = dill.loads(common)
     return f(dill.loads(line), **kwargs)
+def terminateGraceful(): signal.signal(signal.SIGINT, signal.SIG_IGN)
 class applyMp(BaseCli):
     _pools = set()
     def __init__(self, f:Callable[[T], T], prefetch:int=None, timeout:float=8, utilization:float=0.8, bs:int=1, **kwargs):
@@ -134,6 +135,13 @@ pools (using :meth:`clearPools`), to terminate all child processes and thus free
 resources. On earlier versions, you have to do this manually before exiting, but now
 :class:`applyMp` is much more robust.
 
+Also, you should not immediately assume that :class:`applyMp` will always be faster
+than :class:`apply`. Remember that :class:`applyMp` will create new processes,
+serialize and transfer data to them, execute it, then transfer data back. If your code
+transfers a lot of data back and forth (compared to the amount of computation done), or
+the child processes don't have a lot of stuff to do before returning, it may very well
+be a lot slower than :class:`apply`.
+
 :param prefetch: if not specified, schedules all jobs at the same time. If
     specified, schedules jobs so that there'll only be a specified amount of
     jobs, and will only schedule more if results are actually being used.
@@ -153,9 +161,8 @@ resources. On earlier versions, you have to do this manually before exiting, but
         bs = self.bs; timeout = self.timeout
         if bs > 1:
             return it | cli.batched(bs, True) | applyMp(apply(self.f) | cli.deref(), self.prefetch, timeout, **self.kwargs) | cli.joinStreams()
-        self.p = p = mp.Pool(int(mp.cpu_count()*self.utilization), lambda: signal.signal(signal.SIGINT, signal.SIG_IGN))
-        applyMp._pools.add(p)
-        common = dill.dumps([self.f, self.kwargs])
+        self.p = p = mp.Pool(int(mp.cpu_count()*self.utilization), terminateGraceful)
+        applyMp._pools.add(p); common = dill.dumps([self.f, self.kwargs])
         def gen():
             try:
                 fs = deque()
@@ -275,8 +282,7 @@ Example::
     # returns ['104', 'ab0c']
     ["1234", "ab23c"] | replace("23", "0") | deref()
 
-:param target: if not specified, then use the default delimiter specified
-    in ``cliSettings``"""
+:param target: if not specified, then use the default delimiter specified in :attr:`~k1lib.settings`"""
     t = patchDefaultDelim(target)
     return apply(lambda e: e.replace(s, t), column)
 def remove(s:str, column:int=None):

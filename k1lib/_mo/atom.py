@@ -2,8 +2,9 @@
 """This module is for all things related to atoms, molecules and their simulations"""
 import k1lib
 from typing import Dict, List
-settings = {"overOctet": False}
-__all__ = ["settings", "Atom", "substances", "NoFreeElectrons", "OctetFull"]
+settings = k1lib.Settings().add("overOctet", False, "whether to allow making bonds that exceeds the octet rule")
+k1lib.settings.add("mo", settings, "from k1lib.mo module")
+__all__ = ["Atom", "substances", "NoFreeElectrons", "OctetFull"]
 class NoFreeElectrons(RuntimeError): pass
 class OctetFull(RuntimeError): pass
 # if Atom's gDepth is smaller than this, then it means that it has not been visited
@@ -129,9 +130,9 @@ def _makeRoom(self, nBonds:int):
         Hs = [bond for bond in self.bonds if bond.name == "H"]
         if len(Hs) >= nBondsToRemove:
             for i in range(nBondsToRemove): self.removeBond(Hs[i])
-        elif not settings['overOctet']:
+        elif not settings.overOctet:
             ans = input(f"Can't remove Hydrogen bonds to make room for new bond! Do you want to do anyway (y/n): ")
-            print("Btw, you can auto accept this by doing `mo.settings['overOctet'] = True`")
+            print("Btw, you can auto accept this by doing `settings.mo.overOctet = True`")
             if ans.lower()[0] != "y": raise OctetFull("Stopping...")
     availableE = len(self.eClouds) * 2 + self.freeE
     if availableE < nBonds: raise NoFreeElectrons(f"Can't make room for {nBonds} new bonds on {self.name}. Only {availableE} electrons left for bonds!")

@@ -27,6 +27,7 @@ Class :class:`torch.Tensor`
 .. automethod:: torch.Tensor.crissCross
 .. automethod:: torch.Tensor.histBounds
 .. automethod:: torch.Tensor.histScaled
+.. automethod:: torch.Tensor.positionalEncode
 .. automethod:: torch.Tensor.clearNan
 .. automethod:: torch.Tensor.hasNan
 .. automethod:: torch.Tensor.hasInfs
@@ -36,12 +37,12 @@ Module :mod:`torch`
 
 .. automethod:: torch.loglinspace
 
-Class :class:`graphviz.dot.Digraph`
+Class :class:`graphviz.Digraph`
 -------------------------------------
 
 .. automethod:: graphviz.dot.Digraph.__call__
 
-Class :class:`graphviz.dot.Graph`
+Class :class:`graphviz.Graph`
 -------------------------------------
 
 .. automethod:: graphviz.dot.Graph.__call__

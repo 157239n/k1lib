@@ -52,7 +52,7 @@ grab the last thing at the end of __ror__, hence "last" and not "end".
         if not self._reprRO():
             td = TraceData(None, self.lastTd.outS, None, "\\<end\\>")
             self._formNode(td); self._formEdge(self.lastTd, td)
-        dis.display(dis.SVG(k1lib.scaleSvg(self.g._repr_svg_(), cliSettings["svgScale"]))); return "<trace object>"
+        dis.display(dis.SVG(k1lib.scaleSvg(self.g._repr_svg_()))); return "<trace object>"
     def __ror__(self, it):
         """Alternative way to specify input."""
         #if self.inp != emptyInputSentinel: raise TraceException("Input to trace has already been set, but it's being set again (possibly due to `.all()`). Check last trace using ``trace.last``")

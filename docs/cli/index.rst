@@ -43,7 +43,7 @@ current environment, like this::
    from k1lib.imports import *
 
 Because there are a lot of clis, you may sometimes unintentionally overwritten an
-exposed cli tool. No oworries, every tool is also under the ``cli`` object, meaning
+exposed cli tool. No worries, every tool is also under the ``cli`` object, meaning
 you can use ``deref()`` or ``cli.deref()``.
 
 Besides operating on string iterators alone, this package can also be extra meta,
@@ -68,6 +68,8 @@ cli tools' ``__ror__`` operator. Workarounds might look like this::
    shape()(np.random.randn(2, 3, 5))
    # returns (2, 3, 5), mitigation strategy #2
    [np.random.randn(2, 3, 5)] | (item() | shape())
+
+All settings are at :attr:`~k1lib.settings` under name "cli".
 
 Where to start?
 -------------------------
@@ -135,35 +137,6 @@ grep module
 init module
 -------------------------
 
-.. autoattribute:: k1lib.cli.cliSettings
-
-   Main settings of :mod:`k1lib.cli`. When using::
-
-      from k1lib.cli import *
-
-   ...you can just set the settings like this::
-
-      cliSettings["defaultIndent"] = "\t"
-
-.. _cliSettings:
-
-   There are a few settings:
-
-   - defaultDelim: default delimiter used in-between columns when creating tables
-   - defaultIndent: default indent used for displaying nested structures
-   - lookupImgs: whether to automatically look up images when exploring something
-   - oboFile: gene ontology obo file location
-   - strict: whether strict mode is on. Turning it on can help you debug stuff, but
-     could also be a pain to work with
-   - svgScale: default svg scales for clis that displays graphviz graphs
-   - inf: infinity definition for many clis. Defaulted to just ``float("inf")``. Here
-     because you might want to temporarily not loop things infinitely.
-   - context: context manager to preserve old settings value. Example::
-
-      with cliSettings["context"]():
-         cliSettings["inf"] = 21
-      # old settings automatically restored
-
 .. autoclass:: k1lib.cli.init.BaseCli
    :members:
    :undoc-members:
@@ -203,6 +176,14 @@ modifier module
 -------------------------
 
 .. automodule:: k1lib.cli.modifier
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+nb module
+-------------------------
+
+.. automodule:: k1lib.cli.nb
    :members:
    :undoc-members:
    :show-inheritance:
@@ -267,9 +248,10 @@ others module
    :undoc-members:
    :show-inheritance:
 
-There are a couple monkey-patched clis:
+..
+   There are a couple monkey-patched clis:
 
-.. automethod:: torch.stack
+   .. automethod:: torch.stack
 
 Elsewhere in the library
 -------------------------

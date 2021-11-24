@@ -125,7 +125,7 @@ So yeah, you can easily make every checkpoint active/dormant by changing
 a single variable, how convenient. See over :meth:`Callbacks.suspend`
 for more."""
     def __init__(self):
-        self.l = None; self.cbs = None; self.suspended = False; self.paused = False
+        self.l = None; self.cbs = None; self.suspended = False
         self.name = self.__class__.__name__; self.dependsOn:Set[str] = set()
         self.order = 10 # can be modified by subclasses. A smaller order will be executed first
     def suspend(self):
@@ -163,19 +163,6 @@ do custom stuff when this happens."""
         self.cbs.remove(self.name); return self
 Cbs = k1lib.Object()
 Callback.lossCls = k1lib.Object()
-@k1lib.patch(Callback)
-def pause(self):
-    """Pauses the callback's main functionality for a while. This is a bit different
-from :meth:`Callbacks.suspend`, in that :meth:`Callbacks.suspend` will not call any
-cb's checkpoints at all. However, pausing it will only set an internal variable ``paused``,
-but all the checkpoints will be called normally. :class:`Callback` objects can then
-choose to turn off some checkpoints if deemed appropriate.
-
-This is kinda a niche functionality, and very few built-in :class:`Callback` s actually
-use this."""
-    oldValue = self.paused; self.paused = True
-    try: yield
-    finally: self.paused = oldValue
 class Timings:
     """List of checkpoint timings. Not intended to be instantiated by the end user.
 Used within :class:`~k1lib.callbacks.callbacks.Callbacks`, accessible via

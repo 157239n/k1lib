@@ -72,7 +72,7 @@ def analyzeFloat(l:Iterator[float]):
 Example::
 
     torch.linspace(-2, 2, 50) | kdata.analyzeFloat"""
-    l = l | deref(False); lf = l | toFloat() | toTensor()
+    l = l | deref(ignoreTensors=False); lf = l | toFloat() | toTensor()
     nl = l | shape(0); nlf = len(lf)
     print(f"Percent of useful data: {nlf}/{nl} ({round(100*nlf/nl)}%)")
     print(f"- Mean: {lf.mean()}"); print(f"- Std: {lf.std()}")

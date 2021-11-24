@@ -17,7 +17,7 @@ setup(
               "k1lib.callbacks", "k1lib.callbacks.profilers", 
               "k1lib.callbacks.lossFunctions",
               "k1lib._mo"],
-    version="0.10",
+    version="0.11",
     install_requires=["torch", "numpy>=1.14", "matplotlib>=2.0", "dill"],
     extras_require={"graphviz": ["graphviz"], "vision": ["torchvision", "pillow"], "skimage": ["scikit-image"]},
     description="Some nice ML overhaul",

@@ -5,7 +5,7 @@ For operations that feel like the termination
 from collections import defaultdict
 from typing import Iterator, Any
 from k1lib.cli.init import BaseCli, Table
-import torch, numbers, numpy as np, k1lib; from k1lib import cli
+import torch, numbers, numpy as np, k1lib, tempfile, os; from k1lib import cli
 __all__ = ["stdout", "file", "pretty", "display", "headOut", "intercept"]
 class stdout(BaseCli):
     """Prints out all lines. If not iterable, then print out the input raw.
@@ -21,7 +21,7 @@ Example::
             for line in it: print(line)
         except TypeError: print(it)
 class file(BaseCli):
-    def __init__(self, fileName:str, text:bool=True):
+    def __init__(self, fileName:str=None, text:bool=True):
         """Opens a new file for writing.
 Example::
 
@@ -37,23 +37,63 @@ Example::
     # returns ['5643']
     cat("test/a.bin") | deref()
 
+You can create temporary files on the fly::
+
+    # creates temporary file
+    url = range(3) > file()
+    # returns ['0', '1', '2']
+    cat(url) | deref()
+
+This can be especially useful when integrating with shell scripts that wants to
+read in a file::
+
+    seq1 = "CCAAACCCCCCCTCCCCCGCTTC"
+    seq2 = "CCAAACCCCCCCCTCCCCCCGCTTC"
+    # use "needle" program to locally align 2 sequences
+    None | cmd(f"needle {[seq1] > file()} {[seq2] > file()} -filter")
+
+You can also append to file with the ">>" operator::
+
+    url = range(3) > file()
+    # appended to file
+    range(10, 13) >> file(url)
+    # returns ['0', '1', '2', '10', '11', '12']
+    cat(url) | deref()
+
+:param fileName: if not specified, create new temporary file and returns the url
+    when pipes into it
 :param text: if True, accepts Iterator[str], and prints out each string on a
     new line. Else accepts bytes and write in 1 go."""
         super().__init__(); self.fileName = fileName; self.text = text
+        self.append = False # whether to append to file rather than erasing it
     def __ror__(self, it:Iterator[str]) -> None:
-        super().__ror__(it)
+        super().__ror__(it); fileName = self.fileName
+        if fileName is None:
+            f = tempfile.NamedTemporaryFile()
+            fileName = f.name; f.close()
+        fileName = os.path.expanduser(fileName)
         if self.text:
-            with open(self.fileName, "w") as f:
+            with open(fileName, "a" if self.append else "w") as f:
                 for line in it: f.write(f"{line}\n")
         else:
-            with open(self.fileName, "wb") as f: f.write(it)
+            with open(fileName, "ab" if self.append else "wb") as f: f.write(it)
+        return fileName
+    def __rrshift__(self, it):
+        self.append = True
+        return self.__ror__(it)
+    @property
+    def name(self):
+        """File name of this :class:`file`"""
+        return self.fileName
 class pretty(BaseCli):
-    """Pretty prints a table. Not really used directly.
+    def __init__(self, delim=""):
+        """Pretty prints a table. Not really used directly.
 Example::
 
     # These 2 statements are pretty much the same
     [range(10), range(10)] | head(5) | pretty() > stdout()
     [range(10), range(10)] | display()"""
+        self.delim = delim
     def __ror__(self, it:Table[Any]) -> Iterator[str]:
         table = []; widths = defaultdict(lambda: 0)
         for row in it:
@@ -63,10 +103,7 @@ Example::
                 widths[i] = max(len(e), widths[i])
             table.append(_row)
         for row in table:
-            s = ""
-            for w, e in zip(widths.values(), row):
-                s += e.rstrip(" ").ljust(w+3)
-            yield s
+            yield self.delim.join(e.rstrip(" ").ljust(w+3) for w, e in zip(widths.values(), row))
 def display(lines:int=10):
     """Convenience method for displaying a table"""
     f = pretty() | stdout()

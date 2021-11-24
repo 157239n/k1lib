@@ -71,7 +71,7 @@ Expected variables in :class:`~k1lib.Learner`:
 
 - accuracy: single float value from 0 to 1"""
         super().__init__(); self.order = 20
-        self.train = [0]; self.valid = [0]
+        self.train = [0]; self.valid = [0]; self.paused = True
         self._landscape = k1lib.callbacks.Landscape(lambda l: l.accuracy, "_AccuracyLandscape")
     @property
     def hasAccF(self):

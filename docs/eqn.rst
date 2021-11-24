@@ -6,7 +6,7 @@ k1lib.eqn module
 The idea of this module looks something like this::
 
    from k1lib.imports import *
-   k1lib.eqn.settings["eqnPrintExtras"] = False
+   settings.eqn.eqnPrintExtras = False
 
    s = k1lib.eqn.System("""
    # comments like this are okay. This section's for buying things
@@ -37,8 +37,8 @@ Output:
 
 
    Producers:
-   0. H2O + 16 MJ -> 0.11 H2 + 0.88 O2
-   1. 12 dollar -> O2
+   1. H2O + 16 MJ -> 0.11 H2 + 0.88 O2
+   2. 12 dollar -> O2
 
 Then, you can pick out a single equation that has another unique term "dollar"::
 

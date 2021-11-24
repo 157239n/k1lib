@@ -21,7 +21,7 @@ from . import schedule; schedule = wrapMod(schedule)
 from . import viz;      viz      = wrapMod(viz)
 
 #from . import gE
-from . import eqn
+from . import eqn;      eqn      = wrapMod(eqn)
 
 class _Mo(wrapMod):
     def __init__(self, mod): super().__init__(mod); self._MoWrap_dirs = ["registerSubstance"]

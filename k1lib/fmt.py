@@ -37,7 +37,9 @@ Example::
     (t | toTensor()).min() # min value should be close to 100
 """
     l = list(l)
-    idx = math.floor(math.log10(l | cli.toMax())/3)
+    v = l | cli.toMax()
+    v = math.log10(v) if v > 0 else -math.log10(-v)
+    idx = math.floor(v/3)
     coef = 1.0/1000**idx
     return sizes[idx], l | cli.apply(lambda x: x * coef) | cli.deref()
 computations = {i: f"{p}FLOPs" for i, p in metricPrefixes.items() if i >= 0}

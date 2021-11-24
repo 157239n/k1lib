@@ -3,7 +3,7 @@ from .callbacks import Callback, Callbacks, Cbs
 import k1lib, time
 __all__ = ["BatchLimit", "EpochLimit", "TimeLimit", "CancelOnExplosion",
            "CancelOnLowLoss", "CancelOnHighAccuracy", "DontTrain",
-           "GradientClipping", "GradientClippingNorm"]
+           "GradientClipping", "GradientClippingNorm", "TrainOnly", "ValidOnly"]
 @k1lib.patch(Cbs)
 class BatchLimit(Callback):
     """Cancels the epoch after executed certain number of batches"""
@@ -110,3 +110,22 @@ See also: :class:`~k1lib.callbacks.limits.GradientClipping` callback."""
             for m in self.l.model.parameters():
                 clip_grad_norm_(m, self.max_norm)
         else: clip_grad_norm_(self.l.model.parameters(), self.max_norm)
+@k1lib.patch(Cbs)
+class TrainOnly(Callback):
+    " "
+    def __init__(self, cb):
+        """Only executes specified callback when training. This modifies the callback's
+``suspended`` variable, so it may interfere with :meth:`k1lib.callbacks.callbacks.Callbacks.suspend`
+by setting it to different values while in the context."""
+        super().__init__(); self.cb = cb
+    def startBatch(self):
+        self.cb.suspended = not self.l.model.training
+@k1lib.patch(Cbs)
+class ValidOnly(Callback):
+    " "
+    def __init__(self, cb):
+        """Same as :class:`TrainOnly`, but only executes specified callback when doing
+validation."""
+        super().__init__(); self.cb = cb
+    def startBatch(self):
+        self.cb.suspended = self.l.model.training

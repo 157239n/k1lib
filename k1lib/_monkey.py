@@ -199,6 +199,36 @@ Plot #2:
     out = np.interp(self.numpy().flatten(), bounds, np.linspace(0, 1, len(bounds)))
     return torch.tensor(out).reshape(self.shape)
 @k1lib.patch(torch.Tensor)
+def positionalEncode(t:torch.Tensor, richFactor:float=2) -> torch.Tensor:
+    r"""Position encode a tensor of shape :math:`(L, F)`, where :math:`L`
+is the sequence length, :math:`F` is the encoded features. Will add the
+encodings directly to the input tensor and return it.
+
+This is a bit different from the standard implementations that ppl use.
+This is exactly:
+
+.. math:: p = \frac{i}{F\cdot richFactor}
+.. math:: w = 1/10000^p
+.. math:: pe = sin(w * L)
+
+With ``i`` from range [0, F), and ``p`` the "progress". If ``richFactor`` is 1
+(original algo), then ``p`` goes from 0% to 100% of the features. Example::
+
+    import matplotlib.pyplot as plt, torch, k1lib
+    plt.figure(dpi=150)
+    plt.imshow(torch.zeros(100, 10).positionalEncode().T)
+
+.. image:: images/positionalEncoding.png
+
+:param richFactor: the bigger, the richer the features are. A lot of
+    times, I observe that the features that are meant to cover huge scales
+    are pretty empty and don't really contribute anything useful. So this
+    is to bump up the usefulness of those features"""
+    seqN, featsN = t.shape
+    feats = torch.tensor(range(featsN)); w = (1/10000**(feats/featsN/richFactor))[None, :].expand(t.shape)
+    times = torch.tensor(range(seqN))[:, None].expand(t.shape)
+    t[:] = torch.sin(w * times); return t
+@k1lib.patch(torch.Tensor)
 def clearNan(self, value:float=0.0) -> torch.Tensor:
     """Sets all nan values to a specified value.
 Example::

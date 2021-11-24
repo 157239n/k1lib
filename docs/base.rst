@@ -1,6 +1,12 @@
 Base module
 =============
 
+.. attribute:: k1lib.settings
+
+This is actually an object of type :class:`~k1lib.Settings`:
+
+.. include:: literals/settings.rst
+
 Classes
 --------
 
@@ -14,6 +20,7 @@ Classes
 - :class:`k1lib.RunOnce`
 - :class:`k1lib.MaxDepth`
 - :class:`k1lib.Absorber`
+- :class:`k1lib.Settings`
 
 .. autoclass:: k1lib.Learner
    :members:
@@ -70,6 +77,11 @@ Classes
    :undoc-members:
    :show-inheritance:
 
+.. autoclass:: k1lib.Settings
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 .. autoclass:: k1lib.wrapMod
    :members:
    :undoc-members:
@@ -100,6 +112,16 @@ Context managers
 Exceptions
 -------------
 
+These exceptions are used within :class:`~k1lib.Learner` to cancel things early on.
+If you raise :class:`~k1lib.CancelBatchException` while passing through the model,
+the :class:`~k1lib.Learner` will catch it, run cleanup code (including checkpoint
+``endBatch`` ), then proceeds as usual.
+
+If you raise something more major, like :class:`~k1lib.CancelRunException`,
+:class:`~k1lib.Learner` will first catch it at batch level, run clean up code, then
+rethrow it. :class:`~k1lib.Learner` will then recatch it at the epoch level, run
+clean up code, then rethrow again. Same deal at the run level.
+
 .. autoexception:: k1lib.CancelRunException
 .. autoexception:: k1lib.CancelEpochException
 .. autoexception:: k1lib.CancelBatchException
@@ -122,12 +144,9 @@ Functions
 .. autofunction:: k1lib.limitChars
 .. autofunction:: k1lib.showLog
 .. autofunction:: k1lib.beep
-.. autofunction:: k1lib.executeNb
 .. autofunction:: k1lib.dontWrap
-.. autofunction:: k1lib.positionalEncode
 .. autofunction:: k1lib.debounce
 .. autofunction:: k1lib.scaleSvg
-.. autofunction:: k1lib.nbCells
 .. autofunction:: k1lib.perlin3d
 .. autofunction:: k1lib.graph
 .. autofunction:: k1lib.digraph

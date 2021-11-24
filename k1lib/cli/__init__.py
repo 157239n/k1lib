@@ -25,5 +25,6 @@ from . import kxml; kxml = _wrapMod(kxml)
 from . import kcsv; kcsv = _wrapMod(kcsv)
 from . import sam;  sam  = _wrapMod(sam)
 from . import gb;   gb   = _wrapMod(gb)
+from . import nb;   nb   = _wrapMod(nb)
 
 from .trace import * # has to be last, to wait for others to load up

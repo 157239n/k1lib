@@ -5,8 +5,7 @@ structure in a dramatic way. They're the core transformations
 """
 from typing import List, Union, Iterator, Callable, Any, Tuple, Dict
 from collections import defaultdict, Counter, deque
-from k1lib.cli.init import patchDefaultDelim, BaseCli, oneToMany, T, Table,\
-cliSettings, fastF
+from k1lib.cli.init import patchDefaultDelim, BaseCli, oneToMany, T, Table, fastF
 import k1lib.cli as cli
 import itertools, numpy as np, torch, k1lib
 __all__ = ["transpose", "joinList", "splitList",
@@ -17,24 +16,39 @@ __all__ = ["transpose", "joinList", "splitList",
            "count", "permute", "accumulate", "AA_", "peek", "peekF",
            "repeat", "repeatF", "repeatFrom"]
 class transpose(BaseCli):
-    def __init__(self, fillValue=None):
+    def __init__(self, dim1:int=0, dim2:int=1, fill=None):
         """Join multiple columns and loop through all rows. Aka transpose.
 Example::
 
     # returns [[1, 4], [2, 5], [3, 6]]
     [[1, 2, 3], [4, 5, 6]] | transpose() | deref()
     # returns [[1, 4], [2, 5], [3, 6], [0, 7]]
-    [[1, 2, 3], [4, 5, 6, 7]] | transpose(0) | deref()
+    [[1, 2, 3], [4, 5, 6, 7]] | transpose(fill=0) | deref()
+
+Multidimensional transpose works just like :meth:`torch.transpose` too::
+
+    # returns (2, 7, 5, 3), but detected Tensor, so it will use builtin :meth:`torch.transpose`
+    torch.randn(2, 3, 5, 7) | transpose(3, 1) | shape()
+    # also returns (2, 7, 5, 3), but actually does every required computation. Can be slow if shape is huge
+    torch.randn(2, 3, 5, 7) | deref(ignoreTensors=False) | transpose(3, 1) | shape()
 
 Be careful with infinite streams, as transposing stream of shape (inf, 5) will
-hang this operation!
+hang this operation! Either don't do it, or temporarily limit all infinite streams like
+this::
 
-:param fillValue: if not None, then will try to zip longest with this fill value"""
-        super().__init__(); self.fillValue = fillValue
+    with settings.cli.context(inf=21):
+        # returns (3, 21)
+        [2, 1, 3] | repeat() | transpose() | shape()
+
+:param fill: if not None, then will try to zip longest with this fill value"""
+        super().__init__(); self.fill = fill
+        self.d1 = min(dim1, dim2); self.d2 = max(dim1, dim2)
     def __ror__(self, it:Iterator[Iterator[T]]) -> Table[T]:
-        super().__ror__(it)
-        if self.fillValue is None: yield from zip(*it)
-        else: yield from itertools.zip_longest(*it, fillvalue=self.fillValue)
+        super().__ror__(it); d1 = self.d1; d2 = self.d2; fill = self.fill
+        if isinstance(it, torch.Tensor): return it.transpose(d1, d2)
+        if d1 != 0: return it | cli.serial(*([transpose(fill=fill).all(i) for i in range(d1, d2)] + [transpose(fill=fill).all(i-1) for i in range(d2-1, d1, -1)]))
+        if self.fill is None: return zip(*it)
+        else: return itertools.zip_longest(*it, fillvalue=fill)
 class joinList(BaseCli):
     def __init__(self, element=None, begin=True):
         """Join element into list.
@@ -198,15 +212,14 @@ Example::
 def insertRow(*row:List[T]):
     """Inserts a row right before every other rows. See also: :meth:`joinList`."""
     return joinList(row)
-def insertColumn(*column, begin=True, fillValue=""):
+def insertColumn(*column, begin=True, fill=""):
     """Inserts a column at beginning or end.
 Example::
 
     # returns [['a', 1, 2], ['b', 3, 4]]
-    [[1, 2], [3, 4]] | insertColumn("a", "b") | deref()
-"""
-    return transpose(fillValue) | joinList(column, begin) | transpose(fillValue)
-def insertIdColumn(table=False, begin=True, fillValue=""):
+    [[1, 2], [3, 4]] | insertColumn("a", "b") | deref()"""
+    return transpose(fill=fill) | joinList(column, begin) | transpose(fill=fill)
+def insertIdColumn(table=False, begin=True, fill=""):
     """Inserts an id column at the beginning (or end).
 Example::
 
@@ -217,7 +230,7 @@ Example::
 
 :param table: if False, then insert column to an Iterator[str], else treat
     input as a full fledged table"""
-    f = (cli.toRange() & transpose(fillValue)) | joinList(begin=begin) | transpose(fillValue)
+    f = (cli.toRange() & transpose(fill=fill)) | joinList(begin=begin) | transpose(fill=fill)
     if table: return f
     else: return cli.wrapList() | transpose() | f
 class toDict(BaseCli):
@@ -420,7 +433,7 @@ won't work as you will have used it the first time. Example::
     def __init__(self, limit:int=None):
         super().__init__(); self.limit = limit
     def __ror__(self, o:T) -> Iterator[T]:
-        super().__ror__(o); limit = self.limit or cliSettings["inf"]
+        super().__ror__(o); limit = self.limit or k1lib.settings.cli.inf
         for i in itertools.count():
             if i >= limit: break
             yield o
@@ -436,7 +449,7 @@ Example::
 :param limit: if None, then repeats indefinitely
 
 See also: :class:`repeatFrom`"""
-    f = fastF(f); limit = limit or cliSettings["inf"]
+    f = fastF(f); limit = limit or k1lib.settings.cli.inf
     for i in itertools.count():
         if i >= limit: break
         yield f()
@@ -454,7 +467,7 @@ class repeatFrom(BaseCli):
         super().__init__(); self.limit = limit
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
         super().__ror__(it); it = list(it)
-        limit = self.limit or cliSettings["inf"]
+        limit = self.limit or k1lib.settings.cli.inf
         for i in itertools.count():
             if i >= limit: break
             yield from it

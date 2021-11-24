@@ -8,9 +8,8 @@ __all__ = ["_docsUrl",
            "patch", "wrapMod", "wraps", "squeeze", "raiseEx", "smooth",
            "numDigits", "limitLines",
            "limitChars", "showLog", "cleanDiv", "graph", "digraph",
-           "beep", "beepOnAvailable", "executeNb", "dontWrap",
-           "positionalEncode", "debounce", "scaleSvg",
-           "nbCells"]
+           "beep", "beepOnAvailable", "dontWrap",
+           "debounce", "scaleSvg"]
 _docsUrl = "https://k1lib.github.io"
 def textToHtml(text:str) -> str:
     """Transform a string so that it looks the same on browsers
@@ -19,11 +18,11 @@ as in `print()`"""
 def clearLine():
     """Prints a character that clears the current line"""
     print("\r" + " "*80 + "\r", end="")
-def tab(text:Union[list, str]) -> Union[list, str]:
+def tab(text:Union[list, str], pad="    ") -> Union[list, str]:
     """Adds a tab before each line. str in, str out. List in, list out"""
     if isinstance(text, str):
-        return "\n".join(["    " + line for line in text.split("\n")])
-    else: return ["    " + line for line in text]
+        return "\n".join([pad + line for line in text.split("\n")])
+    else: return [pad + line for line in text]
 def isNumeric(x) -> bool:
     """Returns whether object is actually a number"""
     return isinstance(x, (int, float, np.number))
@@ -150,7 +149,7 @@ def limitChars(s:str, limit:int=50):
     """If input string is too long, truncates to first `limit` characters of the first line"""
     if s is None: return ""
     s = f"{s}".split("\n")[0]
-    return s[:limit] + "..." if len(s) > limit-3 else s
+    return s[:limit-3] + "..." if len(s) > limit else s
 def showLog(loggerName:str="", level:int=logging.DEBUG):
     """Prints out logs of a particular logger at a particular level"""
     logger = logging.getLogger(loggerName); logger.setLevel(level)
@@ -197,36 +196,6 @@ a beep sound"""
             if successful:
                 beep(); break
     except KeyboardInterrupt: print("Still not available")
-def executeNb(fileName:str, _globals:dict=None, preserveDir=False):
-    """Executes a specified IPython notebook. Can make all variables
-defined in the notebook appear in the __main__ context by passing `globals()` in
-
-:param preserveDir: if True, don't change working directory to that of the notebook's"""
-    import json, os, traceback
-    if _globals is None: _globals = {}
-    if not preserveDir:
-        oldPath = os.getcwd()
-        os.chdir(os.path.dirname(fileName))
-    def execute():
-        allLines = []
-        for cell in json.loads(open(fileName).read())["cells"]:
-            if cell["cell_type"] == "code":
-                lines = []
-                for line in cell["source"]:
-                    line = line.rstrip()
-                    if line.startswith("!"): continue
-                    if line.startswith("%%"): continue
-                    lines.append(line)
-                    allLines.append(line)
-                lines = "\n".join(lines)
-                try: exec(lines, _globals); plt.show() # clears plots
-                except Exception as e:
-                    print("Problematic code block:\n")
-                    print(lines); traceback.print_exc();
-                    print("All lines:\n")
-                    print("\n".join(allLines)); raise e
-    execute()
-    if not preserveDir: os.chdir(oldPath)
 def dontWrap():
     """Don't wrap horizontally when in a notebook. Normally, if you're
 displaying something long, like the output of ``print('a'*1000)`` in a notebook,
@@ -240,35 +209,6 @@ that by displaying some HTML with css styles so that the notebook doesn't wrap."
     div.CodeMirror > div.highlight {overflow-y: auto;}
 </style>"""))
     except: print("Can't run dontWrap()")
-def positionalEncode(t:torch.Tensor, richFactor:float=2) -> torch.Tensor:
-    r"""Position encode a tensor of shape :math:`(L, F)`, where :math:`L`
-is the sequence length, :math:`F` is the encoded features. Will add the
-encodings directly to the input tensor and return it.
-
-This is a bit different from the standard implementations that ppl use.
-This is exactly:
-
-.. math:: p = \frac{i}{F\cdot richFactor}
-.. math:: w = 1/10000^p
-.. math:: pe = sin(w * L)
-
-With ``i`` from range [0, F), and ``p`` the "progress". If ``richFactor`` is 1
-(original algo), then ``p`` goes from 0% to 100% of the features. Example::
-
-    import matplotlib.pyplot as plt, torch, k1lib
-    plt.figure(dpi=150)
-    plt.imshow(k1lib.positionalEncode(torch.zeros(100, 10)).T)
-
-.. image:: images/positionalEncoding.png
-
-:param richFactor: the bigger, the richer the features are. A lot of
-    times, I observe that the features that are meant to cover huge scales
-    are pretty empty and don't really contribute anything useful. So this
-    is to bump up the usefulness of those features"""
-    seqN, featsN = t.shape
-    feats = torch.tensor(range(featsN)); w = (1/10000**(feats/featsN/richFactor))[None, :].expand(t.shape)
-    times = torch.tensor(range(seqN))[:, None].expand(t.shape)
-    t[:] = torch.sin(w * times); return t
 import asyncio, functools
 from threading import Timer as ThreadingTimer
 class AsyncTimer: # rename if want to use
@@ -306,8 +246,9 @@ Example::
             timer.start()
         functools.update_wrapper(debounced, fn); return debounced
     return decorator
-def scaleSvg(svg:str, scale:float) -> str:
+def scaleSvg(svg:str, scale:float=None) -> str:
     """Scales an svg xml string by some amount."""
+    if scale is None: scale = k1lib.settings.svgScale
     wS = w = re.findall("width=\"\d*pt\"", svg)[0]
     hS = w = re.findall("height=\"\d*pt\"", svg)[0]
     w = int(int(re.findall("\d+", wS)[0])*scale)
@@ -315,11 +256,3 @@ def scaleSvg(svg:str, scale:float) -> str:
     svg = re.sub(wS, f'width="{w}pt"', svg)
     svg = re.sub(hS, f'height="{h}pt"', svg)
     return svg
-def nbCells(source:str) -> Iterator[Dict]:
-    """Gets simplified notebook cells from file source, including fields
-``cell_type`` and ``source`` only. Example::
-
-    k1lib.nbCells(cat("file.ipynb") | join())"""
-    js = json.loads(source)
-    cells = []; fields = set(["cell_type", "source"])
-    return [{k:cell[k] for k in cell.keys() if k in fields} for cell in js["cells"]]

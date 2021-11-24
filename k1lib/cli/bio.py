@@ -2,17 +2,17 @@
 """
 This is for functions that are actually biology-related
 """
-from k1lib.cli.init import cliSettings, BaseCli
-import k1lib.cli as cli
+from k1lib.cli.init import BaseCli
+import k1lib; import k1lib.cli as cli
 import os
 from typing import Iterator, Union
 __all__ = ["go",
            "transcribe", "complement", "translate", "medAa", "longAa"]
 def go(term:int):
     """Looks up a GO term"""
-    if cliSettings["oboFile"] is None and not os.path.exists("go.obo"):
+    if k1lib.settings.cli.oboFile is None and not os.path.exists("go.obo"):
         answer = input("""No gene ontology obo file specified! You can:
-- Specify the file using `cliSettings['oboFile']='/some/folder/go.obo'`
+- Specify the file using `settings.cli.oboFile='/some/folder/go.obo'`
 - Download this automatically to file `go.obo`
 
 You want to download this automatically? (y/n) """)
@@ -21,10 +21,10 @@ You want to download this automatically? (y/n) """)
             print(f"Downloading from {url}...      ", end="")
             cli.wget(url); print("Finished!")
         else: return print("Aborted")
-    file = cliSettings["oboFile"] or "go.obo"; term = f"{term}".rjust(7, "0")
+    file = k1lib.settings.cli.oboFile or "go.obo"; term = f"{term}".rjust(7, "0")
     cli.cat(file) | cli.grep(f"id: GO:{term}", 0, 10) > cli.stdout()
     print(f"https://www.ebi.ac.uk/QuickGO/GTerm?id=GO:{term}")
-    if cliSettings["lookupImgs"]:
+    if k1lib.settings.cli.lookupImgs:
         class Repr:
             def _repr_html_(self):
                 return f"""<img src="http://amigo.geneontology.org/visualize?mode=amigo&term_data_type=string&format=png&inline=false&term_data=GO%3A{term}" />"""
