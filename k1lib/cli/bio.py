@@ -4,15 +4,24 @@ This is for functions that are actually biology-related
 """
 from k1lib.cli.init import BaseCli
 import k1lib; import k1lib.cli as cli
-import os
+import os; from functools import partial
 from typing import Iterator, Union
-__all__ = ["go",
+__all__ = ["go", "quality", "longFa", "idx",
            "transcribe", "complement", "translate", "medAa", "longAa"]
+settings = k1lib.Settings()
+k1lib.settings.cli.add("bio", settings, "from k1lib.cli.bio module");
+def _patchDir(term, s, p):
+    if p != None: p = os.path.abspath(os.path.expanduser(p))
+    s.__dict__[term] = p
+settings.add("blast", None, "location of BLAST database", partial(_patchDir, "blast"))
+settings.add("go", None, "location of gene ontology file (.obo)", partial(_patchDir, "go"))
+settings.add("so", None, "location of sequence ontology file", partial(_patchDir, "so"));
+settings.add("lookupImgs", True, "sort of niche. Whether to auto looks up extra gene ontology relationship images")
 def go(term:int):
     """Looks up a GO term"""
-    if k1lib.settings.cli.oboFile is None and not os.path.exists("go.obo"):
+    if settings.go is None and not os.path.exists("go.obo"):
         answer = input("""No gene ontology obo file specified! You can:
-- Specify the file using `settings.cli.oboFile='/some/folder/go.obo'`
+- Specify the file using `settings.cli.bio.go = '/some/folder/go.obo'`
 - Download this automatically to file `go.obo`
 
 You want to download this automatically? (y/n) """)
@@ -21,27 +30,99 @@ You want to download this automatically? (y/n) """)
             print(f"Downloading from {url}...      ", end="")
             cli.wget(url); print("Finished!")
         else: return print("Aborted")
-    file = k1lib.settings.cli.oboFile or "go.obo"; term = f"{term}".rjust(7, "0")
+    file = settings.go or "go.obo"; term = f"{term}".rjust(7, "0")
     cli.cat(file) | cli.grep(f"id: GO:{term}", 0, 10) > cli.stdout()
     print(f"https://www.ebi.ac.uk/QuickGO/GTerm?id=GO:{term}")
-    if k1lib.settings.cli.lookupImgs:
+    if settings.lookupImgs:
         class Repr:
             def _repr_html_(self):
                 return f"""<img src="http://amigo.geneontology.org/visualize?mode=amigo&term_data_type=string&format=png&inline=false&term_data=GO%3A{term}" />"""
         return Repr()
+settings.add("phred", """!"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJ""", "Phred quality score")
+def quality(log=True):
+    """Get numeric quality of sequence.
+Example::
+
+    # returns [2, 2, 5, 30]
+    "##&?" | quality() | deref()
+
+:param log: whether to use log scale (0 -> 40), or linear scale (1 -> 0.0001)"""
+    if log: return cli.toIdx(settings.phred)
+    else: return cli.toIdx(settings.phred) | cli.apply(lambda x: 10**(-x/10))
+def longFa():
+    """Takes in a fasta file and put each sequence on 1 line.
+File "gene.fa"::
+
+    >AF086833.2 Ebola virus - Mayinga, Zaire, 1976, complete genome
+    CGGACACACAAAAAGAAAGAAGAATTTTTAGGATC
+    TTTTGTGTGCGAATAACTATGAGGAAGATTAATAA
+    >something other gene
+    CGGACACACAAAAAGAAAGAAGA
+    TTTTGTGTGCGAATAACTATGAG
+
+Code::
+
+    cat("gene.fa") | bio.longFa() | cli.headOut()
+
+Prints out::
+
+    >AF086833.2 Ebola virus - Mayinga, Zaire, 1976, complete genome
+    CGGACACACAAAAAGAAAGAAGAATTTTTAGGATCTTTTGTGTGCGAATAACTATGAGGAAGATTAATAA
+    >something other gene
+    CGGACACACAAAAAGAAAGAAGATTTTGTGTGCGAATAACTATGAG"""
+    return cli.grep("^>", sep=True).till() | (cli.item() & (~cli.head(1) | cli.join(""))).all() | cli.joinStreams()
+def _fileWithoutExt(f): return ".".join(f.split(".")[:-1])
+class idx(BaseCli):
+    """Indexes files with various formats."""
+    @staticmethod
+    def blast(fileName:str=None, dbtype:str=None):
+        """Uses ``makeblastdb`` to create a blast database from a fasta file.
+Example::
+
+    "file.fa" | bio.idx.blast()
+    bio.idx.blast("file.fa")"""
+        f = cli.applyS(lambda fileName: None | cli.cmd(f"makeblastdb -dbtype {dbtype or 'nucl'} -in {fileName} -out {_fileWithoutExt(fileName)}"))
+        return f if fileName is None else f(fileName)
+    @staticmethod
+    def bwa(fileName:str=None):
+        """Uses ``bwa`` to index a fasta file.
+Example::
+
+    "file.fa" | bio.idx.bwa()
+    bio.idx.bwa("file.bwa")"""
+        f = cli.applyS(lambda fileName: None | cli.cmd(f"bwa index {fileName}"))
+        return f if fileName is None else f(fileName)
+    @staticmethod
+    def bam(fileName:str=None):
+        """Uses ``samtools`` to index a bam file.
+Example::
+
+    "file.bam" | bio.idx.bam()
+    bio.idx.bam("file.bam")"""
+        f = cli.applyS(lambda fileName: None | cli.cmd(f"samtools index {fileName}"))
+        return f if fileName is None else f(fileName)
 class transcribe(BaseCli):
-    """Transcribes (DNA -> RNA) incoming rows"""
+    """Transcribes (DNA -> RNA) incoming rows.
+Example::
+
+    # returns "AUCG"
+    "ATCG" | transcribe()
+    # returns ["AUCG"]
+    ["ATCG"] | transcribe() | deref()"""
     def __ror__(self, it:Union[Iterator[str], str]):
-        if isinstance(it, str): it = [it]
-        for line in it:
-            yield line.lower().replace("t", "u")
+        if isinstance(it, str): return [it] | self | cli.item()
+        return (line.upper().replace("T", "U") for line in it)
 class complement(BaseCli):
+    """Get the reverse complement of DNA.
+Example::
+
+    # returns "TAGC"
+    "ATCG" | bio.complement()
+    # returns ["TAGC"]
+    ["ATCG"] | bio.complement() | deref()"""
     def __ror__(self, it:Union[Iterator[str], str]):
-        if isinstance(it, str): it = [it]
-        for line in it:
-            line = line.lower().replace("a", "0").replace("t", "1")\
-                .replace("u", "1").replace("c", "2").replace("g", "3")
-            yield line.replace("0", "t").replace("1", "a").replace("2", "g").replace("3", "c")
+        if isinstance(it, str): return [it] | self | cli.item()
+        return (line.upper().replace("A", "0").replace("T", "A").replace("0", "T").upper().replace("C", "0").replace("G", "C").replace("0", "G") for line in it)
 ntAa = {"UUU": "F", "UUC": "F", "UUA": "L", "UUG": "L",
         "UCU": "S", "UCC": "S", "UCA": "S", "UCG": "S",
         "UAU": "Y", "UAC": "Y", "UAA": "*", "UAG": "*",

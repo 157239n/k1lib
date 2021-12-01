@@ -67,7 +67,7 @@ class Variable:
         """Actual float value of :class:`Variable`. When setting this, if the
 new value's not None, the object would act like a constant in every future
 equations. To turn it back into a :class:`Variable`, simply set this to
-:class:`None`."""
+:data:`None`."""
         return self._value
     @value.setter
     def value(self, v):

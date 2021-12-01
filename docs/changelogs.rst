@@ -2,6 +2,37 @@
 Changelogs
 ==========
 
+`0.12 </0.12>`_
+---------------
+
+.. currentmodule:: k1lib.cli
+
+Generic:
+
+- Disallow adding new settings accidentally when using :meth:`~k1lib.Settings.context`.
+
+Cli:
+
+- Fixed :class:`~inp.cmd` piping mechanism into each other.
+- Added ``quiet`` setting, used by :class:`~inp.cmd`.
+- Made :class:`~filt.columns` more robust so that it can deal with missing elements
+  and longer rows below.
+- Added operator ``-`` to :class:`~filt.filt` for extra intuitiveness.6
+- Added :class:`~utils.bindec`, :class:`~utils.toBin`, :class:`~utils.toIdx`,
+  :class:`sam.flag`, :meth:`~bio.longFa` and :class:`~bio.idx`.
+- Moved :class:`sam.quality` to :meth:`bio.quality`, and added ``cli.bio.phred``,
+  ``cli.sam.header`` settings.
+- Moved setting ``cli.oboFile`` to ``cli.bio.go``, and ``cli.lookupImgs`` to
+  ``cli.bio.lookupImgs``.
+- Added ``fill`` param to :class:`~utils.item`.
+- Optimizes higher order operations quite a bit, and added setting ``cli.atomic``.
+- Renamed :class:`init.manyToManySpecific` to :class:`init.mtmS`, and added method
+  :meth:`~init.mtmS.f`.
+- Added :meth:`~structural.transpose.fill` and :meth:`~structural.transpose.wrap` to
+  :meth:`~structural.transpose`.
+- Revamped how :class:`~inp.cmd` works, allowed real time output yielding, added
+  bytes mode and option on how to return stdout and stderr.
+
 `0.11 </0.11>`_
 ---------------
 
@@ -16,7 +47,7 @@ DL:
 - Removed "pause" concept from :class:`~callbacks.Callback`.
 - Patched :meth:`torch.Tensor.positionalEncode`, and removed procedural version
   (:meth:`k1lib.positionalEncode`).
-- Added :class:`knn.MultiheadAttention`.
+- Added :class:`~k1lib.knn.MultiheadAttention`.
 
 .. currentmodule:: k1lib.cli
 

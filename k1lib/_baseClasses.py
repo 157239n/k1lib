@@ -6,12 +6,13 @@ from typing import Callable, Iterator, Tuple, Union, Dict, Any, List
 from k1lib import isNumeric; import k1lib, contextlib
 import random, torch, math, sys, io, os, numpy as np
 __all__ = ["Object", "Range", "Domain", "AutoIncrement", "Wrapper", "Every",
-           "RunOnce", "MaxDepth", "Absorber", "Settings", "settings"]
+           "RunOnce", "MaxDepth", "Absorber",
+           "Settings", "settings", "_settings"]
 class Object:
     """Convenience class that acts like :class:`~collections.defaultdict`. You
 can use it like a normal object::
 
-    a = Object()
+    a = k1lib.Object()
     a.b = 3
     print(a.b) # outputs "3"
 
@@ -24,12 +25,12 @@ can use it like a normal object::
 
 You can instantiate it from a dict::
 
-    a = Object.fromDict({"b": 3, "c": 4})
+    a = k1lib.Object.fromDict({"b": 3, "c": 4})
     print(a.c) # outputs "4"
 
 And you can specify a default value, just like defaultdict::
 
-    a = Object().withAutoDeclare(lambda: [])
+    a = k1lib.Object().withAutoDeclare(lambda: [])
     a.texts.extend(["factorio", "world of warcraft"])
     print(a.texts[0]) # outputs "factorio"
     
@@ -40,11 +41,9 @@ And you can specify a default value, just like defaultdict::
 
 Treating it like defaultdict is okay too::
 
-    a = Object().withAutoDeclare(lambda: [])
+    a = k1lib.Object().withAutoDeclare(lambda: [])
     a["movies"].append("dune")
-    print(a.movies[0]) # outputs "dune"
-
-"""
+    print(a.movies[0]) # outputs "dune" """
     def __init__(self): self._defaultValueGenerator = None; self.repr = None
     @staticmethod
     def fromDict(_dict:Dict[str, Any]):
@@ -126,8 +125,7 @@ There are different ``__init__`` functions for many situations:
 You can also pass in a :class:`slice` object, in which case, a range subset
 will be returned. Code kinda looks like this::
 
-    range(start, stop)[index]
-"""
+    range(start, stop)[index]"""
         if index == 0: return self.start
         if index == 1: return self.stop
         if type(index) == slice:
@@ -653,8 +651,8 @@ class Settings:
         """Creates a new settings object. Basically fancy version of :class:`dict`.
 Example::
 
-    s = Settings(a=3, b="42")
-    s.c = Settings(d=8)
+    s = k1lib.Settings(a=3, b="42")
+    s.c = k1lib.Settings(d=8)
     
     s.a # returns 3
     s.b # returns "42"
@@ -669,7 +667,7 @@ Example::
         """Context manager to temporarily modify some settings. Applies
 to all sub-settings. Example::
 
-    s = Settings(a=3, b="42", c=Settings(d=8))
+    s = k1lib.Settings(a=3, b="42", c=k1lib.Settings(d=8))
     with s.context(a=4):
         s.c.d = 20
         s.a # returns 4
@@ -677,13 +675,16 @@ to all sub-settings. Example::
     s.a # returns 3
     s.c.d # returns 8"""
         oldValues = dict(self.__dict__)
+        for k in kwargs.keys():
+            if k not in oldValues:
+                raise RuntimeError(f"'{k}' settings not found!")
         with contextlib.ExitStack() as stack:
             for _, sub in self._subSettings():
                 stack.enter_context(sub.context())
             for k, v in kwargs.items(): setattr(self, k, v)
             yield
         for k, v in oldValues.items(): setattr(self, k, v)
-    def add(self, k:str, v:Any, docs:str="", cb:Callable[[Any], None]=None) -> "Settings":
+    def add(self, k:str, v:Any, docs:str="", cb:Callable[["Settings", Any], None]=None) -> "Settings":
         """Long way to add a variable. Advantage of this is that you can slip in extra
 documentation for the variable. Example::
 
@@ -691,7 +692,7 @@ documentation for the variable. Example::
     s.add("a", 3, "some docs")
     print(s) # displays the extra docs
 
-:param cb: callback if any property changes"""
+:param cb: callback that takes in (settings, new value) if any property changes"""
         setattr(self, k, v); self._docs[k] = docs
         self._cbs[k] = cb; return self
     def _docsOf(self, k:str):
@@ -703,24 +704,21 @@ documentation for the variable. Example::
     def __setattr__(self, k, v):
         self.__dict__[k] = v
         if k != "_setattr_sentinel" and not self._setattr_sentinel:
-            if k in self._cbs and self._cbs[k] is not None: self._cbs[k](v)
+            if k in self._cbs and self._cbs[k] is not None: self._cbs[k](self, v)
     def __repr__(self):
         """``includeDocs`` mainly used internally when generating docs in sphinx."""
         ks = list(k for k in self.__dict__ if not k.startswith("_"))
         kSpace = max([1, *(ks | k1lib.cli.lengths())]); s = "Settings:\n"
         for k, v in self._simpleSettings():
-            s += f"- {k.ljust(kSpace)} = {k1lib.limitChars(str(v), 50)}{sep}{self._docsOf(k)}\n"
+            s += f"- {k.ljust(kSpace)} = {k1lib.limitChars(str(v), settings.displayCutoff)}{sep}{self._docsOf(k)}\n"
         for k, v in self._subSettings():
             sub = k1lib.tab("\n".join(v.__repr__().split("\n")[1:-1]), "  ")
             s += f"- {k.ljust(kSpace)} = <Settings>{sep}{self._docsOf(k)}\n" + sub + "\n"
         return s.split("\n") | k1lib.cli.op().split(sep).all() | k1lib.cli.pretty(sep) | k1lib.cli.join("\n")
-settings = Settings().add("svgScale", 0.7, "default svg scales for clis that displays graphviz graphs")
-def _cb_wd(p):
-    if p != None:
-        p = os.path.abspath(os.path.expanduser(p)); os.chdir(p)
-    settings.__dict__["wd"] = p
-def _cb_blast(p):
-    if p != None: p = os.path.abspath(os.path.expanduser(p))
-    settings.bio.__dict__["blast"] = p
+_settings = Settings().add("test", Settings().add("bio", True, "whether to test bioinformatics clis that involve strange command line tools like samtools and bwa"))
+settings = Settings().add("displayCutoff", 50, "cutoff length when displaying a Settings object")
+settings.add("svgScale", 0.7, "default svg scales for clis that displays graphviz graphs")
+def _cb_wd(s, p):
+    if p != None: p = os.path.abspath(os.path.expanduser(p)); os.chdir(p)
+    s.__dict__["wd"] = p
 settings.add("wd", os.getcwd(), "default working directory, will get from `os.getcwd()`. Will update using `os.chdir()` automatically when changed", _cb_wd)
-settings.add("bio", Settings().add("blast", None, "location of BLAST database", _cb_blast), "everything related to biology")

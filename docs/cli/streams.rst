@@ -106,6 +106,6 @@ More procedural?
 ----------------
 
 Underlying operations :class:`~init.serial`, :class:`~init.oneToMany`,
-:class:`~init.manyToMany`, :class:`~init.manyToManySpecific` that stands for operations
+:class:`~init.manyToMany`, :class:`~init.mtmS` that stands for operations
 (``|``, ``&``, ``.all()``, ``+``) are exposed, in case your streams have varying
 lengths.

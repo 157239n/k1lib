@@ -34,9 +34,8 @@ Example::
 
     x = torch.abs(torch.randn(2)) * 1e4 + 1e5
     label, t = fmt.sizeOf(x) # label is "kB"
-    (t | toTensor()).min() # min value should be close to 100
-"""
-    l = list(l)
+    (t | toTensor()).min() # min value should be close to 100"""
+    l = list(l | cli.apply(lambda n: abs(n)))
     v = l | cli.toMax()
     v = math.log10(v) if v > 0 else -math.log10(-v)
     idx = math.floor(v/3)

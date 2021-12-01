@@ -2,33 +2,55 @@
 """
 This is for functions that are .sam or .bam related
 """
-from k1lib import cli
-__all__ = ["cat", "header", "quality"]
-def cat(bamFile:str):
-    """Get sam file outputs from bam file"""
-    return None | cli.cmd(f"samtools view -h {bamFile}")
-_shortHeader = ["qname", "flag", "rname", "pos", "mapq", "cigar", "rnext", "pnext", "tlen", "seq", "qual"]
-_longHeader = ["Query template name", "Flags", "Reference sequence name", "Position", "Mapping quality", "CIGAR string", "Rname of next read", "Position of next read", "Template length", "Sequence", "Quality"]
+from k1lib import cli; import k1lib
+__all__ = ["cat", "header", "flag"]
+settings = k1lib.Settings()
+k1lib.settings.cli.add("sam", settings, "from k1lib.cli.sam module");
+def cat(bamFile:str, header:bool=True):
+    """Get sam file outputs from bam file.
+Example::
+
+    sam.cat("file.bam") | display()
+
+:param header: whether to include headers or not"""
+    return None | cli.cmd(f"samtools view {'-h' if header else ''} {bamFile}") | cli.table("\t")
+settings.add("header", k1lib.Settings()
+             .add("short", ["qname", "flag", "rname", "pos", "mapq", "cigar", "rnext", "pnext", "tlen", "seq", "qual"])
+             .add("long", ["Query template name", "Flags", "Reference sequence name", "Position", "Mapping quality", "CIGAR string", "Rname of next read", "Position of next read", "Template length", "Sequence", "Quality"]), "sam headers")
 class header(cli.BaseCli):
     def __init__(self, long=True):
         """Adds a header to the table.
+Example::
+
+    sam.cat("file.bam") | sam.header() | display()
+
+You can change the header labels like this::
+
+    settings.cli.sam.header.long = ["Query template name", ...]
 
 :param long: whether to use a long descriptive header, or a short one"""
         super().__init__(); self.long = long
     def __ror__(self, it):
-        super().__ror__(it)
-        header = _longHeader if self.long else _shortHeader
-        return it | cli.insertRow(header)
-_phred = """!"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJ"""
-_phredLog = {c: i for i, c in enumerate(_phred)}
-_phredLinear = {c: 10**(-i/10) for i, c in enumerate(_phred)}
-class quality(cli.BaseCli):
-    def __init__(self, log=True):
-        """Get numeric quality of sequence.
+        return it | cli.insertRow(*(settings.header.long if self.long else settings.header.short))
+settings.add("flags", ['PAIRED', 'PROPER_PAIR', 'UNMAP', 'MUNMAP', 'REVERSE', 'MREVERSE', 'READ1', 'READ2', 'SECONDARY', 'QCFAIL', 'DUP', 'SUPPLEMENTARY'], "list of flags")
+class flag(cli.bindec):
+    def __init__(self, f=None):
+        """Decodes flags attribute.
+Example::
 
-:param log: whether to use log scale (0 -> 40), or linear scale (1 -> 0.0001)"""
-        super().__init__(); self.log = log
-    def __ror__(self, line):
-        super().__ror__(line)
-        scale = _phredLog if self.log else _phredLinear
-        for char in line: yield scale[char]
+    # returns ['PAIRED', 'UNMAP']
+    5 | flag()
+    # returns 'PAIRED, UNMAP'
+    5 | flag(cli.join(", "))
+
+You'll mostly use this in this format::
+
+    sam.cat("file.bam", False) | apply(sam.flag(), 1) | display()
+
+You can change the flag labels like this::
+
+    settings.cli.sam.flags = ["paired", ...]
+
+:param f: transform function fed into :class:`~k1lib.cli.utils.bindec`, defaulted
+    to `join(", ")`"""
+        super().__init__(k1lib.settings.cli.sam.flags, f or cli.join(", "))

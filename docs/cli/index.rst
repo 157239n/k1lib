@@ -14,16 +14,27 @@ Turns into this statement::
 
    cat("file.txt") | head(5) > file("headerFile.txt")
 
-Here, "cat", "head" and "file" are all classes extended
-from :class:`~init.BaseCli`. All of
-them implements the "reverse or" operation, or __ror__.
-Essentially, these 2 statements are equivalent::
+You can even integrate with existing shell commands::
+
+   ls("~") | cmd("grep so")
+
+Here, "ls" will list out files inside the home directory, then pipes it into regular
+grep on linux, which is then piped back into Python as a list of strings. So it's
+equivalent to this bash statement:
+
+.. code-block:: console
+
+   ls | grep so
+
+"cat", "head", "file", "ls" and "cmd" are all classes extended from
+:class:`~init.BaseCli`. All of them implements the "reverse or" operation, or
+__ror__. So essentially, these 2 statements are equivalent::
 
    3 | obj
    obj.__ror__(3)
 
-Also, a lot of these tools assume that we are operating
-on a table. So this table:
+Also, a lot of these tools (like :class:`~modifier.apply` and :class:`~modifier.filt`)
+assume that we are operating on a table. So this table:
 
 +------+------+------+
 | col1 | col2 | col3 |
@@ -37,12 +48,15 @@ Is equivalent to this list::
 
    [["col1", "col2", "col3"], [1, 2, 3], [4, 5, 6]]
 
+:class:`~structural.transpose` and :class:`~init.mtmS` provides more flexible ways
+to transform a table structure (but usually involves more code).
+
 Also, the expected way to use these tools is to import everything directly into the
 current environment, like this::
 
    from k1lib.imports import *
 
-Because there are a lot of clis, you may sometimes unintentionally overwritten an
+Because there are a lot of clis, you may sometimes unintentionally overwrite an
 exposed cli tool. No worries, every tool is also under the ``cli`` object, meaning
 you can use ``deref()`` or ``cli.deref()``.
 
@@ -77,10 +91,10 @@ Where to start?
 Core clis include :class:`~modifier.apply`, :class:`~modifier.applyS` (its
 multiprocessing cousins :class:`~modifier.applyMp` and :class:`~modifier.applyMpBatched`
 are great too), :class:`~modifier.op`, :class:`~filt.filt`, :class:`~utils.deref`,
-:class:`~utils.item`, :class:`~utils.shape`, :class:`~utils.iden`, so start reading
-there first. Then, skim over everything to know what you can do with these
-collection of tools. While you're doing that, checkout :meth:`~trace.trace`, for a
-quite powerful debugging tool.
+:class:`~utils.item`, :class:`~utils.shape`, :class:`~utils.iden`, :class:`~inp.cmd`,
+so start reading there first. Then, skim over everything to know what you can do
+with these collection of tools. While you're doing that, checkout :meth:`~trace.trace`,
+for a quite powerful debugging tool.
 
 There are several `written tutorials <../tutorials.html>`_ about cli here, and I
 also made some `video tutorials <https://www.youtube.com/playlist?list=PLP1sw-g877osNI_dMXwR72kVDREeHsYnt>`_
@@ -144,7 +158,7 @@ init module
    :show-inheritance:
 
 .. automodule:: k1lib.cli.init
-   :members: serial, oneToMany, manyToMany, manyToManySpecific, fastF
+   :members: serial, oneToMany, manyToMany, mtmS, fastF
    :undoc-members:
    :show-inheritance:
 

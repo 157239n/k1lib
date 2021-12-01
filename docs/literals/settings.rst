@@ -1,20 +1,32 @@
 .. code-block:: text
 
-   Settings:                                         
-   - svgScale = 0.7                                  ​default svg scales for clis that displays graphviz graphs                                                           
-   - wd       = /home/kelvin/repos/labs/k1lib/docs   ​default working directory, will get from `os.getcwd()`. Will update using `os.chdir()` automatically when changed   
-   - bio      = <Settings>                           ​everything related to biology                                                                                       
-     - blast = None                                  ​location of BLAST database                                                                                          
-   - cli      = <Settings>                           ​from k1lib.cli module                                                                                               
-     - defaultDelim  = 	                             ​default delimiter used in-between columns when creating tables. Defaulted to tab character.                         
-     - defaultIndent =                               ​default indent used for displaying nested structures                                                                
-     - oboFile       = None                          ​gene ontology obo file location                                                                                     
-     - strict        = False                         ​turning it on can help you debug stuff, but could also be a pain to work with                                       
-     - lookupImgs    = True                          ​sort of niche. Whether to auto looks up extra gene ontology relationship images                                     
-     - inf           = inf                           ​infinity definition for many clis. Here because you might want to temporarily not loop things infinitely            
-   - eqn      = <Settings>                           ​from k1lib.eqn module                                                                                               
-     - spaceBetweenValueSymbol = True                ​                                                                                                                    
-     - eqnPrintExtras          = True                ​                                                                                                                    
-   - mo       = <Settings>                           ​from k1lib.mo module                                                                                                
-     - overOctet = False                             ​whether to allow making bonds that exceeds the octet rule                                                           
-                                                     
+   Settings:                                                                     
+   - displayCutoff = 50                                                          ​cutoff length when displaying a Settings object                                                                     
+   - svgScale      = 0.7                                                         ​default svg scales for clis that displays graphviz graphs                                                           
+   - wd            = /home/kelvin/repos/labs/k1lib/docs                          ​default working directory, will get from `os.getcwd()`. Will update using `os.chdir()` automatically when changed   
+   - cli           = <Settings>                                                  ​from k1lib.cli module                                                                                               
+     - defaultDelim  = 	                                                         ​default delimiter used in-between columns when creating tables. Defaulted to tab character.                         
+     - defaultIndent =                                                           ​default indent used for displaying nested structures                                                                
+     - strict        = False                                                     ​turning it on can help you debug stuff, but could also be a pain to work with                                       
+     - inf           = inf                                                       ​infinity definition for many clis. Here because you might want to temporarily not loop things infinitely            
+     - quiet         = False                                                     ​whether to mute extra outputs from clis or not                                                                      
+     - atomic        = <Settings>                                                ​classes/types that are considered atomic and specified cli tools should never try to iterate over them              
+       - baseAnd = (<class 'numbers.Number'>, <class 'numpy.number...            ​used by BaseCli.__and__                                                                                             
+       - deref   = (<class 'numbers.Number'>, <class 'numpy.number...            ​used by deref                                                                                                       
+     - bio           = <Settings>                                                ​from k1lib.cli.bio module                                                                                           
+       - blast      = None                                                       ​location of BLAST database                                                                                          
+       - go         = None                                                       ​location of gene ontology file (.obo)                                                                               
+       - so         = None                                                       ​location of sequence ontology file                                                                                  
+       - lookupImgs = True                                                       ​sort of niche. Whether to auto looks up extra gene ontology relationship images                                     
+       - phred      = !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJ                 ​Phred quality score                                                                                                 
+     - sam           = <Settings>                                                ​from k1lib.cli.sam module                                                                                           
+       - flags  = ['PAIRED', 'PROPER_PAIR', 'UNMAP', 'MUNMAP', 'R...             ​list of flags                                                                                                       
+       - header = <Settings>                                                     ​sam headers                                                                                                         
+         - short = ['qname', 'flag', 'rname', 'pos', 'mapq', 'ciga...            ​                                                                                                                    
+         - long  = ['Query template name', 'Flags', 'Reference seq...            ​                                                                                                                    
+   - eqn           = <Settings>                                                  ​from k1lib.eqn module                                                                                               
+     - spaceBetweenValueSymbol = True                                            ​                                                                                                                    
+     - eqnPrintExtras          = True                                            ​                                                                                                                    
+   - mo            = <Settings>                                                  ​from k1lib.mo module                                                                                                
+     - overOctet = False                                                         ​whether to allow making bonds that exceeds the octet rule                                                           
+                                                                                 

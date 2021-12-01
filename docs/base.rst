@@ -7,6 +7,10 @@ This is actually an object of type :class:`~k1lib.Settings`:
 
 .. include:: literals/settings.rst
 
+Also, this is exposed automatically, so something like this works::
+
+   settings.svgScale = 0.6
+
 Classes
 --------
 

@@ -52,13 +52,17 @@ grab the last thing at the end of __ror__, hence "last" and not "end".
         if not self._reprRO():
             td = TraceData(None, self.lastTd.outS, None, "\\<end\\>")
             self._formNode(td); self._formEdge(self.lastTd, td)
-        dis.display(dis.SVG(k1lib.scaleSvg(self.g._repr_svg_()))); return "<trace object>"
+        try: svg = self.g._repr_svg_()
+        except:
+            try: svg = self.g._repr_image_svg_xml()
+            except: pass
+        dis.display(dis.SVG(k1lib.scaleSvg(svg))); return "<trace object>"
     def __ror__(self, it):
         """Alternative way to specify input."""
         #if self.inp != emptyInputSentinel: raise TraceException("Input to trace has already been set, but it's being set again (possibly due to `.all()`). Check last trace using ``trace.last``")
         if self.inp != emptyInputSentinel: self.firstTime = False
         self.inp = it | deref(); return self
-    def __iter__(self): return self.inp
+    def __iter__(self): return iter(self.inp)
 @k1lib.patch(_trace)
 def __or__(self, c):
     if self.inp is emptyInputSentinel:
@@ -104,9 +108,9 @@ def __or__(self, c):
                 self._formEdge(o1Td, t.startTd); self._formEdge(t.lastTd, o2Td)
         self._formEdge(self.lastTd, o1Td); self.lastTd = o2Td; o2Td.outS = self.f(out)
         if startTdSet: self.startTd = o1Td
-    elif self.depth and isinstance(c, manyToManySpecific):
+    elif self.depth and isinstance(c, mtmS):
         with self.g.subgraph(name=f"cluster_{clusterAuto()}") as subG:
-            subG.attr(label="+, manyToManySpecific")
+            subG.attr(label="+, mtmS")
             o1Td = TraceData(None, self.f(self.inp), None, "*"); self._formNode(o1Td, g=subG)
             o2Td = TraceData(None, None, self.f(out),      "*"); self._formNode(o2Td, g=subG)
             for _c, _it in zip(c.clis, self.inp):

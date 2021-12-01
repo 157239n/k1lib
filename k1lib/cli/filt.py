@@ -36,7 +36,6 @@ You can also pass in :class:`~k1lib.cli.modifier.op`, for extra intuitiveness::
         super().__init__(fs=[predicate])
         self.predicate = predicate; self.column = column
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
-        super().__ror__(it)
         p = fastF(self.predicate); c = self.column
         if c is None: yield from (l for l in it if p(l))
         else:
@@ -46,6 +45,9 @@ You can also pass in :class:`~k1lib.cli.modifier.op`, for extra intuitiveness::
     def __invert__(self):
         """Negate the condition"""
         return filt(lambda s: not self.predicate(s), self.column)
+    def __neg__(self):
+        """Also negates the condition"""
+        return ~self
 def isFile() -> filt:
     """Filters out non-files.
 Example::
@@ -82,7 +84,7 @@ but "empty" is a short, sweet name easy to remember. Example::
 :param reverse: not intended to be used by the end user. Do ``~empty()`` instead."""
         super().__init__(); self.reverse = reverse
     def __ror__(self, streams:Iterator[Iterator[T]]) -> Iterator[Iterator[T]]:
-        super().__ror__(streams); r = self.reverse
+        r = self.reverse
         for stream in streams:
             try:
                 item, it = stream | cli.peek()
@@ -133,27 +135,20 @@ class head(BaseCli):
     "0123456" | ~head(-3) | deref() # returns ['4', '5', '6']"""
         super().__init__(); self.n = n; self.inverted = False
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
-        super().__ror__(it); n = self.n
+        n = self.n; it = iter(it)
         if n >= 0:
             if not self.inverted:
-                for i, line in enumerate(it):
-                    if i >= n: return
-                    yield line
+                for i, line in zip(range(n), it): yield line
             else:
-                for i, line in enumerate(it):
-                    if i < n: continue
-                    yield line
+                for i, line in zip(range(n), it): pass
+                yield from it
         else:
-            n = abs(n); queue = deque()
             if not self.inverted: # head to -3
+                n = abs(n); queue = deque()
                 for line in it:
                     queue.append(line)
                     if len(queue) > n: yield queue.popleft()
-            else: # -3 to end
-                for line in it:
-                    queue.append(line)
-                    if len(queue) > n: queue.popleft()
-                yield from queue
+            else: yield from deque(it, -n) # -3 to end
     def __invert__(self): self.inverted = not self.inverted; return self
 class rowsList(BaseCli):
     """Space-expensive implementation for :class:`rows`, without a lot of
@@ -162,7 +157,6 @@ this directly, use :class:`rows` instead"""
     def __init__(self, _slice):
         super().__init__(); self._slice = _slice; self.inverted = False
     def __ror__(self, it:Iterator[str]):
-        super().__ror__(it)
         it = list(it); full = range(len(it))
         rows = full[self._slice]
         if self.inverted: rows = [e for e in full if e not in rows]
@@ -235,13 +229,16 @@ Table[T]."""
         if len(columns) == 1 and isinstance(columns[0], slice): columns = columns[0]
         self.columns = columns; self.inverted = False
     def __ror__(self, it:Table[T]) -> Table[T]:
-        super().__ror__(it); columns = self.columns; it = iter(it)
+        columns = self.columns; it = iter(it)
         sentinel = object(); row = next(it, sentinel)
         if row == sentinel: return []
-        row = list(row); rs = range(len(row)); it = it | cli.joinList(row)
+        row = list(row); rs = range(len(row)+1000) # 1000 for longer rows below
+        it = it | cli.joinList(row)
         if isinstance(columns, slice): columns = set(rs[columns])
         if self.inverted: columns = set(e for e in rs if e not in columns)
-        if len(columns) == 1: c = list(columns)[0]; return (list(row)[c] for row in it)
+        if len(columns) == 1:
+            c = list(columns)[0];
+            return (r[c] for r in (list(row) for row in it) if len(r) > c)
         else: return ((e for i, e in enumerate(row) if i in columns) for row in it)
     def __getitem__(self, idx):
         answer = columns(idx); answer.inverted = self.inverted; return answer
@@ -282,7 +279,7 @@ Example::
     :class:`k1lib.cli.utils.toSet`"""
         super().__init__(); self.column = column
     def __ror__(self, it:Table[T]) -> Table[T]:
-        self.__ror__(it); terms = set(); c = self.column
+        terms = set(); c = self.column
         for row in it:
             row = list(row); e = row[c]
             if e not in terms: yield row
@@ -296,7 +293,7 @@ Example::
     [*range(10), 2, 3] | breakIf(lambda x: x > 5) | deref()"""
         super().__init__(); self.f = f
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
-        super().__ror__(it); f = self.f
+        f = self.f
         for line in it:
             if f(line): break
             yield line

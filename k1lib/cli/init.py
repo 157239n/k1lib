@@ -4,27 +4,27 @@ import k1lib.cli as cli; from numbers import Number
 import k1lib, itertools, copy, torch; import numpy as np
 
 __all__ = ["BaseCli", "Table", "T", "fastF",
-           "serial", "oneToMany", "manyToMany", "manyToManySpecific"]
-s = k1lib.Settings()
-s.add("defaultDelim", "\t", "default delimiter used in-between columns when creating tables. Defaulted to tab character.")
-s.add("defaultIndent", "  ", "default indent used for displaying nested structures")
-s.add("oboFile", None, "gene ontology obo file location")
-s.add("strict", False, "turning it on can help you debug stuff, but could also be a pain to work with")
-s.add("lookupImgs", True, "sort of niche. Whether to auto looks up extra gene ontology relationship images")
-s.add("inf", float("inf"), "infinity definition for many clis. Here because you might want to temporarily not loop things infinitely")
-k1lib.settings.add("cli", s, "from k1lib.cli module")
+           "serial", "oneToMany", "manyToMany", "mtmS"]
+settings = k1lib.Settings()
+atomic = k1lib.Settings()
+settings.add("atomic", atomic, "classes/types that are considered atomic and specified cli tools should never try to iterate over them")
+settings.add("defaultDelim", "\t", "default delimiter used in-between columns when creating tables. Defaulted to tab character.")
+settings.add("defaultIndent", "  ", "default indent used for displaying nested structures")
+settings.add("strict", False, "turning it on can help you debug stuff, but could also be a pain to work with")
+settings.add("inf", float("inf"), "infinity definition for many clis. Here because you might want to temporarily not loop things infinitely")
+k1lib.settings.add("cli", settings, "from k1lib.cli module")
 def patchDefaultDelim(st:str):
     """
 :param s:
     - if not None, returns self
     - else returns the default delimiter in :attr:`~k1lib.settings`"""
-    return s.defaultDelim if st is None else st
+    return settings.defaultDelim if st is None else st
 def patchDefaultIndent(st:str):
     """
 :param s:
     - if not None, returns self
     - else returns the default indent character in :attr:`~k1lib.settings`"""
-    return s.defaultIndent if st is None else st
+    return settings.defaultIndent if st is None else st
 T = TypeVar("T")
 """Generic type variable"""
 class _MetaType(type):
@@ -89,18 +89,14 @@ Example::
 Kinda like :class:`~k1lib.cli.modifier.apply`. There're just multiple ways of doing
 this. This I think, is more intuitive, and :class:`~k1lib.cli.modifier.apply` is more
 for lambdas and columns mode. Performances are pretty much identical."""
-        if isinstance(self, oneToMany):
-            self.clis.append(cli); return self
-        if isinstance(cli, oneToMany):
-            cli.clis.append(self); return cli
+        if isinstance(self, oneToMany): return self._after(cli)
+        if isinstance(cli, oneToMany): return cli._before(self)
         return oneToMany(self, cli)
-    def __add__(self, cli:"BaseCli") -> "manyToManySpecific":
+    def __add__(self, cli:"BaseCli") -> "mtmS":
         """Parallel pass multiple streams to multiple clis."""
-        if isinstance(self, manyToManySpecific):
-            self.clis.append(cli); return self
-        if isinstance(cli, manyToManySpecific):
-            cli.clis.append(self); return cli
-        return manyToManySpecific(self, cli)
+        if isinstance(self, mtmS): return self._after(cli)
+        if isinstance(cli, mtmS): return cli._before(self)
+        return mtmS(self, cli)
     def all(self, n:int=1) -> "BaseCli":
         """Applies this cli to all incoming streams.
 
@@ -110,10 +106,8 @@ for lambdas and columns mode. Performances are pretty much identical."""
         return s
     def __or__(self, cli) -> "serial":
         """Joins clis end-to-end"""
-        if isinstance(self, serial):
-            self.clis.append(cli); return self
-        if isinstance(cli, serial):
-            cli.clis = [self] + cli.clis; return cli
+        if isinstance(self, serial): return self._after(cli)
+        if isinstance(cli, serial): return cli._before(self)
         return serial(self, cli)
     def __ror__(self, it): return NotImplemented
     def f(self) -> Table[Table[int]]:
@@ -153,40 +147,73 @@ fails to run::
 
     [1, 2] | a() | b() # runs
     c = a() | b(); [1, 2] | c # doesn't run if this class doesn't exist"""
-        super().__init__(fs=clis); self.clis = list(clis)
+        super().__init__(fs=clis); self.clis = list(clis); self._cache()
+    def _cache(self):
+        self._hasTrace = any(isinstance(c, cli.trace) for c in self.clis)
+        self._cliCs = [fastF(c) for c in self.clis]; return self
     def __ror__(self, it:Iterator[Any]) -> Iterator[Any]:
-        super().__ror__(it); clis = self.clis#iter(self.clis)
-        for cli in clis:
-            if isinstance(it, np.ndarray): it = cli.__ror__(it)
-            else: it = it | cli
+        if self._hasTrace: # slower, but tracable
+            for cli in self.clis: it = it | cli
+        else: # faster, but not tracable
+            for cli in self._cliCs: it = cli(it)
         return it
+    def _before(self, c): self.clis = [c] + self.clis; return self._cache()
+    def _after(self, c): self.clis = self.clis + [c]; return self._cache()
+atomic.add("baseAnd", (Number, np.number, str, dict, bool, bytes, list, tuple, torch.Tensor), "used by BaseCli.__and__")
+def _iterable(it):
+    try: iter(it); return True
+    except: return False
 class oneToMany(BaseCli):
     def __init__(self, *clis:List[BaseCli]):
         """Duplicates 1 stream into multiple streams, each for a cli in the
 list. Used in the "a & b" joining operator. See also: :meth:`BaseCli.__and__`"""
-        super().__init__(fs=clis); self.clis = clis
+        super().__init__(fs=clis); self.clis = clis; self._cache()
     def __ror__(self, it:Iterator[Any]) -> Iterator[Iterator[Any]]:
-        super().__ror__(it); notIterable = False
-        try: iter(it)
-        except: notIterable = True
-        if notIterable or isinstance(it, (list, tuple, torch.Tensor, str, Number, np.number, bool)):
-            for cli in self.clis: yield cli.__ror__(it)
+        if isinstance(it, atomic.baseAnd) or not _iterable(it):
+            for cli in self._cliCs: yield cli(it)
         else:
             its = itertools.tee(it, len(self.clis))
-            for cli, it in zip(self.clis, its): yield cli.__ror__(it)
+            for cli, it in zip(self._cliCs, its): yield cli(it)
+    def _cache(self): self._cliCs = [fastF(c) for c in self.clis]; return self
+    def _before(self, c): self.clis = [c] + self.clis; return self._cache()
+    def _after(self, c): self.clis = self.clis + [c]; return self._cache()
 class manyToMany(BaseCli):
     def __init__(self, cli:BaseCli):
         """Applies multiple streams to a single cli. Used in the :meth:`BaseCli.all`
 operator."""
-        super().__init__(fs=[cli]); self.cli = cli
+        super().__init__(fs=[cli]); self.cli = cli; self._cliC = fastF(cli)
     def __ror__(self, it:Iterator[Iterator[Any]]) -> Iterator[Iterator[Any]]:
-        super().__ror__(it); f = fastF(self.cli)
-        return (f(s) for s in it)
-class manyToManySpecific(BaseCli):
+        f = self._cliC; return (f(s) for s in it)
+class mtmS(BaseCli):
     def __init__(self, *clis:List[BaseCli]):
         """Applies multiple streams to multiple clis independently. Used in
-the "a + b" joining operator. See also: :meth:`BaseCli.__add__`"""
-        super().__init__(fs=clis); self.clis = list(clis)
+the "a + b" joining operator. See also: :meth:`BaseCli.__add__`.
+
+Weird name is actually a shorthand for "many to many specific"."""
+        super().__init__(fs=clis); self.clis = list(clis); self._cache()
+    def _cache(self): self._cliCs = [fastF(c) for c in self.clis]; return self
+    def _before(self, c): self.clis = [c] + self.clis; return self._cache()
+    def _after(self, c): self.clis = self.clis + [c]; return self._cache()
     def __ror__(self, its:Iterator[Any]) -> Iterator[Any]:
-        super().__ror__(its)
-        for cli, it in zip(self.clis, its): yield cli.__ror__(it)
+        for cli, it in zip(self._cliCs, its): yield cli(it)
+    @staticmethod
+    def f(f, i:int, n:int=100):
+        """Convenience method, so
+that this::
+
+    mtmS(iden(), op()**2, iden(), iden(), iden())
+    # also the same as this btw:
+    (iden() + op()**2 + iden() + iden() + iden())
+
+is the same as this::
+
+    mtmS.single(op()**2, 1, 5)
+
+Example::
+
+    # returns [5, 36, 7, 8, 9]
+    range(5, 10) | mtmS.single(op()**2, 1, 5) | deref()
+
+:param i: where should I put the function?
+:param n: how many clis in total? Defaulted to 100"""
+        return mtmS(*([cli.iden()]*i + [f] + [cli.iden()]*(n-i-1)))

@@ -31,8 +31,7 @@ This also decorates the returned object so that it has same qualname, docstring
 and whatnot."""
         super().__init__(fs=[f]); self.f = f
         update_wrapper(self, f)
-    def __ror__(self, it:T) -> T:
-        return self.f(it)
+    def __ror__(self, it:T) -> T: return self.f(it)
 class apply(BaseCli):
     def __init__(self, f:Callable[[T], T], column:int=None, cache:int=0):
         """Applies a function f to every line.
@@ -62,10 +61,10 @@ You can also add a cache, like this::
 :param column: if not None, then applies the function to that column only
 :param cache: if specified, then caches this much number of values"""
         super().__init__(fs=[f]);
-        self.f = f; self.column = column; self.cache = cache
+        self.f = f; self.column = column; self._fC = fastF(f)
+        if cache > 0: self._fC = lru_cache(cache)(self._fC)
     def __ror__(self, it:Iterator[str]):
-        super().__ror__(it); f = fastF(self.f); c = self.column
-        if self.cache > 0: f = lru_cache(self.cache)(f)
+        c = self.column; f = self._fC
         if c is None: return (f(line) for line in it)
         else: return ([(e if i != c else f(e)) 
                        for i, e in enumerate(row)] for row in it)
@@ -157,10 +156,9 @@ be a lot slower than :class:`apply`.
         self.timeout = timeout; self.utilization = utilization
         self.bs = bs; self.kwargs = kwargs
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
-        super().__ror__(it); it = iter(it) # really make sure it's an iterator, for prefetch
-        bs = self.bs; timeout = self.timeout
-        if bs > 1:
-            return it | cli.batched(bs, True) | applyMp(apply(self.f) | cli.deref(), self.prefetch, timeout, **self.kwargs) | cli.joinStreams()
+        timeout = self.timeout; it = iter(it) # really make sure it's an iterator, for prefetch
+        if self.bs > 1:
+            return it | cli.batched(self.bs, True) | applyMp(apply(self.f) | cli.deref(), self.prefetch, timeout, **self.kwargs) | cli.joinStreams()
         self.p = p = mp.Pool(int(mp.cpu_count()*self.utilization), terminateGraceful)
         applyMp._pools.add(p); common = dill.dumps([self.f, self.kwargs])
         def gen():
@@ -351,7 +349,7 @@ Example::
         self.column = column; self.reverse = reverse; self.numeric = numeric
         self.filterF = (lambda x: float(x)) if numeric else (lambda x: x)
     def __ror__(self, it:Iterator[str]):
-        super().__ror__(it); c = self.column
+        c = self.column
         if c is None:
             return it | cli.wrapList() | cli.transpose() | sort(0, self.numeric, self.reverse)
         f = self.filterF
@@ -374,7 +372,6 @@ Example::
     ["a", "aaa", "aaaaa", "aa", "aaaa"] | ~sortF(lambda r: len(r)) | deref()"""
         super().__init__(fs=[f]); self.f = f; self.reverse = reverse
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
-        super().__ror__(it)
         return iter(sorted(list(it), key=self.f, reverse=self.reverse))
     def __invert__(self) -> "sortF":
         return sortF(self.f, not self.reverse)
@@ -392,7 +389,7 @@ This is useful whenever you want to mutate something, but don't want to
 include the function result into the main stream."""
         super().__init__(fs=[f]); self.f = f
     def __ror__(self, it:T) -> T:
-        super().__ror__(it); self.f(it); return it
+        self.f(it); return it
 class randomize(BaseCli):
     def __init__(self, bs=100):
         """Randomize input stream. In order to be efficient, this does not
@@ -411,7 +408,6 @@ in ``float("inf")``, or ``None``. Example::
     range(10) | randomize(None) | deref()"""
         super().__init__(); self.bs = bs if bs != None else float("inf")
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
-        super().__ror__(it)
         for batch in it | cli.batched(self.bs, True):
             batch = list(batch); perms = torch.randperm(len(batch))
             for idx in perms: yield batch[idx]

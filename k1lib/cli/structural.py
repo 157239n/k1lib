@@ -40,15 +40,47 @@ this::
         # returns (3, 21)
         [2, 1, 3] | repeat() | transpose() | shape()
 
+Also be careful with empty streams, as you might not get any results at all::
+
+    # returns [], as the last stream has no elements
+    [[1, 2], [3, 4], []] | transpose() | deref()
+    # returns [[1, 3, 0], [2, 4, 0]]
+    [[1, 2], [3, 4], []] | transpose(fill=0) | deref()
+
 :param fill: if not None, then will try to zip longest with this fill value"""
         super().__init__(); self.fill = fill
         self.d1 = min(dim1, dim2); self.d2 = max(dim1, dim2)
     def __ror__(self, it:Iterator[Iterator[T]]) -> Table[T]:
-        super().__ror__(it); d1 = self.d1; d2 = self.d2; fill = self.fill
+        d1 = self.d1; d2 = self.d2; fill = self.fill
         if isinstance(it, torch.Tensor): return it.transpose(d1, d2)
         if d1 != 0: return it | cli.serial(*([transpose(fill=fill).all(i) for i in range(d1, d2)] + [transpose(fill=fill).all(i-1) for i in range(d2-1, d1, -1)]))
         if self.fill is None: return zip(*it)
         else: return itertools.zip_longest(*it, fillvalue=fill)
+    @staticmethod
+    def fill(fill="", dim1:int=0, dim2:int=1):
+        """Convenience method to fill in missing elements of a table.
+Example::
+
+    # returns [[1, 2, 3], [4, 5, 0]]
+    [[1, 2, 3], [4, 5]] | transpose.fill(0) | deref()
+    # also returns [[1, 2, 3], [4, 5, 0]], demonstrating how it works underneath
+    [[1, 2, 3], [4, 5]] | transpose(fill=0) | transpose(fill=0) | deref()"""
+        return transpose(dim1, dim2, fill=fill) | transpose(dim1, dim2, fill=fill)
+    @staticmethod
+    def wrap(f, dim1:int=0, dim2:int=1, fill=None):
+        """Wraps ``f`` around 2 :class:`transpose`s, can be useful in combination with
+:class:`k1lib.cli.init.mtmS`. Example::
+
+    # returns [[1, 4, 3, 4], [8, 81, 10, 11]]
+    [range(1, 5), range(8, 12)] | transpose.wrap(mtmS.f(apply(op()**2), 1)) | deref()
+    # also returns [[1, 4, 3, 4], [8, 81, 10, 11]], demonstrating the typical way to do this
+    [range(1, 5), range(8, 12)] | apply(op()**2, 1) | deref()
+
+The example given is sort of to demonstrate this only. Most of the time, just use
+:class:`~k1lib.cli.modifier.apply` with columns instead. But sometimes you need direct
+access to a column, so this is how you can do it."""
+        if not isinstance(f, BaseCli): f = cli.applyS(f)
+        return transpose(dim1, dim2, fill) | f | transpose(dim1, dim2, fill)
 class joinList(BaseCli):
     def __init__(self, element=None, begin=True):
         """Join element into list.
@@ -63,7 +95,7 @@ Example::
     else takes the input [...] as usual"""
         super().__init__(); self.element = element; self.begin = begin
     def __ror__(self, it:Tuple[T, Iterator[T]]) -> Iterator[T]:
-        super().__ror__(it); it = iter(it)
+        it = iter(it)
         if self.element is None:
             if self.begin: yield next(it); yield from next(it)
             else: e = next(it); yield from next(it); yield e
@@ -83,7 +115,7 @@ then automatically defaults to [0.8, 0.2]. Example::
         if len(weights) == 0: weights = [0.8, 0.2]
         self.weights = np.array(weights)
     def __ror__(self, it):
-        super().__ror__(it); it = list(it); ws = self.weights; c = 0
+        it = list(it); ws = self.weights; c = 0
         ws = (ws * len(it) / ws.sum()).astype(int)
         for w in ws: yield it[c:c+w]; c += w
 class joinStreams(BaseCli):
@@ -111,7 +143,6 @@ continue. Could be useful in active learning. Example::
     # could return [-5, -4, 0, -3, 1, 2, 3, 4, 5, 6], demonstrating yieldSentinel
     [range(7), stream2] | joinStreamsRandom() | deref()"""
     def __ror__(self, streams:Iterator[Iterator[T]]) -> Iterator[T]:
-        super().__ror__(streams)
         streams = [iter(st) for st in streams]
         try:
             for streamIdx in rand(len(streams)):
@@ -155,18 +186,16 @@ it.
 :param limit: max number of active samples. Discards samples if number of samples
     is over this.
 :param p: probability of actually adding the samples in"""
-        super().__init__(); self.samples = deque()
-        self.limit = limit; self.p = p
+        super().__init__(); self.p = p
+        self.samples = deque([], limit)
     def append(self, item):
         """Adds 1 sample."""
-        if random.random() < self.p:
-            if len(self.samples) > self.limit: self.samples.popleft()
-            self.samples.append(item)
+        if random.random() < self.p: self.samples.append(item)
     def extend(self, items):
         """Adds multiple samples."""
         for item in items: self.append(item)
     def __iter__(self):
-        samples = self.samples; limit = self.limit
+        samples = self.samples
         while True:
             if len(samples) == 0: yield yieldSentinel
             else: yield samples.popleft()
@@ -192,7 +221,7 @@ Example::
     range(5) | batched(float("inf"), False) | deref()"""
         super().__init__(); self.bs = bs; self.includeLast = includeLast
     def __ror__(self, it):
-        super().__ror__(it); it = iter(it); l = []; bs = self.bs
+        it = iter(it); l = []; bs = self.bs
         if bs == float("inf"):
             if self.includeLast: yield it
             return
@@ -255,7 +284,7 @@ values. Example::
         super().__init__(fs=[keyF, valueF]); self.keyF = keyF or (lambda s: s)
         self.valueF = valueF or (lambda s: s)
     def __ror__(self, keys:Iterator[Any]) -> Dict[Any, Any]:
-        super().__ror__(keys); keyF = self.keyF; valueF = self.valueF
+        keyF = self.keyF; valueF = self.valueF
         return {keyF(key):valueF(key) for key in keys}
 class expandE(BaseCli):
     def __init__(self, f:Callable[[T], List[T]], column:int):
@@ -306,6 +335,8 @@ columns. Example::
         it = it | cli.apply(lambda row: (tuple(row) if isinstance(row, list) else row))
         c = Counter(it); s = sum(c.values())
         for k, v in c.items(): yield [v, k, f"{round(100*v/s)}%"]
+def _permuteGen(row, pers):
+    row = list(row); return (row[i] for i in pers)
 class permute(BaseCli):
     def __init__(self, *permutations:List[int]):
         """Permutes the columns. Acts kinda like :meth:`torch.Tensor.permute`.
@@ -315,9 +346,8 @@ Example::
     ["ab", "cd"] | permute(1, 0) | deref()"""
         super().__init__(); self.permutations = permutations
     def __ror__(self, it:Iterator[str]):
-        super().__ror__(it); p = self.permutations
-        def gen(row): row = list(row); return (row[i] for i in p)
-        for row in it: yield gen(row)
+        p = self.permutations
+        for row in it: yield _permuteGen(row, p)
 class accumulate(BaseCli):
     def __init__(self, columnIdx:int=0, avg=False):
         """Groups lines that have the same row[columnIdx], and
@@ -328,7 +358,6 @@ add together all other columns, assuming they're numbers
         super().__init__(); self.columnIdx = columnIdx; self.avg = avg
         self.dict = defaultdict(lambda: defaultdict(lambda: 0))
     def __ror__(self, it:Iterator[str]):
-        super().__ror__(it)
         for row in it:
             row = list(row); key = row[self.columnIdx]
             row.pop(self.columnIdx)
@@ -399,8 +428,7 @@ inadvertently alter the iterator::
 The example happens because you have already consumed all elements of the first
 row, and thus there aren't any left when you try to call ``next(it)``."""
     def __ror__(self, it:Iterator[T]) -> Tuple[T, Iterator[T]]:
-        super().__ror__(it); it = iter(it)
-        sentinel = object(); row = next(it, sentinel)
+        it = iter(it); sentinel = object(); row = next(it, sentinel)
         if row == sentinel: return None, []
         def gen(): yield row; yield from it
         return row, gen()
@@ -416,8 +444,7 @@ return the input Iterator, which is not tampered. Example::
     it() | peekF(headOut()) | deref()"""
         super().__init__(fs=[f]); self.f = f
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
-        super().__ror__(it); it = iter(it)
-        sentinel = object(); row = next(it, sentinel)
+        it = iter(it); sentinel = object(); row = next(it, sentinel)
         if row == sentinel: return []
         def gen(): yield row; yield from it
         self.f(row); return gen()
@@ -433,7 +460,7 @@ won't work as you will have used it the first time. Example::
     def __init__(self, limit:int=None):
         super().__init__(); self.limit = limit
     def __ror__(self, o:T) -> Iterator[T]:
-        super().__ror__(o); limit = self.limit or k1lib.settings.cli.inf
+        limit = self.limit or k1lib.settings.cli.inf
         for i in itertools.count():
             if i >= limit: break
             yield o
@@ -466,8 +493,7 @@ class repeatFrom(BaseCli):
 :param limit: if None, then repeats indefinitely"""
         super().__init__(); self.limit = limit
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
-        super().__ror__(it); it = list(it)
-        limit = self.limit or k1lib.settings.cli.inf
+        it = list(it); limit = self.limit or k1lib.settings.cli.inf
         for i in itertools.count():
             if i >= limit: break
             yield from it

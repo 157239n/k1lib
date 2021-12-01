@@ -31,7 +31,7 @@ so the term's order might matter to you"""
         """Gets a single tag out. Applies this on a single feature only"""
         class _tag(cli.BaseCli):
             def __ror__(self, it):
-                lines = it | cli.grep(f"/{tag}").till("/") | cli.deref()
+                lines = it | cli.grep(f"/{tag}").till(f"/(?!{tag})") | cli.deref()
                 # check if on same line
                 if len(lines) > 1 and lines[-1].lstrip().startswith("/"): lines.pop()
                 return (lines | cli.op().split(f"/{tag}=\"").all() | cli.joinStreams() | ~cli.head(1)\

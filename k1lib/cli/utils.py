@@ -21,7 +21,9 @@ __all__ = ["size", "shape", "item", "identity", "iden",
            "toList", "wrapList", "toSet", "toIter", "toRange", "toType",
            "equals", "reverse", "ignore",
            "toSum", "toAvg", "toMean", "toMax", "toMin", "toPIL",
-           "lengths", "headerIdx", "deref"]
+           "toBin", "toIdx",
+           "lengths", "headerIdx", "deref", "bindec"]
+settings = k1lib.settings.cli
 def exploreSize(it):
     """Returns first element and length of array"""
     if isinstance(it, str): raise TypeError("Just here to terminate shape()")
@@ -29,9 +31,7 @@ def exploreSize(it):
     o = next(it, sentinel); count = 1
     if o is sentinel: return None, 0
     try:
-        while True:
-            next(it)
-            count += 1
+        while True: next(it); count += 1
     except StopIteration: pass
     return o, count
 class size(BaseCli):
@@ -70,23 +70,21 @@ instead of actually looping over them.
     columns"""
         super().__init__(); self.idx = idx
     def __ror__(self, it:Iterator[str]):
-        super().__ror__(it)
         if self.idx is None:
             answer = []
             try:
                 while True:
                     if isinstance(it, (torch.Tensor, np.ndarray)):
-                        tuple(answer + list(it.shape))
-                    it, s = exploreSize(it)
-                    answer.append(s)
+                        return tuple(answer + list(it.shape))
+                    it, s = exploreSize(it); answer.append(s)
             except TypeError: pass
             return tuple(answer)
         else:
-            it |= cli.item(self.idx)
-            return exploreSize(it)[1]
+            return exploreSize(it | cli.item(self.idx))[1]
 shape = size
+noFill = object()
 class item(BaseCli):
-    def __init__(self, amt:int=1):
+    def __init__(self, amt:int=1, fill=noFill):
         """Returns the first row.
 Example::
 
@@ -94,21 +92,24 @@ Example::
     iter(range(5)) | item()
     # returns torch.Size([5])
     torch.randn(3,4,5) | item(2) | shape()
+    # returns 3
+    [] | item(fill=3)
 
-:param amt: how many times do you want to call item() back to back?"""
-        self.amt = amt
+:param amt: how many times do you want to call item() back to back?
+:param fill: if iterator length is 0, return this"""
+        self.amt = amt; self.fill = fill
+        self.fillP = [fill] if fill != noFill else [] # preprocessed, to be faster
     def __ror__(self, it:Iterator[str]):
         if self.amt != 1:
-            return it | cli.serial(*(item() for _ in range(self.amt)))
-        return next(iter(it))
+            return it | cli.serial(*(item(fill=self.fill) for _ in range(self.amt)))
+        return next(iter(it), *self.fillP)
 class identity(BaseCli):
     """Yields whatever the input is. Useful for multiple streams.
 Example::
 
     # returns range(5)
     range(5) | identity()"""
-    def __ror__(self, it:Iterator[Any]):
-        return it
+    def __ror__(self, it:Iterator[Any]): return it
 iden = identity
 class toStr(BaseCli):
     def __init__(self, column:int=None):
@@ -136,7 +137,7 @@ class join(BaseCli):
     [2, "a"] | join("\n")"""
         super().__init__(); self.delim = patchDefaultDelim(delim)
     def __ror__(self, it:Iterator[str]):
-        super().__ror__(it); return self.delim.join(it | toStr())
+        return self.delim.join(it | toStr())
 class toNumpy(BaseCli):
     """Converts generator to numpy array. Essentially ``np.array(list(it))``"""
     def __ror__(self, it:Iterator[float]) -> np.array:
@@ -274,6 +275,25 @@ Example::
         import PIL; self.PIL = PIL
     def __ror__(self, path) -> "PIL.Image.Image":
         return self.PIL.Image.open(path)
+class toBin(BaseCli):
+    """Converts integer to binary string.
+Example::
+
+    # returns "101"
+    5 | toBin()"""
+    def __ror__(self, it):
+        return bin(int(it))[2:]
+class toIdx(BaseCli):
+    def __init__(self, chars:str):
+        """Get index of characters according to a reference.
+Example::
+
+    # returns [1, 4, 4, 8]
+    "#&&*" | toIdx("!#$%&'()*+") | deref()"""
+        self.chars = {v:k for k, v in enumerate(chars)}
+    def __ror__(self, it):
+        chars = self.chars
+        for e in it: yield chars[e]
 class lengths(BaseCli):
     """Returns the lengths of each element.
 Example::
@@ -294,18 +314,17 @@ Example::
     # returns [[0, 'a'], [1, 'b'], [2, 'c']]
     ["abc"] | headerIdx() | deref()"""
     return item() | cli.wrapList() | cli.transpose() | cli.insertIdColumn(True)
-Tensor = torch.Tensor
-atomicTypes = (numbers.Number, np.number, str, dict, torch.nn.Module)
+settings.atomic.add("deref", (numbers.Number, np.number, str, dict, bool, bytes, torch.nn.Module), "used by deref")
+Tensor = torch.Tensor; atomic = settings.atomic
 class inv_dereference(BaseCli):
     def __init__(self, ignoreTensors=False):
         """Kinda the inverse to :class:`dereference`"""
         super().__init__(); self.ignoreTensors = ignoreTensors
     def __ror__(self, it:Iterator[Any]) -> List[Any]:
-        super().__ror__(it); ignoreTensors = self.ignoreTensors; 
         for e in it:
-            if e is None or isinstance(e, atomicTypes): yield e
+            if e is None or isinstance(e, atomic.deref): yield e
             elif isinstance(e, Tensor):
-                if not ignoreTensors and len(e.shape) == 0: yield e.item()
+                if not self.ignoreTensors and len(e.shape) == 0: yield e.item()
                 else: yield e
             else:
                 try: yield e | self
@@ -331,22 +350,27 @@ You can also specify a ``maxDepth``::
     # returns [[0, 1, 2]]
     iter([range(3)]) | deref(2)
 
-:param maxDepth: maximum depth to dereference. Starts at 0 for not doing anything
-    at all
-:param ignoreTensors: if True, then don't loop over :class:`torch.Tensor`
-    internals
+There are a few classes/types that are considered atomic, and :class:`deref`
+will never try to iterate over it. If you wish to change it, do something like::
+
+    settings.cli.atomic.deref = (int, float, ...)
 
 .. warning::
 
-    Can work well with PyTorch Tensors, but not Numpy's array as they screw things up
+    Can work well with PyTorch Tensors, but not Numpy arrays as they screw things up
     with the __ror__ operator, so do torch.from_numpy(...) first. Don't worry about
-    unnecessary copying, as numpy and torch both utilizes the buffer protocol."""
+    unnecessary copying, as numpy and torch both utilizes the buffer protocol.
+
+:param maxDepth: maximum depth to dereference. Starts at 0 for not doing anything
+    at all
+:param ignoreTensors: if True, then don't loop over :class:`torch.Tensor`
+    internals"""
         super().__init__(); self.ignoreTensors = ignoreTensors
         self.maxDepth = maxDepth; self.depth = 0
     def __ror__(self, it:Iterator[T]) -> List[T]:
-        super().__ror__(it); ignoreTensors = self.ignoreTensors
+        ignoreTensors = self.ignoreTensors
         if self.depth >= self.maxDepth: return it
-        elif isinstance(it, atomicTypes): return it
+        elif isinstance(it, atomic.deref): return it
         elif isinstance(it, Tensor):
             if ignoreTensors: return it
             if len(it.shape) == 0: return it.item()
@@ -356,10 +380,25 @@ You can also specify a ``maxDepth``::
         for e in it:
             if e is cli.yieldSentinel: return answer
             answer.append(self.__ror__(e))
-        self.depth -= 1
-        return answer
+        self.depth -= 1; return answer
     def __invert__(self) -> BaseCli:
         """Returns a :class:`~k1lib.cli.init.BaseCli` that makes
 everything an iterator. Not entirely sure when this comes in handy, but it's
 there."""
         return inv_dereference(self.ignoreTensors)
+class bindec(BaseCli):
+    def __init__(self, cats:List[Any], f=None):
+        """Binary decodes the input.
+Example::
+
+    # returns ['a', 'c']
+    5 | bindec("abcdef")
+    # returns 'a,c'
+    5 | bindec("abcdef", join(","))
+
+:param cats: categories
+:param f: transformation function of the selected elements. Defaulted to :class:`toList`, but others like :class:`join` is useful too"""
+        self.cats = cats; self.f = f or toList()
+    def __ror__(self, it):
+        it = bin(int(it))[2:][::-1]
+        return (e for i, e in zip(it, self.cats) if i == '1') | self.f
