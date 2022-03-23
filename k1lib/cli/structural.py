@@ -8,7 +8,7 @@ from collections import defaultdict, Counter, deque
 from k1lib.cli.init import patchDefaultDelim, BaseCli, oneToMany, T, Table, fastF
 import k1lib.cli as cli
 import itertools, numpy as np, torch, k1lib
-__all__ = ["transpose", "joinList", "splitList",
+__all__ = ["transpose", "reshape", "joinList", "splitW",
            "joinStreams", "yieldSentinel", "joinStreamsRandom", "activeSamples",
            "table", "batched", "collate",
            "insertRow", "insertColumn", "insertIdColumn",
@@ -81,6 +81,42 @@ The example given is sort of to demonstrate this only. Most of the time, just us
 access to a column, so this is how you can do it."""
         if not isinstance(f, BaseCli): f = cli.applyS(f)
         return transpose(dim1, dim2, fill) | f | transpose(dim1, dim2, fill)
+def _formStructure(it, dims, dimI):
+    if dimI >= len(dims): return next(it)
+    return [_formStructure(it, dims, dimI+1) for i in range(dims[dimI])]
+class reshape(BaseCli):
+    def __init__(self, *dims):
+        """Reshapes the input stream into the desired shape.
+Example::
+
+    # returns [[0, 1, 2], [3, 4, 5]]
+    range(6) | reshape(2, 3) | deref()
+    # returns [[0, 1], [2, 3], [4, 5]]
+    range(6) | reshape(3, 2) | deref()
+    # returns [[0, 1], [2, 3], [4, 5]], stopped early
+    range(100) | reshape(3, 2) | deref()
+    # returns [[0, 1, 2], [3, 4, 5]], can leave out first dimension
+    range(6) | reshape(-1, 3) | deref()
+    # returns [[0, 1, 2]], won't include 2nd element, as it ran out of elements
+    range(5) | reshape(-1, 3) | deref()
+    # throws error, as it ran out of elements and can't fulfill the request
+    range(6) | reshape(3, 3) | deref()
+
+Unlike :meth:`torch.reshape`, the input piped into this has to be a simple iterator.
+If you have a complex data structure with multiple dimensions, turn that into a simple
+iterator with :class:`joinStreams` first, like this::
+
+    # returns [[[0, 1, 2]], [[3, 4, 5]]]
+    [[[0], [1]], [[2], [3]], [[4], [5]]] | joinStreams(2) | reshape(2, 1, 3) | deref()"""
+        self.dims = dims
+    def __ror__(self, it):
+        it = iter(it)
+        if self.dims[0] == -1:
+            try:
+                while True: yield _formStructure(it, self.dims, 1)
+            except StopIteration: pass
+        else:
+            for i in range(self.dims[0]): yield _formStructure(it, self.dims, 1)
 class joinList(BaseCli):
     def __init__(self, element=None, begin=True):
         """Join element into list.
@@ -102,15 +138,15 @@ Example::
         else:
             if self.begin: yield self.element; yield from it
             else: yield from it; yield self.element
-class splitList(BaseCli):
+class splitW(BaseCli):
     def __init__(self, *weights:List[float]):
-        """Splits list of elements into multiple lists. If no weights are provided,
+        """Splits elements into multiple weighted lists. If no weights are provided,
 then automatically defaults to [0.8, 0.2]. Example::
 
     # returns [[0, 1, 2, 3, 4, 5, 6, 7], [8, 9]]
-    range(10) | splitList(0.8, 0.2) | deref()
+    range(10) | splitW(0.8, 0.2) | deref()
     # same as the above
-    range(10) | splitList() | deref()"""
+    range(10) | splitW() | deref()"""
         super().__init__();
         if len(weights) == 0: weights = [0.8, 0.2]
         self.weights = np.array(weights)
@@ -119,14 +155,25 @@ then automatically defaults to [0.8, 0.2]. Example::
         ws = (ws * len(it) / ws.sum()).astype(int)
         for w in ws: yield it[c:c+w]; c += w
 class joinStreams(BaseCli):
-    """Joins multiple streams.
+    def __init__(self, dims=1):
+        """Joins multiple streams.
 Example::
 
     # returns [1, 2, 3, 4, 5]
-    [[1, 2, 3], [4, 5]] | joinStreams() | deref()"""
+    [[1, 2, 3], [4, 5]] | joinStreams() | deref()
+    # returns [[0, 1], [2], [3, 4, 5], [6, 7, 8], [], [9, 10]]
+    [[[0, 1], [2], [3, 4, 5]], [[6, 7, 8], [], [9, 10]]] | joinStreams() | deref()
+    # returns [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    [[[0, 1], [2], [3, 4, 5]], [[6, 7, 8], [], [9, 10]]] | joinStreams(2) | deref()
+
+Sometimes, you may want to impose some dimensional structure after joining all streams
+together, which :class:`reshape` does."""
+        if dims < 1: raise AttributeError(f"`dims` ({dims}) can't be less than 1, as it doesn't make any sense!")
+        self.multi = cli.serial(*(joinStreams().all(dims-d-1) for d in range(dims))) if dims > 1 else None
     def __ror__(self, streams:Iterator[Iterator[T]]) -> Iterator[T]:
-        super().__ror__(streams)
-        for stream in streams: yield from stream
+        if self.multi != None: yield from streams | self.multi
+        else:
+            for stream in streams: yield from stream
 import random
 def rand(n):
     while True: yield random.randrange(n)

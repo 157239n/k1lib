@@ -204,7 +204,8 @@ Can...
 _time = time.time
 class Callbacks:
     def __init__(self):
-        self._l: k1lib.Learner = None; self.cbsDict = {}; self._timings = Timings()
+        self._l: k1lib.Learner = None; self.cbsDict = {}
+        self._timings = Timings(); self.contexts = [[]]
     @property
     def timings(self) -> Timings:
         """Returns :class:`~k1lib.callbacks.callbacks.Timings` object"""
@@ -225,7 +226,19 @@ you set :attr:`k1lib.Learner.cbs` to this :class:`Callbacks`"""
     def _sort(self) -> "Callbacks":
         self.cbsDict = OrderedDict(sorted(self.cbsDict.items(), key=(lambda o: o[1].order))); return self
     def add(self, cb:Callback, name:str=None):
-        """Adds a callback to the collection."""
+        """Adds a callback to the collection. 
+Example::
+
+    cbs = k1lib.Callbacks()
+    cbs.add(k1lib.Callback().withCheckpoint("startBatch", lambda self: print("here")))
+
+If you just want to insert a simple callback with a single checkpoint, then
+you can do something like::
+
+    cbs.add(["startBatch", lambda _: print("here")])"""
+        if isinstance(cb, (list, tuple)):
+            return self.add(Callback().withCheckpoint(cb[0], cb[1]))
+        if not isinstance(cb, Callback): raise RuntimeError("`cb` is not a callback!")
         if cb in self.cbs: cb.l = self.l; cb.cbs = self; return self
         cb.l = self.l; cb.cbs = self; name = name or cb.name
         if name in self.cbsDict:
@@ -371,30 +384,38 @@ used for evaluation callbacks. Just convenience method really. Currently include
     classes.update(more); classes -= set(less)
     return self.suspendClasses(*classes)
 class AppendContext:
-    def __init__(self, cbs:Callbacks): self.cbs = cbs
-    def __enter__(self): self.cbs.contexts.append([])
+    def __init__(self, cbs:Callbacks, initCbs:List[Callback]=[]):
+        self.cbs = cbs; self.initCbs = initCbs
+    def __enter__(self):
+        self.cbs.contexts.append([])
+        for cb in self.initCbs: self.cbs.add(cb)
+        return self.cbs
     def __exit__(self, *ignored):
         [cb.detach() for cb in self.cbs.contexts.pop()]
 @k1lib.patch(Callbacks)
 def _appendContext_append(self, cb):
-    if "contexts" not in self.__dict__: self.contexts = [[]]
     self.contexts[-1].append(cb)
 @k1lib.patch(Callbacks)
-def context(self) -> ContextManager:
+def context(self, *initCbs:List[Callback]) -> ContextManager:
     """Add context.
 
 Works like this::
 
     cbs = k1lib.Callbacks().add(CbA())
     # CbA is available
-    with cbs.context():
+    with cbs.context(CbE(), CbF()):
         cbs.add(CbB())
-        # CbA and CbB available
+        # CbA, CbB, CbE and CbF available
         cbs.add(CbC())
-        # all 3 are available
+        # all 5 are available
     # only CbA is available
+
+For maximum shortness, you can do this::
+
+    with k1lib.Callbacks().context(CbA()) as cbs:
+        # Cba is available
 """
-    return AppendContext(self)
+    return AppendContext(self, initCbs)
 @k1lib.patch(Callbacks)
 def _checkpointGraph_call(self, checkpoints:List[str]):
     if not hasattr(self, "_checkpointGraphDict"):

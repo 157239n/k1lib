@@ -5,8 +5,9 @@ For operations that feel like the termination
 from collections import defaultdict
 from typing import Iterator, Any
 from k1lib.cli.init import BaseCli, Table
-import torch, numbers, numpy as np, k1lib, tempfile, os; from k1lib import cli
-__all__ = ["stdout", "file", "pretty", "display", "headOut", "intercept"]
+import torch, numbers, numpy as np, k1lib, tempfile, os, sys, time; from k1lib import cli
+__all__ = ["stdout", "tee", "file", "pretty", "display", "headOut",
+           "intercept"]
 class stdout(BaseCli):
     """Prints out all lines. If not iterable, then print out the input raw.
 Example::
@@ -20,6 +21,36 @@ Example::
             it = iter(it)
             for line in it: print(line)
         except TypeError: print(it)
+class tee(BaseCli):
+    def __init__(self, f=(lambda s: f"{s}\n"), s=None):
+        """Like the Linux ``tee`` command, this prints the elements to another
+specified stream, while yielding the elements. Example::
+
+    # prints "0\\n1\\n2\\n3\\n4\\n" and returns [0, 1, 4, 9, 16]
+    range(5) | tee() | apply(op() ** 2) | deref()
+
+:param f: element transform function. Defaults to just adding a new
+    line at the end
+:param s: stream to write to. Defaults to :attr:`sys.stdout`"""
+        self.s = s or sys.stdout; self.f = f
+    def __ror__(self, it):
+        s = self.s; f = self.f
+        for e in it:
+            print(f(e), end="", file=s)
+            yield e
+    @staticmethod
+    def cr():
+        """Tee, but replaces the previous line. "cr" stands for carriage return.
+Example::
+
+    # prints "4" and returns [0, 1, 4, 9, 16]. Does print all the numbers in the middle, but is overriden
+    range(5) | tee.cr() | apply(op() ** 2) | deref()"""
+        return tee(lambda s: f"\r{s}")
+    @staticmethod
+    def crt():
+        """Like :meth:`tee.cr`, but includes an elapsed time text at the end"""
+        beginTime = time.time()
+        return tee(lambda s: f"\r{s}, {int(time.time() - beginTime)}s elapsed")
 class file(BaseCli):
     def __init__(self, fileName:str=None, text:bool=True):
         """Opens a new file for writing.

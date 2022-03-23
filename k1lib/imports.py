@@ -9,7 +9,7 @@ import torch; from torch import nn, optim
 import torch.nn.functional as F, torch.utils.data as data
 import matplotlib.pyplot as plt, matplotlib as mpl
 import numpy as np, dill as pickle, multiprocessing as mp, concurrent.futures as futures
-import math, os, time, sys, random, logging, traceback, re, typing, glob, warnings
+import math, os, time, sys, random, logging, traceback, re, typing, glob, warnings, dill
 import functools; from functools import partial, lru_cache
 import contextlib; from contextlib import contextmanager
 from typing import List, Tuple, Callable, Union, Iterator, Set, Dict, Any

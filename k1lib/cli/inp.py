@@ -65,15 +65,13 @@ Example::
     # same as above
     "/home" | ls()
     # only outputs files, not folders
-    ls("/home") | isFile()
-
-See also: :meth:`~k1lib.cli.filt.isFile`"""
+    ls("/home") | filt(os.path.isfile)"""
     if folder is None: return _ls()
     else: return folder | _ls()
 class _ls(BaseCli):
     def __ror__(self, folder:str):
-        folder = os.path.expanduser(folder)
-        return [f"{folder}/{e}" for e in os.listdir(folder)]
+        folder = os.path.expanduser(folder.rstrip(os.sep))
+        return [f"{folder}{os.sep}{e}" for e in os.listdir(folder)]
 k1lib.settings.cli.add("quiet", False, "whether to mute extra outputs from clis or not")
 newline = b'\n'[0]
 class lazySt:
@@ -102,7 +100,7 @@ found, else do nothing"""
     a = cmd(cliTool); None | a;
     if len(a.err) > 0: raise ImportError(f"""Can't find cli tool {cliTool}. Please install it first.""")
 class cmd(BaseCli):
-    def __init__(self, cmd:str, mode:int=1, text=True): # 0: return (stdout, stderr). 1: return stdout, 2: return stderr
+    def __init__(self, cmd:str, mode:int=1, text=True, block=False): # 0: return (stdout, stderr). 1: return stdout, 2: return stderr
         """Runs a command, and returns the output line by line. Can pipe in some
 inputs. If no inputs then have to pipe in :data:`None`. Example::
 
@@ -166,8 +164,10 @@ Settings:
 
 :param mode: if 0, returns ``(stdout, stderr)``. If 1, returns ``stdout`` and prints
     ``stderr`` if there are any errors. If 2, returns ``stderr``
-:param text: whether to decode the outputs into :class:`str` or return raw :class:`bytes`"""
-        super().__init__(); self.cmd = cmd; self.mode = mode; self.text = text; self.ro = k1lib.RunOnce()
+:param text: whether to decode the outputs into :class:`str` or return raw :class:`bytes`
+:param block: whether to wait for the task to finish before returning to Python or not"""
+        super().__init__(); self.cmd = cmd; self.mode = mode
+        self.text = text; self.block = block; self.ro = k1lib.RunOnce()
     def __ror__(self, it:Union[None, str, bytes, Iterator[Any]]) -> Iterator[Union[str, bytes]]:
         """Pipes in lines of input, or if there's nothing to
 pass, then pass None"""
@@ -176,6 +176,9 @@ pass, then pass None"""
                 if not isinstance(it, (str, bytes)): it = it | cli.toStr() | cli.join("\n")
                 if not isinstance(it, bytes): it = it.encode("utf-8")
             self.out, self.err = executeCmd(self.cmd, it, self.text); mode = self.mode
+        if self.block:
+            self.out = self.out | cli.deref()
+            self.err = self.err | cli.deref()
         if mode == 0: return (self.out, self.err)
         elif mode == 1:
             threading.Thread(target=lambda: printStderr(self.err)).start()

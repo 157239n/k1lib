@@ -7,6 +7,7 @@ __all__ = ["BaseCli", "Table", "T", "fastF",
            "serial", "oneToMany", "manyToMany", "mtmS"]
 settings = k1lib.Settings()
 atomic = k1lib.Settings()
+settings.add("jit", True, "whether to enable automatic JIT compilation of cli tools. See `fastF` for more details")
 settings.add("atomic", atomic, "classes/types that are considered atomic and specified cli tools should never try to iterate over them")
 settings.add("defaultDelim", "\t", "default delimiter used in-between columns when creating tables. Defaulted to tab character.")
 settings.add("defaultIndent", "  ", "default indent used for displaying nested structures")
@@ -73,12 +74,33 @@ have the same feel without extending from this class, but advanced stream operat
 At the moment, you don't have to call super().__init__() and super().__ror__(),
 as __init__'s only job right now is to solidify any :class:`~k1lib.cli.modifier.op`
 passed to it, and __ror__ does nothing."""
-    def __init__(self, fs=[]):
+    def __init__(self, fs:list=[]):
         """Not expected to be instantiated by the end user.
 
-:param fs: if functions inside here is actually a :class:`~k1lib.cli.modifier.op`,
-    then solidifies it (make it not absorb __call__ anymore)"""
-        [f.op_solidify() for f in fs if isinstance(f, cli.op)]
+**fs param**
+
+Expected to use it like this::
+
+    class A(BaseCli):
+        def __init__(self, f):
+            fs = [f]; super().__init__(fs); self.f = fs[0]
+
+Where ``f`` is some (potentially exotic) function. This will replace f with a "normal"
+function that's executable. See source code of :class:`~k1lib.cli.filt.filt` for an
+example of why this is useful. Currently, it will:
+
+- Replace with last recorded ``4 in op()``, if ``f`` is :data:`True`, because Python does
+  not allow returning complex objects from __contains__ method
+- Solidifies every :class:`~k1lib.cli.modifier.op`."""
+        if isinstance(fs, tuple): raise AttributeError("`fs` should not be a tuple. Use a list instead, so that new functions can be returned")
+        l = []
+        for f in fs:
+            if f is True: f = cli.op._op_pop_contains()
+            if f is False: f = cli.op._op_pop_contains_inv()
+            if f.__class__.__name__.split(".")[-1] == "op":
+                f.op_solidify()
+            l.append(f)
+        fs.clear(); fs.extend(l)
     def __and__(self, cli:"BaseCli") -> "oneToMany":
         """Duplicates input stream to multiple joined clis.
 Example::
@@ -93,19 +115,35 @@ for lambdas and columns mode. Performances are pretty much identical."""
         if isinstance(cli, oneToMany): return cli._before(self)
         return oneToMany(self, cli)
     def __add__(self, cli:"BaseCli") -> "mtmS":
-        """Parallel pass multiple streams to multiple clis."""
+        """Parallel pass multiple streams to multiple clis.
+Example::
+
+    # returns [8, 15]
+    [2, 3] | ((op() * 4) + (op() * 5)) | deref()"""
         if isinstance(self, mtmS): return self._after(cli)
         if isinstance(cli, mtmS): return cli._before(self)
         return mtmS(self, cli)
     def all(self, n:int=1) -> "BaseCli":
         """Applies this cli to all incoming streams.
+Example::
+
+    # returns (3,)
+    torch.randn(3, 4) | toMean().all() | shape()
+    # returns (3, 4)
+    torch.randn(3, 4, 5) | toMean().all(2) | shape()
 
 :param n: how many times should I chain ``.all()``?"""
+        if n < 0: raise AttributeError(f"Does not make sense for `n` to be \"{n}\"")
         s = self
         for i in range(n): s = manyToMany(s)
         return s
     def __or__(self, cli) -> "serial":
-        """Joins clis end-to-end"""
+        """Joins clis end-to-end.
+Example::
+
+    c = apply(op() ** 2) | deref()
+    # returns [0, 1, 4, 9, 16]
+    range(5) | c"""
         if isinstance(self, serial): return self._after(cli)
         if isinstance(cli, serial): return cli._before(self)
         return serial(self, cli)
@@ -115,7 +153,10 @@ for lambdas and columns mode. Performances are pretty much identical."""
 ``x | self``."""
         return lambda it: self.__ror__(it)
     def __lt__(self, it):
-        """Default backup join symbol `>`, in case `it` implements __ror__()"""
+        """Backup pipe symbol `>`, purely for style, so that you can do something like
+this::
+
+    range(4) > file("a.txt")"""
         return self.__ror__(it)
     def __call__(self, it, *args):
         """Another way to do ``it | cli``. If multiple arguments are fed, then the
@@ -128,13 +169,22 @@ argument list is passed to cli instead of just the first element. Example::
     f(2, 3) # returns [2, 3]"""
         if len(args) == 0: return self.__ror__(it)
         else: return self.__ror__([it, *args])
-def fastF(c):
+    def __neg__(self):
+        """Alias for __invert__, for clis that support inverting stuff."""
+        return ~self
+def fastF(c, x=None):
     """Tries to figure out what's going on, is it a normal function, or an applyS,
 or a BaseCli, etc., and return a really fast function for execution. Example::
 
     # both returns 16, fastF returns "lambda x: x**2", so it's really fast
     fastF(op()**2)(4)
-    fastF(applyS(lambda x: x**2))(4)"""
+    fastF(applyS(lambda x: x**2))(4)
+
+At the moment, parameter ``x`` does nothing, but potentially in the future, you can
+pass in an example input to the cli, so that this returns an optimized, C compiled
+version.
+
+:param x: sample data for the cli"""
     if isinstance(c, cli.op): return c.ab_fastF()
     if isinstance(c, cli.applyS): return fastF(c.f)
     if isinstance(c, BaseCli): return c.__ror__
@@ -147,7 +197,7 @@ fails to run::
 
     [1, 2] | a() | b() # runs
     c = a() | b(); [1, 2] | c # doesn't run if this class doesn't exist"""
-        super().__init__(fs=clis); self.clis = list(clis); self._cache()
+        fs = list(clis); super().__init__(fs); self.clis = fs; self._cache()
     def _cache(self):
         self._hasTrace = any(isinstance(c, cli.trace) for c in self.clis)
         self._cliCs = [fastF(c) for c in self.clis]; return self
@@ -167,7 +217,7 @@ class oneToMany(BaseCli):
     def __init__(self, *clis:List[BaseCli]):
         """Duplicates 1 stream into multiple streams, each for a cli in the
 list. Used in the "a & b" joining operator. See also: :meth:`BaseCli.__and__`"""
-        super().__init__(fs=clis); self.clis = clis; self._cache()
+        fs = list(clis); super().__init__(fs); self.clis = fs; self._cache()
     def __ror__(self, it:Iterator[Any]) -> Iterator[Iterator[Any]]:
         if isinstance(it, atomic.baseAnd) or not _iterable(it):
             for cli in self._cliCs: yield cli(it)
@@ -181,7 +231,7 @@ class manyToMany(BaseCli):
     def __init__(self, cli:BaseCli):
         """Applies multiple streams to a single cli. Used in the :meth:`BaseCli.all`
 operator."""
-        super().__init__(fs=[cli]); self.cli = cli; self._cliC = fastF(cli)
+        fs = [cli]; super().__init__(fs); self.cli = fs[0]; self._cliC = fastF(self.cli)
     def __ror__(self, it:Iterator[Iterator[Any]]) -> Iterator[Iterator[Any]]:
         f = self._cliC; return (f(s) for s in it)
 class mtmS(BaseCli):
@@ -190,7 +240,7 @@ class mtmS(BaseCli):
 the "a + b" joining operator. See also: :meth:`BaseCli.__add__`.
 
 Weird name is actually a shorthand for "many to many specific"."""
-        super().__init__(fs=clis); self.clis = list(clis); self._cache()
+        fs = list(clis); super().__init__(fs=fs); self.clis = fs; self._cache()
     def _cache(self): self._cliCs = [fastF(c) for c in self.clis]; return self
     def _before(self, c): self.clis = [c] + self.clis; return self._cache()
     def _after(self, c): self.clis = self.clis + [c]; return self._cache()

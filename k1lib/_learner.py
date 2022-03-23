@@ -71,9 +71,11 @@ See also: :class:`~k1lib.selector.ModuleSelector`"""
         if attr == "cbs": raise AttributeError()
         return getattr(self.cbs, attr)
     def __getstate__(self):
-        answer = dict(self.__dict__); del answer["selector"]; return answer
+        answer = dict(self.__dict__); answer.pop("selector", None)
+        answer.pop("_data", None); return answer
     def __setstate__(self, state):
         self.__dict__.update(state)
+        self.__dict__["_data"] = None
         self.css = self.css; self.cbs.l = self
     def evaluate(self): pass # supposed to be overriden, to provide functionality here
     @property
@@ -105,7 +107,8 @@ Use...
 - l.Loss: to get a specific callback, this case "Loss"\n\n"""
 @k1lib.patch(Learner)
 def save(self, fileName:str=None):
-    """Saves this :class:`Learner` to file. See also: :meth:`load`
+    """Saves this :class:`Learner` to file. See also: :meth:`load`. Does not
+save the ``data`` object, because that's potentially very big.
 
 :param fileName: if empty, then will save as "learner-0.pth", with 0
     changeable to avoid conflicts. If resave this exact :class:`Learner`, then

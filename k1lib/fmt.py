@@ -8,10 +8,11 @@ automatically with::
 """
 import k1lib, math; from k1lib import cli
 from typing import Dict, Iterator, Tuple
-__all__ = ["size", "sizeOf", "comp", "compRate", "time", "item", "txt"]
+__all__ = ["generic", "metricPrefixes", "size", "sizeOf",
+           "comp", "compRate", "time", "item", "txt"]
 metricPrefixes = {-8:"y",-7:"z",-6:"a",-5:"f",-4:"p",-3:"n",-2:"u",-1:"m",0:"",1:"k",2:"M",3:"G",4:"T",5:"P",6:"E",7:"Z",8:"Y"}
 #metricPrefixes = ["", "k", "M", "G", "T", "P", "E", "Z", "Y"]
-def _formatScale(x, units:Dict[int, str]):
+def generic(x, units:Dict[int, str]):
     for i, unit in units.items():
         upperBound = 1000 * 1000**i
         if abs(x) < upperBound:
@@ -27,7 +28,7 @@ Example::
     # returns "12.0 MB"
     fmt.size(1.2e7)
 """
-    return _formatScale(_bytes, sizes)
+    return generic(_bytes, sizes)
 def sizeOf(l:Iterator[float]) -> Tuple[str, Iterator[float]]:
     """Figures out appropriate scale, scales back the Iterator, and return both.
 Example::
@@ -51,7 +52,7 @@ Example::
     # returns "50.0 MFLOPs"
     fmt.computation(5e7)
 """
-    return _formatScale(flop, computations)
+    return generic(flop, computations)
 computationRates = {i: f"{p}FLOPS" for i, p in metricPrefixes.items() if i >= 0}
 def compRate(flops=0):
     """Formats computation rate.
@@ -62,7 +63,7 @@ Example::
     # returns "50.0 MFLOPS"
     fmt.computationRate(5e7)
 """
-    return _formatScale(flops, computationRates)
+    return generic(flops, computationRates)
 times = {i:f"{p}s" for i, p in metricPrefixes.items() if i <= 0}
 def time(seconds=0):
     """Formats small times.
@@ -73,7 +74,7 @@ Example::
     fmt.time(0.02) # returns "20.0 ms"
     fmt.time(1e-5) # returns "10.0 us"
 """
-    return _formatScale(seconds, times)
+    return generic(seconds, times)
 items = {0: "", 1: "k", 2: "M", 3: "B", 4: "T"}
 def item(n=0):
     """Formats generic item.
@@ -84,7 +85,7 @@ Example::
     # returns "500.0 k"
     fmt.item(5e5)
 """
-    return _formatScale(n, items).strip()
+    return generic(n, items).strip()
 _esc = '\033['
 _end = f'{_esc}0m'
 class txt:

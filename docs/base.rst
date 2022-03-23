@@ -23,6 +23,7 @@ Classes
 - :class:`k1lib.Every`
 - :class:`k1lib.RunOnce`
 - :class:`k1lib.MaxDepth`
+- :class:`k1lib.MovingAvg`
 - :class:`k1lib.Absorber`
 - :class:`k1lib.Settings`
 
@@ -76,6 +77,11 @@ Classes
    :undoc-members:
    :show-inheritance:
 
+.. autoclass:: k1lib.MovingAvg
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 .. autoclass:: k1lib.Absorber
    :members:
    :undoc-members:
@@ -97,6 +103,7 @@ Context managers
 - :class:`k1lib.captureStdout`
 - :class:`k1lib.ignoreWarnings`
 - :class:`k1lib.timer`
+- :class:`k1lib.attrContext`
 
 .. autoclass:: k1lib.captureStdout
    :members:
@@ -109,6 +116,11 @@ Context managers
    :show-inheritance:
 
 .. autoclass:: k1lib.timer
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. autoclass:: k1lib.attrContext
    :members:
    :undoc-members:
    :show-inheritance:
@@ -142,7 +154,6 @@ Functions
 .. autofunction:: k1lib.wraps
 .. autofunction:: k1lib.squeeze
 .. autofunction:: k1lib.raiseEx
-.. autofunction:: k1lib.smooth
 .. autofunction:: k1lib.numDigits
 .. autofunction:: k1lib.limitLines
 .. autofunction:: k1lib.limitChars
@@ -151,6 +162,7 @@ Functions
 .. autofunction:: k1lib.dontWrap
 .. autofunction:: k1lib.debounce
 .. autofunction:: k1lib.scaleSvg
+.. autofunction:: k1lib.pValue
 .. autofunction:: k1lib.perlin3d
 .. autofunction:: k1lib.graph
 .. autofunction:: k1lib.digraph

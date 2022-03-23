@@ -6,7 +6,7 @@ from typing import Callable, Iterator, Tuple, Union, Dict, Any, List
 from k1lib import isNumeric; import k1lib, contextlib
 import random, torch, math, sys, io, os, numpy as np
 __all__ = ["Object", "Range", "Domain", "AutoIncrement", "Wrapper", "Every",
-           "RunOnce", "MaxDepth", "Absorber",
+           "RunOnce", "MaxDepth", "MovingAvg", "Absorber",
            "Settings", "settings", "_settings"]
 class Object:
     """Convenience class that acts like :class:`~collections.defaultdict`. You
@@ -504,6 +504,52 @@ likely for internal tools."""
     def __call__(self):
         """Alias of :meth:`__bool__`."""
         return bool(self)
+class MovingAvg:
+    def __init__(self, initV:float=0, alpha=0.9, debias=False):
+        """Smoothes out sequential data using momentum.
+Example::
+
+    a = k1lib.MovingAvg(5)
+    a(3).value # returns 4.8, because 0.9*5 + 0.1*3 = 4.8
+    a(3).value # returns 4.62
+
+Difference between normal and debias modes::
+
+    x = torch.linspace(0, 10, 100); y = torch.cos(x) | op().item().all() | deref()
+    plt.plot(x, y);
+    a = k1lib.MovingAvg(debias=False); plt.plot(x, y | apply(lambda y: a(y).value) | deref())
+    a = k1lib.MovingAvg(debias=True); plt.plot(x, y | apply(lambda y: a(y).value) | deref())
+    plt.legend(["Signal", "Normal", "Debiased"])
+
+.. image:: images/movingAvg.png
+
+As you can see, normal mode still has the influence of the initial value at
+0 and can't rise up fast, whereas the debias mode will ignore the initial
+value and immediately snaps to the first saved value.
+
+:param initV: initial value
+:param alpha: number in [0, 1]. Basically how much to keep old value?
+:param debias: whether to debias the initial value"""
+        self.value = initV; self.alpha = alpha; self.debias = debias
+        self.m = self.value; self.t = 0
+    def __call__(self, value):
+        """Updates the average with a new value"""
+        self.m = self.m * self.alpha + value * (1 - self.alpha)
+        if self.debias:
+            self.t += 1
+            self.value = self.m / (1 - self.alpha**self.t)
+        else: self.value = self.m
+        return self
+    def __add__(self, o): return self.value + o
+    def __radd__(self, o): return o + self.value
+    def __sub__(self, o): return self.value - o
+    def __rsub__(self, o): return o - self.value
+    def __mul__(self, o): return self.value * o
+    def __rmul__(self, o): return o * self.value
+    def __truediv__(self, o): return self.value / o
+    def __rtruediv__(self, o): return o / self.value
+    def __repr__(self):
+        return f"Moving average: {self.value}, alpha: {self.alpha}"
 sen = "_ab_sentinel"
 class Absorber:
     """Creates an object that absorbes every operation done on it. Could be
@@ -674,16 +720,18 @@ to all sub-settings. Example::
         s.c.d # returns 20
     s.a # returns 3
     s.c.d # returns 8"""
-        oldValues = dict(self.__dict__)
+        oldValues = dict(self.__dict__); err = None
         for k in kwargs.keys():
             if k not in oldValues:
                 raise RuntimeError(f"'{k}' settings not found!")
-        with contextlib.ExitStack() as stack:
-            for _, sub in self._subSettings():
-                stack.enter_context(sub.context())
-            for k, v in kwargs.items(): setattr(self, k, v)
-            yield
-        for k, v in oldValues.items(): setattr(self, k, v)
+        try:
+            with contextlib.ExitStack() as stack:
+                for _, sub in self._subSettings():
+                    stack.enter_context(sub.context())
+                for k, v in kwargs.items(): setattr(self, k, v)
+                yield
+        finally:
+            for k, v in oldValues.items(): setattr(self, k, v)
     def add(self, k:str, v:Any, docs:str="", cb:Callable[["Settings", Any], None]=None) -> "Settings":
         """Long way to add a variable. Advantage of this is that you can slip in extra
 documentation for the variable. Example::
@@ -719,6 +767,8 @@ _settings = Settings().add("test", Settings().add("bio", True, "whether to test 
 settings = Settings().add("displayCutoff", 50, "cutoff length when displaying a Settings object")
 settings.add("svgScale", 0.7, "default svg scales for clis that displays graphviz graphs")
 def _cb_wd(s, p):
-    if p != None: p = os.path.abspath(os.path.expanduser(p)); os.chdir(p)
+    if p != None: p = os.path.abspath(os.path.expanduser(p)); _oschdir(p)
     s.__dict__["wd"] = p
+def oschdir(path): settings.wd = path
+_oschdir = os.chdir; os.chdir = oschdir; os.chdir.__doc__ = _oschdir.__doc__
 settings.add("wd", os.getcwd(), "default working directory, will get from `os.getcwd()`. Will update using `os.chdir()` automatically when changed", _cb_wd)

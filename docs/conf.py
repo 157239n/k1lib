@@ -69,6 +69,7 @@ intersphinx_mapping = {
     'numpy': ('https://numpy.org/doc/stable', None),
     'torch': ('https://pytorch.org/docs/master/', None),
     'matplotlib': ('https://matplotlib.org/stable/', None),
+    'scipy': ('https://docs.scipy.org/doc/scipy/reference/', None),
     'graphviz': ('https://graphviz.readthedocs.io/en/stable/', None),
     'PIL': ('https://pillow.readthedocs.io/en/stable/', None),
 }
@@ -78,4 +79,4 @@ intersphinx_mapping = {
 with open("literals/settings.rst", "w") as f:
     with k1lib.captureStdout() as out:
         print(k1lib.settings.__repr__())
-    f.write(".. code-block:: text\n\n" + "\n".join([f"   {e}" for e in out]))
+    f.write(".. code-block:: text\n\n" + "\n".join([f"   {e}" for e in out.value]))

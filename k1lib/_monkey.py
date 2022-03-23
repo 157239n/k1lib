@@ -319,7 +319,7 @@ something called marching cubes.
         """Use the same aspect ratio for all axes."""
         self.set_box_aspect([ub - lb for lb, ub in (getattr(self, f'get_{a}lim')() for a in 'xyz')])
     @k1lib.patch(plt)
-    def k3d(labels=True, size=8):
+    def k3d(size=8, labels=True):
         """Convenience function to get an :class:`~mpl_toolkits.mplot3d.axes3d.Axes3D`.
 
 :param labels: whether to include xyz labels or not
@@ -331,6 +331,23 @@ something called marching cubes.
             ax.set_ylabel('y')
             ax.set_zlabel('z')
         return ax
+    @k1lib.patch(plt)
+    def animate(azimSpeed=1, azimStart=0, elevSpeed=0.3, elevStart=0, frames=60, close=True):
+        """Animates the existing 3d axes.
+Example::
+
+    plt.k3d().scatter(*np.random.randn(3, 10))
+    plt.animate()
+
+:param frames: how many frames to render? Frame rate is 30 fps
+:param close: whether to close the figure (to prevent the animation and
+    static plot showing at the same time) or not"""
+        fig = plt.gcf()
+        def f(frame):
+            for ax in fig.axes:
+                ax.view_init(elevStart+frame*elevSpeed, azimStart+frame*azimSpeed)
+        if close: plt.close()
+        return k1lib.viz.FAnim(fig, f, frames)
 except: pass
 try:
     @k1lib.patch(Axes3D)

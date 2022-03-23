@@ -15,14 +15,14 @@ an iterator and output a single object (like getting max, min, std, mean values)
 from k1lib.cli.init import patchDefaultDelim, BaseCli, Table, T
 import k1lib.cli as cli, numbers, torch, numpy as np
 from typing import overload, Iterator, Any, List, Set, Union
-import k1lib
+import k1lib, time
 __all__ = ["size", "shape", "item", "identity", "iden",
            "toStr", "join", "toNumpy", "toTensor",
            "toList", "wrapList", "toSet", "toIter", "toRange", "toType",
-           "equals", "reverse", "ignore",
+           "equals", "reverse", "ignore", "rateLimit",
            "toSum", "toAvg", "toMean", "toMax", "toMin", "toPIL",
            "toBin", "toIdx",
-           "lengths", "headerIdx", "deref", "bindec"]
+           "lengths", "headerIdx", "deref", "bindec", "smooth"]
 settings = k1lib.settings.cli
 def exploreSize(it):
     """Returns first element and length of array"""
@@ -223,6 +223,48 @@ Example::
     [2, 3] | apply(lambda x: print(x)) | ignore()"""
     def __ror__(self, it:Iterator[Any]):
         for _ in it: pass
+class rateLimit(BaseCli):
+    def __init__(self, f, delay=0.1):
+        """Limits the execution flow rate upon a condition.
+Example::
+
+    s = 0; semaphore = 0
+    def heavyAsyncOperation(i):
+        global semaphore, s
+        semaphore += 1
+        s += i; time.sleep(1)
+        semaphore -= 1; return i**2
+
+    # returns (20,), takes 1s to run
+    range(20) | applyTh(heavyAsyncOperation, 100) | shape()
+    # returns (20,), takes 4s to run (20/5 = 4)
+    range(20) | rateLimit(lambda: semaphore < 5) | applyTh(heavyAsyncOperation, 100) | shape()
+
+The first test case is not rate-limited, so it will run all 20 threads at the
+same time, and all of them will finish after 1 second.
+
+The second test case is rate-limited, so that there can only be 5 concurrently
+executing threads because of the semaphore count check. Therefore this takes
+around 4 seconds to run.
+
+:param f: checking function. Should return true if execution is allowed
+:param delay: delay in seconds between calling ``f()``"""
+        self.f = f; self.delay = delay
+    def __ror__(self, it):
+        f = self.f; delay = self.delay
+        for e in it:
+            while not f(): time.sleep(delay)
+            yield e
+    @staticmethod
+    def cpu(maxUtilization=90):
+        """Limits flow rate when cpu utilization is more than a specified
+percentage amount. Needs to install the package ``psutil`` to actually work.
+Example::
+
+    # returns [0, 1, 4, 9, 16]
+    range(5) | rateLimit.cpu() | apply(op()**2) | deref()"""
+        import psutil
+        return rateLimit(lambda: psutil.cpu_percent() < maxUtilization)
 class toSum(BaseCli):
     """Calculates the sum of list of numbers. Can pipe in :class:`torch.Tensor`.
 Example::
@@ -402,3 +444,17 @@ Example::
     def __ror__(self, it):
         it = bin(int(it))[2:][::-1]
         return (e for i, e in zip(it, self.cats) if i == '1') | self.f
+settings.add("smooth", 10, "default smooth amount, used in utils.smooth")
+def smooth(consecutives=None):
+    """Smoothes out the input stream.
+Literally just a shortcut for::
+
+    batched(consecutives) | toMean().all()
+
+Example::
+
+    # returns [4.5, 14.5, 24.5]
+    range(30) | smooth(10) | deref()
+
+:param consecutives: if not defined, then used the value inside ``settings.cli.smooth``"""
+    return cli.batched(consecutives or settings.smooth) | toMean().all()

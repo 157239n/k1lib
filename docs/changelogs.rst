@@ -2,6 +2,40 @@
 Changelogs
 ==========
 
+`0.13 </0.13>`_
+---------------
+
+Generic:
+
+- Added :meth:`~k1lib.pValue`.
+
+.. currentmodule:: k1lib.callbacks.callbacks
+
+Generic:
+
+- :meth:`~k1lib.captureStdout` now returns a :class:`~k1lib.Wrapper`
+- Added :meth:`~k1lib.attrContext`, :class:`~k1lib.MovingAvg`
+- Monkey patched :meth:`~matplotlib.pyplot.animate`
+- Added mechanism to quickly insert a :class:`Callback` in :meth:`Callbacks.add`
+
+.. currentmodule:: k1lib.cli
+
+Cli:
+
+- Added support for ``filt(4 in op())`` as extension for :meth:`filt.contains`.
+- Added support for ``filt(op() in [1, 2, 3])`` as extension for :meth:`filt.inSet`
+- Removed :meth:`filt.isFile`, as ``filt(os.path.isfile)`` does the same thing.
+- Added JIT basics. Just a stub feature for now.
+- Added :class:`~utils.toSorted`, :class:`~structural.reshape`, :class:`~modifier.integrate`,
+  :class:`~output.tee`, :class:`~utils.rateLimit`.
+- Added multidimensional option to :class:`~structural.joinStreams`.
+- Added pipe input mode to :meth:`sam.cat`.
+- Added control flow blocking option to :class:`inp.cmd`.
+- Added ``unpack`` param to :class:`~modifier.applySerial`.
+- Renamed :meth:`structural.splitList` to :meth:`~structural.splitW`
+- Added :meth:`modifier.stagger.tv`
+- Replaced :meth:`k1lib.smooth` with :meth:`utils.smooth` with a simpler impl
+
 `0.12 </0.12>`_
 ---------------
 

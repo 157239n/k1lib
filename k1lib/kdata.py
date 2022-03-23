@@ -22,7 +22,7 @@ Example::
             model(xb)"""
         x = torch.linspace(-5, 5, 1000)
         ds = [x, f(x)] | transpose() | randomize(None)
-        return ds | splitList(8, 2) | (repeatFrom() | randomize() | batched(32)\
+        return ds | splitW() | (repeatFrom() | randomize() | batched(32)\
             | (transpose() | toTensor()).all()).all()\
             | (stagger(epochs*.8) + stagger(epochs*.2)) | toList()
     @staticmethod

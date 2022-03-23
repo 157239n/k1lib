@@ -6,14 +6,16 @@ from k1lib import cli; import k1lib
 __all__ = ["cat", "header", "flag"]
 settings = k1lib.Settings()
 k1lib.settings.cli.add("sam", settings, "from k1lib.cli.sam module");
-def cat(bamFile:str, header:bool=True):
+catF = lambda header: cli.applyS(lambda bamFile: None | cli.cmd(f"samtools view {'-h' if header else ''} {bamFile}") | cli.table("\t"))
+def cat(bamFile:str=None, header:bool=True):
     """Get sam file outputs from bam file.
 Example::
 
     sam.cat("file.bam") | display()
+    "file.bam" | sam.cat(header=False) | display()
 
 :param header: whether to include headers or not"""
-    return None | cli.cmd(f"samtools view {'-h' if header else ''} {bamFile}") | cli.table("\t")
+    return catF(header)(bamFile) if bamFile is not None else catF(header)
 settings.add("header", k1lib.Settings()
              .add("short", ["qname", "flag", "rname", "pos", "mapq", "cigar", "rnext", "pnext", "tlen", "seq", "qual"])
              .add("long", ["Query template name", "Flags", "Reference sequence name", "Position", "Mapping quality", "CIGAR string", "Rname of next read", "Position of next read", "Template length", "Sequence", "Quality"]), "sam headers")

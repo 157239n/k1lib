@@ -57,7 +57,7 @@ consumer side, positive if on producer side"""
     def copy(self):
         answer = Eqn(self.system)
         answer.terms = dict(self.terms); return answer
-    def _repr__(self, printExtras=None):
+    def __repr__(self, printExtras=None):
         space = " " if settings.spaceBetweenValueSymbol else ""
         def formatValue(value:float):
             if abs(value - 1) < 1e-9: return ""
@@ -225,19 +225,19 @@ so this is where :meth:`pick` can be useful."""
         """Returns the list of terms in every equation here. Useful for
 tab completion."""
         return list(self.terms)
-    def _repr__(self):
+    def __repr__(self):
         end = """Can...
 - eqns[i]: to get the 'i'th equation
 - eqns.C: to pick out the first equation that has term 'C'"""
         if self.focusTerm == None:
-            eqns = "\n".join([f"{i}. {eqn._repr__(printExtras=False)}" for i, eqn in enumerate(self.eqns)])
+            eqns = "\n".join([f"{i}. {eqn.__repr__(printExtras=False)}" for i, eqn in enumerate(self.eqns)])
             return f"""Equations:\n{eqns}\n\n{end}"""
         else:
             consumingEqns = []; producingEqns = []
             for eqn in self.eqns:
                 if eqn[self.focusTerm] < 0:
-                    consumingEqns.append(f"{eqn._repr__(printExtras=False)}")
-                else: producingEqns.append(f"{eqn._repr__(printExtras=False)}")
+                    consumingEqns.append(f"{eqn.__repr__(printExtras=False)}")
+                else: producingEqns.append(f"{eqn.__repr__(printExtras=False)}")
             consumingEqns = "\n".join([f"{i}. {eqn}" for i, eqn in enumerate(consumingEqns)])
             producingEqns = "\n".join([f"{i}. {eqn}" for i, eqn in enumerate(producingEqns)])
             return f"""Consumers:\n{consumingEqns}\n\nProducers:\n{producingEqns}\n\n{end}"""
@@ -278,7 +278,7 @@ for automated scripts"""
         """Returns the list of terms in every equation here. Useful for
 tab completion."""
         return list(self.terms)
-    def _repr__(self):
+    def __repr__(self):
         return f"""System of {len(self)} equations:\n{Eqns(self, self.eqns)}\n
 Can...
 - s[i]: to get a specific equation

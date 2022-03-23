@@ -60,3 +60,4 @@ Module :mod:`matplotlib.pyplot`
 --------------------------------------------------
 
 .. automethod:: matplotlib.pyplot.k3d
+.. automethod:: matplotlib.pyplot.animate

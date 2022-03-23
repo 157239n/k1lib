@@ -7,7 +7,7 @@ from k1lib.cli.init import BaseCli, Table, T, fastF
 import k1lib.cli as cli
 import k1lib, os, torch
 from collections import deque
-__all__ = ["filt", "isFile", "inSet", "contains", "empty",
+__all__ = ["filt", "inSet", "contains", "empty",
            "isNumeric", "instanceOf", "inRange",
            "head", "columns", "cut", "rows",
            "intersection", "union", "unique", "breakIf", "mask"]
@@ -29,12 +29,18 @@ You can also pass in :class:`~k1lib.cli.modifier.op`, for extra intuitiveness::
     [2, 3, 5, 6] | filt(op() % 2 == 0) | deref()
     # returns ['abc', 'a12']
     ["abc", "def", "a12"] | filt(op().startswith("a")) | deref()
+    # returns ['abcd', '2bcr']
+    ["abcd", "0123", "2bcr"] | filt("bc" in op()) | deref()
+    # returns [2, 3]
+    range(5) | filt(op() in [2, 8, 3]) | deref()
+    # returns [0, 1, 4]. Does not support `filt(op() not in [2, 8, 3])`. Use inverted filt instead!
+    range(5) | ~filt(op() in [2, 8, 3]) | deref()
 
 :param column:
     - if integer, then predicate(row[column])
     - if None, then predicate(row)"""
-        super().__init__(fs=[predicate])
-        self.predicate = predicate; self.column = column
+        fs = [predicate]; super().__init__(fs)
+        self.predicate = fs[0]; self.column = column
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
         p = fastF(self.predicate); c = self.column
         if c is None: yield from (l for l in it if p(l))
@@ -48,13 +54,6 @@ You can also pass in :class:`~k1lib.cli.modifier.op`, for extra intuitiveness::
     def __neg__(self):
         """Also negates the condition"""
         return ~self
-def isFile() -> filt:
-    """Filters out non-files.
-Example::
-
-    # returns ["a.py", "b.py"], if those files really do exist
-    ["a.py", "hg/", "b.py"] | isFile()"""
-    return filt(lambda l: os.path.isfile(l))
 def inSet(values:Set[Any], column:int=None) -> filt:
     """Filters out lines that is not in the specified set.
 Example::
@@ -62,7 +61,17 @@ Example::
     # returns [2, 3]
     range(5) | inSet([2, 8, 3]) | deref()
     # returns [0, 1, 4]
-    range(5) | ~inSet([2, 8, 3]) | deref()"""
+    range(5) | ~inSet([2, 8, 3]) | deref()
+
+You can also use :class:`~k1lib.cli.modifier.op` like this, so you don't
+have to remember this cli::
+    
+    # returns [2, 3]
+    range(5) | filt(op() in [2, 8, 3]) | deref()
+    # returns [0, 1, 4]
+    range(5) | ~filt(op() in [2, 8, 3]) | deref()
+
+However, this feature is very experimental"""
     values = set(values)
     return filt(lambda l: l in values, column)
 def contains(s:str, column:int=None) -> filt:
@@ -71,12 +80,17 @@ to :class:`~k1lib.cli.grep.grep`, but this is simpler, and can be inverted.
 Example::
 
     # returns ['abcd', '2bcr']
-    ["abcd", "0123", "2bcr"] | contains("bc") | deref()"""
+    ["abcd", "0123", "2bcr"] | contains("bc") | deref()
+
+You can also use :class:`~k1lib.cli.modifier.op` like this::
+
+    # returns ['abcd', '2bcr']
+    ["abcd", "0123", "2bcr"] | filt("bc" in op()) | deref()"""
     return filt(lambda e: s in e, column)
 class empty(BaseCli):
     def __init__(self, reverse=False):
         """Filters out streams that is not empty. Almost always used inverted,
-but "empty" is a short, sweet name easy to remember. Example::
+but "empty" is a short, sweet name that's easy to remember. Example::
 
     # returns [[1, 2], ['a']]
     [[], [1, 2], [], ["a"]] | ~empty() | deref()
@@ -97,7 +111,7 @@ but "empty" is a short, sweet name easy to remember. Example::
         return empty(not self.reverse)
 def isNumeric(column:int=None) -> filt:
     """Filters out a line if that column is not a number.
-Example:
+Example::
 
     # returns [0, 2, '3']
     [0, 2, "3", "a"] | isNumeric() | deref()"""
@@ -120,9 +134,14 @@ def inRange(min:float=float("-inf"), max:float=float("inf"), column:int=None) ->
 Example::
 
     # returns [-2, 3, 6]
-    [-2, -8, 3, 6] | inRange(min=-3) | deref()
+    [-2, -8, 3, 6] | inRange(-3, 10) | deref()
     # returns [-8]
-    [-2, -8, 3, 6] | ~inRange(min=-3) | deref()"""
+    [-2, -8, 3, 6] | ~inRange(-3, 10) | deref()
+
+If you wish to just check against 1 bound, then use filt directly, like this::
+
+    # returns [3, 4]
+    range(5) | filt(op() >= 3) | deref()"""
     return filt(lambda e: e >= min and e < max, column)
 class head(BaseCli):
     def __init__(self, n:int=10):
@@ -132,11 +151,16 @@ class head(BaseCli):
     "abcde" | head(2) | deref() # returns ["a", "b"]
     "abcde" | ~head(2) | deref() # returns ["c", "d", "e"]
     "0123456" | head(-3) | deref() # returns ['0', '1', '2', '3']
-    "0123456" | ~head(-3) | deref() # returns ['4', '5', '6']"""
+    "0123456" | ~head(-3) | deref() # returns ['4', '5', '6']
+    "012" | head(None) | deref() # returns ['0', '1', '2']
+    "012" | ~head(None) | deref() # returns []"""
         super().__init__(); self.n = n; self.inverted = False
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
         n = self.n; it = iter(it)
-        if n >= 0:
+        if n is None:
+            if not self.inverted: yield from it
+            else: return
+        elif n >= 0:
             if not self.inverted:
                 for i, line in zip(range(n), it): yield line
             else:

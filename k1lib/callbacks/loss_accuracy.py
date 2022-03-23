@@ -53,11 +53,16 @@ Example::
     l.Loss.Landscape.plot()"""
         self.cbs.add(self._landscape); return self._landscape
     def detach(self): self._landscape.detach(); return super().detach()
+    def clear(self):
+        """Clears saved data"""
+        self.train = []; self.epoch.train = []
+        self.valid = []; self.epoch.valid = []
     def __repr__(self):
         return f"""{super()._reprHead}, use...
 - cb.train: for all training losses over all epochs and batches (#epochs * #batches)
 - cb.valid: for all validation losses over all epochs and batches (#epochs * #batches)
 - cb.plot(): to plot the 2 above
+- cb.clear(): to clear saved data
 - cb.epoch: for average losses of each epochs
 - cb.Landscape: for loss-landscape-plotting Callback
 {super()._reprCan}"""
@@ -111,10 +116,14 @@ categorical, but the general idea still stands"""
             self._landscape.parent = self
             self.cbs.add(self._landscape); return self._landscape
         else: raise RuntimeError(f"{accFMsg}, before you can view the landscape")
+    def clear(self):
+        """Clears saved data."""
+        self.train = [0]; self.valid = [0]
     def __repr__(self):
         return f"""{super()._reprHead}{f" (.accuracyF not defined yet)" if not self.hasAccF else ""}, use...
 - a.train: for train accuracies over all batches
 - a.valid: for train accuracies over all batches
 - a.plot(): to plot the 2 above
+- a.clear(): to clear saved data
 - a.Landscape: for loss-landscape-plotting Callback
 {super()._reprCan}"""

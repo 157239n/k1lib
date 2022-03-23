@@ -4,7 +4,8 @@ This is for quick modifiers, think of them as changing formats
 """
 __all__ = ["applyS", "apply", "applyMp", "applyTh", "applySerial",
            "replace", "remove", "toFloat", "toInt",
-           "sort", "sortF", "consume", "randomize", "stagger", "op"]
+           "sort", "sortF", "consume", "randomize", "stagger", "op",
+           "integrate"]
 from typing import Callable, Iterator, Any, Union, List
 from k1lib.cli.init import patchDefaultDelim, BaseCli, T, fastF
 import k1lib.cli as cli, numpy as np, torch, threading
@@ -215,7 +216,7 @@ Disadvantages:
 - Is slow if ``f`` has to obtain the GIL to be able to do anything
 
 All examples from :class:`applyMp` should work perfectly here."""
-        super().__init__(fs=[f]); self.f = f; self.bs = bs
+        fs = [f]; super().__init__(fs=fs); self.f = fs[0]; self.bs = bs
         self.prefetch = prefetch; self.timeout = timeout
     def __ror__(self, it):
         if self.bs > 1:
@@ -242,7 +243,7 @@ All examples from :class:`applyMp` should work perfectly here."""
                 raise RuntimeError("Thread timed out!")
             yield data[1].value
 class applySerial(BaseCli):
-    def __init__(self, f, includeFirst=False):
+    def __init__(self, f, includeFirst=False, unpack=False):
         """Applies a function repeatedly. First yields input iterator ``x``. Then
 yields ``f(x)``, then ``f(f(x))``, then ``f(f(f(x)))`` and so on. Example::
 
@@ -257,6 +258,8 @@ If the result of your operation is an iterator, you might want to
     next(rs) | deref()
     # returns []. This is because all the elements are taken by the previous deref()
     next(rs) | deref()
+    # returns [[10, -6], [4, 16], [20, -12]]
+    [2, 8] | applySerial(lambda a, b: (a + b, a - b), unpack=True) | head(3) | deref()
 
     rs = iter(range(8)) | applySerial(rows()[::2] | deref())
     # returns [0, 2, 4, 6]
@@ -267,12 +270,19 @@ If the result of your operation is an iterator, you might want to
     next(rs)
 
 :param f: function to apply repeatedly
-:param includeFirst: whether to include the raw input value or not"""
-        self.f = f; self.includeFirst = includeFirst
+:param includeFirst: whether to include the raw input value or not
+:param unpack: whether to unpack values into the function or not for
+    aesthetic purposes"""
+        fs = [f]; super().__init__(fs=fs); self.f = fs[0]
+        self.includeFirst = includeFirst; self.unpack = unpack
     def __ror__(self, it):
         f = fastF(self.f)
-        if not self.includeFirst: it = f(it)
-        while True: yield it; it = f(it)# | cli.deref()
+        if self.unpack:
+            if not self.includeFirst: it = f(*it)
+            while True: yield it; it = f(*it)
+        else:
+            if not self.includeFirst: it = f(it)
+            while True: yield it; it = f(it)
 def replace(s:str, target:str=None, column:int=None):
     """Replaces substring `s` with `target` for each line.
 Example::
@@ -340,18 +350,19 @@ Example::
     [[1, "b"], [5, "a"], [2, 3]] | ~sort(1) | deref()
     # errors out, as you can't really compare str with int
     [[1, "b"], [2, 3], [5, "a"]] | sort(1, False) | deref()
+    # returns [-1, 2, 3, 5, 8]
+    [2, 5, 3, -1, 8] | sort(None) | deref()
 
 :param column: if None, sort rows based on themselves and not an element
 :param numeric: whether to convert column to float
 :param reverse: False for smaller to bigger, True for bigger to smaller. Use
     :meth:`__invert__` to quickly reverse the order instead of using this param"""
-        super().__init__()
         self.column = column; self.reverse = reverse; self.numeric = numeric
         self.filterF = (lambda x: float(x)) if numeric else (lambda x: x)
     def __ror__(self, it:Iterator[str]):
         c = self.column
         if c is None:
-            return it | cli.wrapList() | cli.transpose() | sort(0, self.numeric, self.reverse)
+            return it | cli.wrapList() | cli.transpose() | sort(0, self.numeric, self.reverse) | cli.op()[0].all()
         f = self.filterF
         rows = (it | cli.isNumeric(c) if self.numeric else it) | cli.deref(maxDepth=2)
         def sortF(row):
@@ -370,7 +381,7 @@ Example::
     ["a", "aaa", "aaaaa", "aa", "aaaa"] | sortF(lambda r: len(r)) | deref()
     # returns ['aaaaa', 'aaaa', 'aaa', 'aa', 'a']
     ["a", "aaa", "aaaaa", "aa", "aaaa"] | ~sortF(lambda r: len(r)) | deref()"""
-        super().__init__(fs=[f]); self.f = f; self.reverse = reverse
+        fs = [f]; super().__init__(fs=fs); self.f = fs[0]; self.reverse = reverse
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
         return iter(sorted(list(it), key=self.f, reverse=self.reverse))
     def __invert__(self) -> "sortF":
@@ -387,7 +398,7 @@ Kinda like the bash command ``tee``. Example::
 
 This is useful whenever you want to mutate something, but don't want to
 include the function result into the main stream."""
-        super().__init__(fs=[f]); self.f = f
+        fs = [f]; super().__init__(fs=fs); self.f = fs[0]
     def __ror__(self, it:T) -> T:
         self.f(it); return it
 class randomize(BaseCli):
@@ -406,7 +417,7 @@ in ``float("inf")``, or ``None``. Example::
     range(10) | randomize(float("inf")) | deref()
     # same as above
     range(10) | randomize(None) | deref()"""
-        super().__init__(); self.bs = bs if bs != None else float("inf")
+        self.bs = bs if bs != None else float("inf")
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
         for batch in it | cli.batched(self.bs, True):
             batch = list(batch); perms = torch.randperm(len(batch))
@@ -471,6 +482,14 @@ mention this in case it's not clear to you."""
         self.every = int(every)
     def __ror__(self, it:Iterator[T]) -> StaggeredStream:
         return StaggeredStream(iter(it), self.every)
+    @staticmethod
+    def tv(every:int, ratio:float=0.8):
+        """Convenience method to quickly stagger train and valid datasets.
+Example::
+
+    # returns [[16], [4]]
+    [range(100)]*2 | stagger.tv(20) | shape().all() | deref()"""
+        return stagger(round(every*ratio)) + stagger(round(every*(1-ratio)))
 class op(k1lib.Absorber, BaseCli):
     """Absorbs operations done on it and applies it on the stream. Based
 on :class:`~k1lib.Absorber`. Example::
@@ -525,13 +544,24 @@ More complex operations can take more of a hit::
     # takes 2.81s, 1.69x worse than for loop
     range(n) | apply(op()**2-3) | ignore()
 
+Experimental features:
+
+    # returns [2, 3, 4]
+    range(10) | filt(op() in range(2, 5)) | deref()
+    # returns [0, 1, 5, 6, 7, 8, 9]
+    range(10) | ~filt(op() in range(2, 5)) | deref()
+    # will not work, so if your set potentially does not have any element, then don't use op()
+    range(10) | filt(op() in []) | deref()
+
 Reserved operations that are not absorbed are:
 
 - all
 - __ror__ (__or__ still works!)
 - op_solidify"""
+    _op_contains = deque([], 1) # last op in the form `4 in op()`
+    _op_contains_inv = deque([], 1) # last op in the form `op() in [1, 2, 3]`
     def __init__(self):
-        super().__init__({"_op_solidified": False})
+        super().__init__({"_op_solidified": False, "_op_in_set": set()})
     def op_solidify(self):
         """Use this to not absorb ``__call__`` operations anymore and makes it
 feel like a regular function (still absorbs other operations though)::
@@ -558,3 +588,46 @@ feel like a regular function (still absorbs other operations though)::
     def __call__(self, *args, **kwargs):
         if self._op_solidified: return self.ab_operate(*args, **kwargs)
         return super().__call__(*args, **kwargs)
+    def __contains__(self, k):
+        cli.op._op_contains.append(self.ab_contains(k)); return True
+    @staticmethod
+    def _op_pop_contains(): # mechanism for `4 in op()`
+        s = "Supposed to be unreachable, tried to recover `4 in op()`, but couldn't find any."
+        if len(cli.op._op_contains) == 0:
+            raise RuntimeError(f"""{s} May be you're doing something like `filt(op() not in [1, 2, 3])`? Use `~filt(op() in [1, 2, 3])` instead!""")
+        return cli.op._op_contains.pop()
+    @staticmethod
+    def _op_pop_contains_inv(): # mechanism for `op() in [1, 2, 3]`
+        s = "Supposed to be unreachable, tried to recover `op() in [1, 2, 3]`, but couldn't find any."
+        if len(cli.op._op_contains_inv) == 0:
+            if len(cli.op._op_contains) > 0:
+                raise RuntimeError(f"""{s} May be you're doing something like `filt(4 not in op())`? Use `~filt(4 in op())` instead!""")
+            else: raise RuntimeError(f"{s} Seems like you're doing something like `filt(op() in [])`? Because of complicated reasons, the set can't be empty. Just use vanilla `inSet([])` instead")
+        return op._op_contains_inv.pop()
+    def __bool__(self): # pops last eq from the operators, mechanism for `op() in [1, 2, 3]`
+        step = self._ab_steps[-1]; _op_in_set = self._op_in_set
+        if step[0][0] != "__eq__": raise RuntimeError(f"Supposed to be unreachable, tried to pop last __eq__ step from _ab_steps, but it's actually a {step[0][0]} operator instead")
+        self._op_in_set.add(step[0][1]); self._ab_steps.pop()
+        if len(_op_in_set) == 1 and (len(self._ab_steps) == 0 or self._ab_steps[-1][0][0] != "<in set>"):
+            self._ab_steps.append([["<in set>", _op_in_set], lambda x: x in _op_in_set])
+        cli.op._op_contains_inv.append(self); return False
+cli.op = op
+class integrate(BaseCli):
+    def __init__(self, dt=1):
+        """Integrates the input.
+Example::
+
+    # returns [0, 1, 3, 6, 10, 15, 21, 28, 36, 45]
+    range(10) | integrate() | deref()
+    # returns [0, 2, 6, 12, 20, 30, 42, 56, 72, 90]
+    range(10) | integrate(2) | deref()
+
+:param dt: Optional small step"""
+        self.dt = dt
+    def __ror__(self, it):
+        if self.dt == 1:
+            s = 0
+            for e in it: s += e; yield s
+        else:
+            dt = self.dt; s = 0
+            for e in it: s += e*dt; yield s

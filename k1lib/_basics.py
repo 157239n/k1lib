@@ -5,11 +5,11 @@ from typing import Any, List, Union, Tuple, Iterator, Dict
 from functools import partial
 __all__ = ["_docsUrl",
            "textToHtml", "clearLine", "tab", "isNumeric", "close",
-           "patch", "wrapMod", "wraps", "squeeze", "raiseEx", "smooth",
+           "patch", "wrapMod", "wraps", "squeeze", "raiseEx",
            "numDigits", "limitLines",
            "limitChars", "showLog", "cleanDiv", "graph", "digraph",
            "beep", "beepOnAvailable", "dontWrap",
-           "debounce", "scaleSvg"]
+           "debounce", "scaleSvg", "pValue"]
 _docsUrl = "https://k1lib.github.io"
 def textToHtml(text:str) -> str:
     """Transform a string so that it looks the same on browsers
@@ -129,14 +129,6 @@ list.
 def raiseEx(ex:Exception):
     """Raises a specific exception. May be useful in lambdas"""
     raise ex
-def smooth(arr:List[float], consecutives:int=5) -> List[float]:
-    """Smoothes out array, so that y values are averages of the neighbors"""
-    answer = []; s = 0
-    for i, elem in enumerate(arr):
-        s += elem
-        if (i + 1) % consecutives == 0:
-            answer.append(s / consecutives); s = 0
-    return answer
 def numDigits(num) -> int:
     """Get the number of digits/characters of this number/object"""
     return len(f"{num}")
@@ -256,3 +248,9 @@ def scaleSvg(svg:str, scale:float=None) -> str:
     svg = re.sub(wS, f'width="{w}pt"', svg)
     svg = re.sub(hS, f'height="{h}pt"', svg)
     return svg
+try:
+    from scipy import stats
+    def pValue(zScore):
+        """2-sided p value of a particular z score. Requires :mod:`scipy`."""
+        return stats.norm.sf(abs(zScore))*2
+except: pass
