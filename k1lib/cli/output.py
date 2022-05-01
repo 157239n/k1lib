@@ -9,13 +9,15 @@ import torch, numbers, numpy as np, k1lib, tempfile, os, sys, time; from k1lib i
 __all__ = ["stdout", "tee", "file", "pretty", "display", "headOut",
            "intercept"]
 class stdout(BaseCli):
-    """Prints out all lines. If not iterable, then print out the input raw.
-Example::
+    def __init__(self):
+        """Prints out all lines. If not iterable, then print out the input
+raw. Example::
 
     # prints out "0\\n1\\n2"
     range(3) | stdout()
     # same as above, but (maybe?) more familiar
     range(3) > stdout()"""
+        super().__init__()
     def __ror__(self, it:Iterator[str]):
         try:
             it = iter(it)

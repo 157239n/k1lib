@@ -9,7 +9,7 @@ import torch; from torch import nn, optim
 import torch.nn.functional as F, torch.utils.data as data
 import matplotlib.pyplot as plt, matplotlib as mpl
 import numpy as np, dill as pickle, multiprocessing as mp, concurrent.futures as futures
-import math, os, time, sys, random, logging, traceback, re, typing, glob, warnings, dill
+import math, os, time, sys, random, logging, traceback, re, typing, glob, warnings, dill, json
 import functools; from functools import partial, lru_cache
 import contextlib; from contextlib import contextmanager
 from typing import List, Tuple, Callable, Union, Iterator, Set, Dict, Any
@@ -17,7 +17,11 @@ import k1lib; from k1lib import schedule, graphEqn, mo, kdata, knn, fmt, selecto
 viz, Cbs, settings, cli
 from k1lib.cli import *
 for e in cli._scatteredClis: globals()[e.__name__] = e
-k1lib.dontWrap(); inf = float("inf")
+if "py_k1lib_in_applyMp" not in os.environ:
+    k1lib.dontWrap()
+    # try: mp.set_start_method("spawn")
+    # except: pass
+inf = float("inf")
 plt.rcParams['figure.dpi'] = 100
 plt.rcParams["animation.html"] = "jshtml"
 def dummy():

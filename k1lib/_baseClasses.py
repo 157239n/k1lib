@@ -772,3 +772,4 @@ def _cb_wd(s, p):
 def oschdir(path): settings.wd = path
 _oschdir = os.chdir; os.chdir = oschdir; os.chdir.__doc__ = _oschdir.__doc__
 settings.add("wd", os.getcwd(), "default working directory, will get from `os.getcwd()`. Will update using `os.chdir()` automatically when changed", _cb_wd)
+settings.add("cancelRun_newLine", True, "whether to add a new line character at the end of the cancel run/epoch/batch message")

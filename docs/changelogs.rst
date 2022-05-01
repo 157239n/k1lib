@@ -2,17 +2,43 @@
 Changelogs
 ==========
 
-`0.13 </0.13>`_
+`0.14 </0.14>`_
 ---------------
+
+.. currentmodule:: k1lib.callbacks
 
 Generic:
 
-- Added :meth:`~k1lib.pValue`.
+
+- Added :class:`~shorts.OnProgress` callback
+
+.. currentmodule:: k1lib.cli
+
+Cli:
+
+- Changed implementation of :class:`~filt.rows`. Should be much more stable and
+  perdictable than the last version
+- Fixed :class:`~structural.transpose` so that it works efficiently with numpy arrays
+- Fixed :class:`~structural.splitW` so that it includes dangling elements at the end
+- Revamped :mod:`k1lib.cli.kxml` heavily
+- Added :meth:`structural.count.join`, to join multiple count results together
+- Added aliases :class:`~utils.toImg`, :class:`~modifier.aS`
+- Added :class:`~utils.toRgb` and :class:`~utils.toRgba`.
+- Added :class:`~utils.clipboard` and its dependency requirement.
+- Fixed bug in :class:`~structural.accumulate`.
+- Removed :meth:`modifier.replace` and :meth:`modifier.remove`, as those can be done by
+  :class:`~modifier.op` just fine.
+- Added seed option in :class:`~modifier.randomize`
+- Added :class:`~structural.window`.
+
+`0.13 </0.13>`_
+---------------
 
 .. currentmodule:: k1lib.callbacks.callbacks
 
 Generic:
 
+- Added :meth:`~k1lib.pValue`.
 - :meth:`~k1lib.captureStdout` now returns a :class:`~k1lib.Wrapper`
 - Added :meth:`~k1lib.attrContext`, :class:`~k1lib.MovingAvg`
 - Monkey patched :meth:`~matplotlib.pyplot.animate`

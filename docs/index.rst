@@ -44,6 +44,10 @@ Installation
 
 Just do this::
 
+   pip install k1lib[extras]
+
+If you can't install the optional extra dependencies then do this::
+
    pip install k1lib
 
 Then in a notebook, do this::

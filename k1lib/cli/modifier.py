@@ -2,8 +2,8 @@
 """
 This is for quick modifiers, think of them as changing formats
 """
-__all__ = ["applyS", "apply", "applyMp", "applyTh", "applySerial",
-           "replace", "remove", "toFloat", "toInt",
+__all__ = ["applyS", "aS", "apply", "applyMp", "applyTh", "applySerial",
+           "toFloat", "toInt",
            "sort", "sortF", "consume", "randomize", "stagger", "op",
            "integrate"]
 from typing import Callable, Iterator, Any, Union, List
@@ -11,7 +11,7 @@ from k1lib.cli.init import patchDefaultDelim, BaseCli, T, fastF
 import k1lib.cli as cli, numpy as np, torch, threading
 import torch.multiprocessing as mp; from collections import deque
 from functools import partial, update_wrapper, lru_cache
-import dill, pickle, k1lib, warnings, atexit, signal
+import dill, pickle, k1lib, warnings, atexit, signal, time, os, random
 class applyS(BaseCli):
     def __init__(self, f:Callable[[T], T]):
         """Like :class:`apply`, but much simpler, just operating on the entire input
@@ -33,6 +33,7 @@ and whatnot."""
         super().__init__(fs=[f]); self.f = f
         update_wrapper(self, f)
     def __ror__(self, it:T) -> T: return self.f(it)
+aS = applyS
 class apply(BaseCli):
     def __init__(self, f:Callable[[T], T], column:int=None, cache:int=0):
         """Applies a function f to every line.
@@ -160,6 +161,7 @@ be a lot slower than :class:`apply`.
         timeout = self.timeout; it = iter(it) # really make sure it's an iterator, for prefetch
         if self.bs > 1:
             return it | cli.batched(self.bs, True) | applyMp(apply(self.f) | cli.deref(), self.prefetch, timeout, **self.kwargs) | cli.joinStreams()
+        os.environ["py_k1lib_in_applyMp"] = "True"
         self.p = p = mp.Pool(int(mp.cpu_count()*self.utilization), terminateGraceful)
         applyMp._pools.add(p); common = dill.dumps([self.f, self.kwargs])
         def gen():
@@ -283,19 +285,6 @@ If the result of your operation is an iterator, you might want to
         else:
             if not self.includeFirst: it = f(it)
             while True: yield it; it = f(it)
-def replace(s:str, target:str=None, column:int=None):
-    """Replaces substring `s` with `target` for each line.
-Example::
-
-    # returns ['104', 'ab0c']
-    ["1234", "ab23c"] | replace("23", "0") | deref()
-
-:param target: if not specified, then use the default delimiter specified in :attr:`~k1lib.settings`"""
-    t = patchDefaultDelim(target)
-    return apply(lambda e: e.replace(s, t), column)
-def remove(s:str, column:int=None):
-    """Removes a specific substring in each line."""
-    return replace(s, "", column)
 def _toop(toOp, c, force, defaultValue):
     return apply(toOp, c) | (apply(lambda x: x or defaultValue, c) if force else cli.filt(cli.op() != None, c))
 def _toFloat(e) -> Union[float, None]:
@@ -402,7 +391,7 @@ include the function result into the main stream."""
     def __ror__(self, it:T) -> T:
         self.f(it); return it
 class randomize(BaseCli):
-    def __init__(self, bs=100):
+    def __init__(self, bs=100, seed=None):
         """Randomize input stream. In order to be efficient, this does not
 convert the input iterator to a giant list and yield random values from that.
 Instead, this fetches ``bs`` items at a time, randomizes them, returns and
@@ -416,11 +405,15 @@ in ``float("inf")``, or ``None``. Example::
     # returns something like this: [7, 0, 5, 2, 4, 9, 6, 3, 1, 8]
     range(10) | randomize(float("inf")) | deref()
     # same as above
-    range(10) | randomize(None) | deref()"""
+    range(10) | randomize(None) | deref()
+    # returns True, as the seed is the same
+    range(10) | randomize(seed=4) | deref() == range(10) | randomize(seed=4) | deref()"""
         self.bs = bs if bs != None else float("inf")
+        r = random.Random(seed)
+        self.gen = torch.Generator().manual_seed(r.getrandbits(63))
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
         for batch in it | cli.batched(self.bs, True):
-            batch = list(batch); perms = torch.randperm(len(batch))
+            batch = list(batch); perms = torch.randperm(len(batch), generator=self.gen)
             for idx in perms: yield batch[idx]
 class StaggeredStream:
     def __init__(self, stream:Iterator[T], every:int):
@@ -433,7 +426,8 @@ instead."""
         """Length of window (length of result if you were to deref it)."""
         return self.every
 class stagger(BaseCli):
-    """Staggers input stream into multiple stream "windows" placed serially. Best
+    def __init__(self, every:int):
+        """Staggers input stream into multiple stream "windows" placed serially. Best
 explained with an example::
 
     o = range(10) | stagger(3)
@@ -478,7 +472,6 @@ meaning::
 
 This may or may not be desirable. Also this should be obvious, but I want to
 mention this in case it's not clear to you."""
-    def __init__(self, every:int):
         self.every = int(every)
     def __ror__(self, it:Iterator[T]) -> StaggeredStream:
         return StaggeredStream(iter(it), self.every)
@@ -491,7 +484,10 @@ Example::
     [range(100)]*2 | stagger.tv(20) | shape().all() | deref()"""
         return stagger(round(every*ratio)) + stagger(round(every*(1-ratio)))
 class op(k1lib.Absorber, BaseCli):
-    """Absorbs operations done on it and applies it on the stream. Based
+    _op_contains = deque([], 1) # last op in the form `4 in op()`
+    _op_contains_inv = deque([], 1) # last op in the form `op() in [1, 2, 3]`
+    def __init__(self):
+        """Absorbs operations done on it and applies it on the stream. Based
 on :class:`~k1lib.Absorber`. Example::
 
     t = torch.tensor([[1, 2, 3], [4, 5, 6.0]])
@@ -558,9 +554,6 @@ Reserved operations that are not absorbed are:
 - all
 - __ror__ (__or__ still works!)
 - op_solidify"""
-    _op_contains = deque([], 1) # last op in the form `4 in op()`
-    _op_contains_inv = deque([], 1) # last op in the form `op() in [1, 2, 3]`
-    def __init__(self):
         super().__init__({"_op_solidified": False, "_op_in_set": set()})
     def op_solidify(self):
         """Use this to not absorb ``__call__`` operations anymore and makes it

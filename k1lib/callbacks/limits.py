@@ -30,7 +30,7 @@ class EpochLimit(Callback):
 class TimeLimit(Callback):
     """Cancels the run after a certain number of seconds have passed"""
     def __init__(self, seconds=30):
-        super().__init__(); self.seconds = seconds; self.order = 25
+        super().__init__(); self.seconds = seconds if seconds != None else float("inf"); self.order = 25
     def startRun(self): self.startTime = time.time()
     def startBatch(self):
         if time.time() - self.startTime > self.seconds:

@@ -139,7 +139,7 @@ def _run1Batch(self):
         if not self.cbs("startStep"):  self.opt.step()
         if not self.cbs("startZeroGrad"): self.opt.zero_grad(set_to_none=True)
     except k1lib.CancelBatchException as ex:
-        self.cbs("cancelBatch"); print(f"Batch cancelled: {ex}.")
+        self.cbs("cancelBatch"); print(f"Batch cancelled: {ex}.", end="\n" if k1lib.settings.cancelRun_newLine else "")
     except (k1lib.CancelEpochException, k1lib.CancelRunException) as ex:
         # makes sure cancelBatch and endBatch gets called, for potential
         # cleanups, then reraise the exception
@@ -172,7 +172,7 @@ def _run1Epoch(self):
                 self.batch += trainLen; self._run1Batch()
         if self.batches is None: self.batches = self.batch + 1
     except k1lib.CancelEpochException as ex:
-        self.cbs("cancelEpoch"); print(f"Epoch cancelled: {ex}.")
+        self.cbs("cancelEpoch"); print(f"Epoch cancelled: {ex}.", end="\n" if k1lib.settings.cancelRun_newLine else "")
     except k1lib.CancelRunException as ex:
         self.cbs("cancelEpoch", "endEpoch"); raise ex
     self.cbs("endEpoch")
@@ -194,7 +194,7 @@ Do you want to continue? (y/n) """).lower().startswith("y"):
         try:
             for self.epoch in range(epochs): self._run1Epoch()
         except k1lib.CancelRunException as ex:
-            self.cbs("cancelRun"); print(f"Run cancelled: {ex}.")
+            self.cbs("cancelRun"); print(f"Run cancelled: {ex}.", end="\n" if k1lib.settings.cancelRun_newLine else "")
         self.cbs("endRun"); return self
 @k1lib.patch(Learner)
 def __call__(self, xb, yb=None):

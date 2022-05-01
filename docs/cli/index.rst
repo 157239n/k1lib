@@ -89,12 +89,11 @@ Where to start?
 -------------------------
 
 Core clis include :class:`~modifier.apply`, :class:`~modifier.applyS` (its
-multiprocessing cousins :class:`~modifier.applyMp` and :class:`~modifier.applyMpBatched`
-are great too), :class:`~modifier.op`, :class:`~filt.filt`, :class:`~utils.deref`,
-:class:`~utils.item`, :class:`~utils.shape`, :class:`~utils.iden`, :class:`~inp.cmd`,
-so start reading there first. Then, skim over everything to know what you can do
-with these collection of tools. While you're doing that, checkout :meth:`~trace.trace`,
-for a quite powerful debugging tool.
+multiprocessing cousin :class:`~modifier.applyMp` is great too), :class:`~modifier.op`,
+:class:`~filt.filt`, :class:`~utils.deref`, :class:`~utils.item`, :class:`~utils.shape`,
+:class:`~utils.iden`, :class:`~inp.cmd`, so start reading there first. Then, skim over
+everything to know what you can do with these collection of tools. While you're doing
+that, checkout :meth:`~trace.trace`, for a quite powerful debugging tool.
 
 There are several `written tutorials <../tutorials.html>`_ about cli here, and I
 also made some `video tutorials <https://www.youtube.com/playlist?list=PLP1sw-g877osNI_dMXwR72kVDREeHsYnt>`_

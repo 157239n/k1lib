@@ -8,13 +8,14 @@ __all__ = ["cells", "pretty", "execute"]
 from k1lib.cli import BaseCli; import k1lib.cli as cli
 import json, k1lib, os, traceback; from typing import List
 import matplotlib.pyplot as plt
-def cells(fileName):
+def cells(fileName, outputs=False):
     """Gets simplified notebook cells from file source, including fields
 ``cell_type`` and ``source`` only. Example::
 
     nb.cells("file.ipynb")"""
     js = json.loads(cli.cat(fileName) | cli.join(""))
     cells = []; fields = set(["cell_type", "source"])
+    if outputs: fields.add("outputs")
     return [{k:cell[k] for k in cell.keys() if k in fields} for cell in js["cells"]]
 class pretty(BaseCli):
     def __init__(self, magics:bool=False, whitelist:List[str]=[], blacklist:List[str]=[]):

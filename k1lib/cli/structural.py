@@ -10,7 +10,7 @@ import k1lib.cli as cli
 import itertools, numpy as np, torch, k1lib
 __all__ = ["transpose", "reshape", "joinList", "splitW",
            "joinStreams", "yieldSentinel", "joinStreamsRandom", "activeSamples",
-           "table", "batched", "collate",
+           "table", "batched", "window", "collate",
            "insertRow", "insertColumn", "insertIdColumn",
            "toDict", "toDictF", "expandE", "unsqueeze",
            "count", "permute", "accumulate", "AA_", "peek", "peekF",
@@ -31,6 +31,11 @@ Multidimensional transpose works just like :meth:`torch.transpose` too::
     torch.randn(2, 3, 5, 7) | transpose(3, 1) | shape()
     # also returns (2, 7, 5, 3), but actually does every required computation. Can be slow if shape is huge
     torch.randn(2, 3, 5, 7) | deref(ignoreTensors=False) | transpose(3, 1) | shape()
+
+Can also work with numpy arrays (although has to be passed in like a function and can't be piped in)::
+
+    # returns (5, 3, 2)
+    transpose(0, 2)(np.random.randn(2, 3, 5)).shape
 
 Be careful with infinite streams, as transposing stream of shape (inf, 5) will
 hang this operation! Either don't do it, or temporarily limit all infinite streams like
@@ -53,6 +58,10 @@ Also be careful with empty streams, as you might not get any results at all::
     def __ror__(self, it:Iterator[Iterator[T]]) -> Table[T]:
         d1 = self.d1; d2 = self.d2; fill = self.fill
         if isinstance(it, torch.Tensor): return it.transpose(d1, d2)
+        if isinstance(it, np.ndarray):
+            dims = list(range(len(it.shape)))
+            temp = dims[d1]; dims[d1] = dims[d2]; dims[d2] = temp
+            return it.transpose(dims)
         if d1 != 0: return it | cli.serial(*([transpose(fill=fill).all(i) for i in range(d1, d2)] + [transpose(fill=fill).all(i-1) for i in range(d2-1, d1, -1)]))
         if self.fill is None: return zip(*it)
         else: return itertools.zip_longest(*it, fillvalue=fill)
@@ -153,7 +162,8 @@ then automatically defaults to [0.8, 0.2]. Example::
     def __ror__(self, it):
         it = list(it); ws = self.weights; c = 0
         ws = (ws * len(it) / ws.sum()).astype(int)
-        for w in ws: yield it[c:c+w]; c += w
+        for w in ws[:-1]: yield it[c:c+w]; c += w
+        yield it[c:]
 class joinStreams(BaseCli):
     def __init__(self, dims=1):
         """Joins multiple streams.
@@ -179,7 +189,8 @@ def rand(n):
     while True: yield random.randrange(n)
 yieldSentinel = object()
 class joinStreamsRandom(BaseCli):
-    """Join multiple streams randomly. If any streams runs out, then quits. If
+    def __init__(self):
+        """Join multiple streams randomly. If any streams runs out, then quits. If
 any stream yields :data:`yieldSentinel`, then just ignores that result and
 continue. Could be useful in active learning. Example::
 
@@ -189,6 +200,7 @@ continue. Could be useful in active learning. Example::
     stream2 = [[-5, yieldSentinel, -4, -3], yieldSentinel | repeat()] | joinStreams()
     # could return [-5, -4, 0, -3, 1, 2, 3, 4, 5, 6], demonstrating yieldSentinel
     [range(7), stream2] | joinStreamsRandom() | deref()"""
+        super().__init__()
     def __ror__(self, streams:Iterator[Iterator[T]]) -> Iterator[T]:
         streams = [iter(st) for st in streams]
         try:
@@ -278,6 +290,31 @@ Example::
                 yield l; l = []
         except StopIteration:
             if self.includeLast: yield l
+class window(BaseCli):
+    def __init__(self, n, newList=False):
+        """Slides window of size n forward and yields the windows.
+Example::
+
+    # returns [[0, 1, 2], [1, 2, 3], [2, 3, 4]]
+    range(5) | window(3) | deref()
+
+If you are doing strange transformations to the result, like
+transposing it, then it might complain that the internal deque
+(double-ended queue) mutated during iteration. In that case,
+then set ``newList`` to True. It's not True by default because
+multiple lists will be created, all of which needs memory
+allocation, which will be slower::
+
+    # takes 15ms
+    range(100000) | window(100) | ignore()
+    # takes 48ms, because of allocating lists
+    range(100000) | window(100) | ignore()"""
+        self.n = n; self.listF = (lambda x: list(x)) if newList else (lambda x: iter(x))
+    def __ror__(self, it):
+        n = self.n; q = deque([], n); listF = self.listF
+        for e in it:
+            q.append(e)
+            if len(q) == n: yield listF(q); q.popleft()
 def collate():
     """Puts individual columns into a tensor.
 Example::
@@ -373,15 +410,34 @@ is a lot more familiar. Also note that the inverse operation "squeeze" is sort o
     t | unsqueeze(1) | item().all(1) | shape()"""
     return cli.wrapList().all(dim)
 class count(BaseCli):
-    """Finds unique elements and returns a table with [frequency, value, percent]
+    def __init__(self):
+        """Finds unique elements and returns a table with [frequency, value, percent]
 columns. Example::
 
     # returns [[1, 'a', '33%'], [2, 'b', '67%']]
     ['a', 'b', 'b'] | count() | deref()"""
+        super().__init__()
     def __ror__(self, it:Iterator[str]):
         it = it | cli.apply(lambda row: (tuple(row) if isinstance(row, list) else row))
         c = Counter(it); s = sum(c.values())
         for k, v in c.items(): yield [v, k, f"{round(100*v/s)}%"]
+    @staticmethod
+    def join():
+        """Joins multiple counts together.
+Example::
+
+    # returns [[2, 'a', '33%'], [4, 'b', '67%']]
+    ['a', 'b', 'b'] | repeat(2) | applyMp(count() | deref()) | count.join() | deref()
+
+This is useful when you want to get the count of a really long list/iterator using multiple cores"""
+        def inner(counts):
+            values = defaultdict(lambda: 0)
+            for _count in counts:
+                for v, k, *_ in _count:
+                    values[k] += v
+            s = values.values() | cli.toSum()
+            for k, v in values.items(): yield [v, k, f"{round(100*v/s)}%"]
+        return cli.applyS(inner)
 def _permuteGen(row, pers):
     row = list(row); return (row[i] for i in pers)
 class permute(BaseCli):
@@ -398,28 +454,32 @@ Example::
 class accumulate(BaseCli):
     def __init__(self, columnIdx:int=0, avg=False):
         """Groups lines that have the same row[columnIdx], and
-add together all other columns, assuming they're numbers
+add together all other columns, assuming they're numbers. Example::
+
+    # returns [['a', 10.5, 9.5, 14.5], ['b', 1.1, 2.2, 3.3]]
+    [["a", 1.1, 2.2, 3.4],
+     ["a", 1.1, 2.2, 7.8],
+     ["a", 8.3, 5.1, 3.3],
+     ["b", 1.1, 2.2, 3.3]] | accumulate(0) | deref()
 
 :param columnIdx: common column index to accumulate
 :param avg: calculate average values instead of sum"""
         super().__init__(); self.columnIdx = columnIdx; self.avg = avg
         self.dict = defaultdict(lambda: defaultdict(lambda: 0))
+        self.keyAppearances = defaultdict(lambda: 0)
     def __ror__(self, it:Iterator[str]):
         for row in it:
             row = list(row); key = row[self.columnIdx]
-            row.pop(self.columnIdx)
+            row.pop(self.columnIdx); self.keyAppearances[key] += 1
             for i, e in enumerate(row):
                 try: self.dict[key][i] += float(e)
                 except: self.dict[key][i] = e
-        for key, values in self.dict.items():
-            n = len(self.dict[key].keys())
+        for key, cols in self.dict.items():
+            ncol = len(cols)
             if self.avg:
-                for i in range(n):
-                    if isinstance(self.dict[key][i], (int, float)):
-                        self.dict[key][i] /= n
-            elems = [str(self.dict[key][i]) for i in range(n)]
-            elems.insert(self.columnIdx, key)
-            yield elems
+                for i, col in enumerate(cols):
+                    if isinstance(col, (int, float)): cols[i] /= self.keyAppearances[key]
+            elems = list(cols.values()); elems.insert(self.columnIdx, key); yield elems
 class AA_(BaseCli):
     def __init__(self, *idxs:List[int], wraps=False):
         """Returns 2 streams, one that has the selected element, and the other
@@ -455,9 +515,10 @@ say you have a set "A", then "not A" is commonly written as A with an overline
         if not self.wraps and len(idxs) == 1: return gen(idxs[0])
         return [gen(idx) for idx in idxs]
 class peek(BaseCli):
-    """Returns (firstRow, iterator). This sort of peaks at the first row, to
-potentially gain some insights about the internal formats. The returned iterator
-is not tampered. Example::
+    def __init__(self):
+        """Returns (firstRow, iterator). This sort of peaks at the first row,
+to potentially gain some insights about the internal formats. The returned
+iterator is not tampered. Example::
 
     e, it = iter([[1, 2, 3], [1, 2]]) | peek()
     print(e) # prints "[1, 2, 3]"
@@ -474,6 +535,7 @@ inadvertently alter the iterator::
 
 The example happens because you have already consumed all elements of the first
 row, and thus there aren't any left when you try to call ``next(it)``."""
+        super().__init__()
     def __ror__(self, it:Iterator[T]) -> Tuple[T, Iterator[T]]:
         it = iter(it); sentinel = object(); row = next(it, sentinel)
         if row == sentinel: return None, []
@@ -496,15 +558,15 @@ return the input Iterator, which is not tampered. Example::
         def gen(): yield row; yield from it
         self.f(row); return gen()
 class repeat(BaseCli):
-    """Yields a specified amount of the passed in object. If you intend to pass in
-an iterator, then make a list out of it first, as second copy of iterator probably
-won't work as you will have used it the first time. Example::
+    def __init__(self, limit:int=None):
+        """Yields a specified amount of the passed in object. If you intend
+to pass in an iterator, then make a list out of it first, as second copy of
+iterator probably won't work as you will have used it the first time. Example::
 
     # returns [[1, 2, 3], [1, 2, 3], [1, 2, 3]]
     [1, 2, 3] | repeat(3) | toList()
 
 :param repeat: if None, then repeats indefinitely"""
-    def __init__(self, limit:int=None):
         super().__init__(); self.limit = limit
     def __ror__(self, o:T) -> Iterator[T]:
         limit = self.limit or k1lib.settings.cli.inf

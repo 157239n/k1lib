@@ -9,7 +9,7 @@ __all__ = ["_docsUrl",
            "numDigits", "limitLines",
            "limitChars", "showLog", "cleanDiv", "graph", "digraph",
            "beep", "beepOnAvailable", "dontWrap",
-           "debounce", "scaleSvg", "pValue"]
+           "debounce", "scaleSvg"]
 _docsUrl = "https://k1lib.github.io"
 def textToHtml(text:str) -> str:
     """Transform a string so that it looks the same on browsers
@@ -250,6 +250,7 @@ def scaleSvg(svg:str, scale:float=None) -> str:
     return svg
 try:
     from scipy import stats
+    __all__.append("pValue")
     def pValue(zScore):
         """2-sided p value of a particular z score. Requires :mod:`scipy`."""
         return stats.norm.sf(abs(zScore))*2

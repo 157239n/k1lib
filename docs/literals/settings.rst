@@ -1,10 +1,11 @@
 .. code-block:: text
 
    Settings:                                                                     
-   - displayCutoff = 50                                                          ​cutoff length when displaying a Settings object                                                                     
-   - svgScale      = 0.7                                                         ​default svg scales for clis that displays graphviz graphs                                                           
-   - wd            = /home/kelvin/repos/labs/k1lib/docs                          ​default working directory, will get from `os.getcwd()`. Will update using `os.chdir()` automatically when changed   
-   - cli           = <Settings>                                                  ​from k1lib.cli module                                                                                               
+   - displayCutoff     = 50                                                      ​cutoff length when displaying a Settings object                                                                     
+   - svgScale          = 0.7                                                     ​default svg scales for clis that displays graphviz graphs                                                           
+   - wd                = /home/kelvin/repos/labs/k1lib/docs                      ​default working directory, will get from `os.getcwd()`. Will update using `os.chdir()` automatically when changed   
+   - cancelRun_newLine = True                                                    ​whether to add a new line character at the end of the cancel run/epoch/batch message                                
+   - cli               = <Settings>                                              ​from k1lib.cli module                                                                                               
      - jit           = True                                                      ​whether to enable automatic JIT compilation of cli tools. See `fastF` for more details                              
      - defaultDelim  = 	                                                         ​default delimiter used in-between columns when creating tables. Defaulted to tab character.                         
      - defaultIndent =                                                           ​default indent used for displaying nested structures                                                                
@@ -26,10 +27,10 @@
        - header = <Settings>                                                     ​sam headers                                                                                                         
          - short = ['qname', 'flag', 'rname', 'pos', 'mapq', 'ciga...            ​                                                                                                                    
          - long  = ['Query template name', 'Flags', 'Reference seq...            ​                                                                                                                    
-   - eqn           = <Settings>                                                  ​from k1lib.eqn module                                                                                               
+   - eqn               = <Settings>                                              ​from k1lib.eqn module                                                                                               
      - spaceBetweenValueSymbol = True                                            ​                                                                                                                    
      - eqnPrintExtras          = True                                            ​                                                                                                                    
-   - mo            = <Settings>                                                  ​from k1lib.mo module                                                                                                
+   - mo                = <Settings>                                              ​from k1lib.mo module                                                                                                
      - overOctet = False                                                         ​whether to allow making bonds that exceeds the octet rule                                                           
                                                                                  
    

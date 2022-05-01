@@ -21,7 +21,7 @@ __all__ = ["size", "shape", "item", "identity", "iden",
            "toList", "wrapList", "toSet", "toIter", "toRange", "toType",
            "equals", "reverse", "ignore", "rateLimit",
            "toSum", "toAvg", "toMean", "toMax", "toMin", "toPIL",
-           "toBin", "toIdx",
+           "toImg", "toRgb", "toRgba", "toBin", "toIdx", "clipboard",
            "lengths", "headerIdx", "deref", "bindec", "smooth"]
 settings = k1lib.settings.cli
 def exploreSize(it):
@@ -104,11 +104,13 @@ Example::
             return it | cli.serial(*(item(fill=self.fill) for _ in range(self.amt)))
         return next(iter(it), *self.fillP)
 class identity(BaseCli):
-    """Yields whatever the input is. Useful for multiple streams.
+    def __init__(self):
+        """Yields whatever the input is. Useful for multiple streams.
 Example::
 
     # returns range(5)
     range(5) | identity()"""
+        super().__init__()
     def __ror__(self, it:Iterator[Any]): return it
 iden = identity
 class toStr(BaseCli):
@@ -139,7 +141,9 @@ class join(BaseCli):
     def __ror__(self, it:Iterator[str]):
         return self.delim.join(it | toStr())
 class toNumpy(BaseCli):
-    """Converts generator to numpy array. Essentially ``np.array(list(it))``"""
+    def __init__(self):
+        """Converts generator to numpy array. Essentially ``np.array(list(it))``"""
+        super().__init__()
     def __ror__(self, it:Iterator[float]) -> np.array:
         return np.array(list(it))
 class toTensor(BaseCli):
@@ -162,40 +166,50 @@ and return."""
         except: pass
         return torch.tensor(list(it)).to(self.dtype)
 class toList(BaseCli):
-    """Converts generator to list. :class:`list` would do the
+    def __init__(self):
+        """Converts generator to list. :class:`list` would do the
 same, but this is just to maintain the style"""
-    def __ror__(self, it:Iterator[Any]) -> List[Any]:
-        return list(it)
+        super().__init__()
+    def __ror__(self, it:Iterator[Any]) -> List[Any]: return list(it)
 class wrapList(BaseCli):
-    """Wraps inputs inside a list. There's a more advanced cli tool
+    def __init__(self):
+        """Wraps inputs inside a list. There's a more advanced cli tool
 built from this, which is :meth:`~k1lib.cli.structural.unsqueeze`."""
-    def __ror__(self, it:T) -> List[T]:
-        return [it]
+        super().__init__()
+    def __ror__(self, it:T) -> List[T]: return [it]
 class toSet(BaseCli):
-    """Converts generator to set. :class:`set` would do the
+    def __init__(self):
+        """Converts generator to set. :class:`set` would do the
 same, but this is just to maintain the style"""
-    def __ror__(self, it:Iterator[T]) -> Set[T]:
-        return set(it)
+        super().__init__()
+    def __ror__(self, it:Iterator[T]) -> Set[T]: return set(it)
 class toIter(BaseCli):
-    """Converts object to iterator. `iter()` would do the
+    def __init__(self):
+        """Converts object to iterator. `iter()` would do the
 same, but this is just to maintain the style"""
-    def __ror__(self, it:List[T]) -> Iterator[T]:
-        return iter(it)
+        super().__init__()
+    def __ror__(self, it:List[T]) -> Iterator[T]: return iter(it)
 class toRange(BaseCli):
-    """Returns iter(range(len(it))), effectively"""
+    def __init__(self):
+        """Returns iter(range(len(it))), effectively"""
+        super().__init__()
     def __ror__(self, it:Iterator[Any]) -> Iterator[int]:
         for i, _ in enumerate(it): yield i
 class toType(BaseCli):
-    """Converts object to its type.
+    def __init__(self):
+        """Converts object to its type.
 Example::
 
     # returns [int, float, str, torch.Tensor]
     [2, 3.5, "ah", torch.randn(2, 3)] | toType() | deref()"""
+        super().__init__()
     def __ror__(self, it:Iterator[T]) -> Iterator[type]:
         for e in it: yield type(e)
 class _EarlyExp(Exception): pass
 class equals:
-    """Checks if all incoming columns/streams are identical"""
+    def __init__(self):
+        """Checks if all incoming columns/streams are identical"""
+        super().__init__()
     def __ror__(self, streams:Iterator[Iterator[str]]):
         streams = list(streams)
         for row in zip(*streams):
@@ -206,21 +220,25 @@ class equals:
                 yield True
             except _EarlyExp: pass
 class reverse(BaseCli):
-    """Reverses incoming list.
+    def __init__(self):
+        """Reverses incoming list.
 Example::
 
     # returns [3, 5, 2]
     [2, 5, 3] | reverse() | deref()"""
+        super().__init__()
     def __ror__(self, it:Iterator[str]) -> List[str]:
         return reversed(list(it))
 class ignore(BaseCli):
-    r"""Just loops through everything, ignoring the output.
+    def __init__(self):
+        r"""Just loops through everything, ignoring the output.
 Example::
 
     # will just return an iterator, and not print anything
     [2, 3] | apply(lambda x: print(x))
     # will prints "2\n3"
     [2, 3] | apply(lambda x: print(x)) | ignore()"""
+        super().__init__()
     def __ror__(self, it:Iterator[Any]):
         for _ in it: pass
 class rateLimit(BaseCli):
@@ -266,22 +284,26 @@ Example::
         import psutil
         return rateLimit(lambda: psutil.cpu_percent() < maxUtilization)
 class toSum(BaseCli):
-    """Calculates the sum of list of numbers. Can pipe in :class:`torch.Tensor`.
+    def __init__(self):
+        """Calculates the sum of list of numbers. Can pipe in :class:`torch.Tensor`.
 Example::
 
     # returns 45
     range(10) | toSum()"""
+        super().__init__()
     def __ror__(self, it:Iterator[float]):
         if isinstance(it, torch.Tensor): return it.sum()
         return sum(it)
 class toAvg(BaseCli):
-    """Calculates average of list of numbers. Can pipe in :class:`torch.Tensor`.
+    def __init__(self):
+        """Calculates average of list of numbers. Can pipe in :class:`torch.Tensor`.
 Example::
 
     # returns 4.5
     range(10) | toAvg()
     # returns nan
     [] | toAvg()"""
+        super().__init__()
     def __ror__(self, it:Iterator[float]):
         if isinstance(it, torch.Tensor): return it.mean()
         s = 0; i = -1
@@ -291,20 +313,24 @@ Example::
         return s / i
 toMean = toAvg
 class toMax(BaseCli):
-    """Calculates the max of a bunch of numbers. Can pipe in :class:`torch.Tensor`.
+    def __init__(self):
+        """Calculates the max of a bunch of numbers. Can pipe in :class:`torch.Tensor`.
 Example::
 
     # returns 6
     [2, 5, 6, 1, 2] | toMax()"""
+        super().__init__()
     def __ror__(self, it:Iterator[float]) -> float:
         if isinstance(it, torch.Tensor): return it.max()
         return max(it)
 class toMin(BaseCli):
-    """Calculates the min of a bunch of numbers. Can pipe in :class:`torch.Tensor`.
+    def __init__(self):
+        """Calculates the min of a bunch of numbers. Can pipe in :class:`torch.Tensor`.
 Example::
 
     # returns 1
     [2, 5, 6, 1, 2] | toMin()"""
+        super().__init__()
     def __ror__(self, it:Iterator[float]) -> float:
         if isinstance(it, torch.Tensor): return it.min()
         return min(it)
@@ -317,14 +343,38 @@ Example::
         import PIL; self.PIL = PIL
     def __ror__(self, path) -> "PIL.Image.Image":
         return self.PIL.Image.open(path)
+toImg = toPIL
+class toRgb(BaseCli):
+    def __init__(self):
+        """Converts greyscale/rgb PIL image to rgb image.
+Example::
+
+    # reads image file and converts it to rgb
+    "a.png" | toPIL() | toRgb()"""
+        import PIL; self.PIL = PIL
+    def __ror__(self, i):
+        rgbI = self.PIL.Image.new("RGB", i.size)
+        rgbI.paste(i); return rgbI
+class toRgba(BaseCli):
+    def __init__(self):
+        """Converts random PIL image to rgba image.
+Example::
+
+    # reads image file and converts it to rgba
+    "a.png" | toPIL() | toRgba()"""
+        import PIL; self.PIL = PIL
+    def __ror__(self, i):
+        rgbI = self.PIL.Image.new("RGBA", i.size)
+        rgbI.paste(i); return rgbI
 class toBin(BaseCli):
-    """Converts integer to binary string.
+    def __init__(self):
+        """Converts integer to binary string.
 Example::
 
     # returns "101"
     5 | toBin()"""
-    def __ror__(self, it):
-        return bin(int(it))[2:]
+        super().__init__()
+    def __ror__(self, it): return bin(int(it))[2:]
 class toIdx(BaseCli):
     def __init__(self, chars:str):
         """Get index of characters according to a reference.
@@ -336,8 +386,18 @@ Example::
     def __ror__(self, it):
         chars = self.chars
         for e in it: yield chars[e]
+class clipboard(BaseCli):
+    def __init__(self):
+        """Saves the input to clipboard.
+Example::
+
+    # copies "abc" into the clipboard. Just use Ctrl+V to paste as usual
+    "abc" | clipboard()"""
+        import pyperclip; self.pyperclip = pyperclip
+    def __ror__(self, s): self.pyperclip.copy(s)
 class lengths(BaseCli):
-    """Returns the lengths of each element.
+    def __init__(self):
+        """Returns the lengths of each element.
 Example::
 
     [range(5), range(10)] | lengths() == [5, 10]
@@ -345,6 +405,7 @@ Example::
 This is a simpler (and faster!) version of :class:`shape`. It assumes each element
 can be called with ``len(x)``, while :class:`shape` iterates through every elements
 to get the length, and thus is much slower."""
+        super().__init__()
     def __ror__(self, it:Iterator[List[Any]]) -> Iterator[int]:
         for e in it: yield len(e)
 def headerIdx():

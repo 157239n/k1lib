@@ -174,18 +174,13 @@ class head(BaseCli):
                     if len(queue) > n: yield queue.popleft()
             else: yield from deque(it, -n) # -3 to end
     def __invert__(self): self.inverted = not self.inverted; return self
-class rowsList(BaseCli):
-    """Space-expensive implementation for :class:`rows`, without a lot of
-flexibility. Just used for slices with negative start/stop really. Don't use
-this directly, use :class:`rows` instead"""
-    def __init__(self, _slice):
-        super().__init__(); self._slice = _slice; self.inverted = False
-    def __ror__(self, it:Iterator[str]):
-        it = list(it); full = range(len(it))
-        rows = full[self._slice]
-        if self.inverted: rows = [e for e in full if e not in rows]
-        for row in rows: yield it[row]
-    def __invert__(self): self.inverted = True; return self
+class lazyList:
+    def __init__(self, it):
+        self.it = iter(it); self.elems = []
+    def __getitem__(self, idx):
+        elems = self.elems; it = self.it
+        for _ in range(len(elems)-1, idx): elems.append(next(it))
+        return elems[idx]
 class rows(BaseCli):
     def __init__(self, *rows:List[int]):
         """Cuts out specific rows. Space complexity O(1) as a list is not
@@ -202,42 +197,31 @@ Example::
     "0123456789" | ~rows()[:7:2] | deref() # returns ['1', '3', '5', '7', '8', '9']
     "0123456789" | rows()[:-4] | deref() # returns ['0', '1', '2', '3', '4', '5']
     "0123456789" | ~rows()[:-4] | deref() # returns ['6', '7', '8', '9']"""
-        super().__init__()
         if len(rows) == 1 and isinstance(rows[0], slice):
-            s = rows[0]
-            start = s.start if s.start is not None else float("-inf")
-            stop = s.stop if s.stop is not None else float("inf")
-            self.domain = k1lib.Domain([start, stop])
-            self.every = s.step or 1 # only used for slices really
-        else:
-            self.domain = k1lib.Domain.fromInts(*rows)
-            self.every = 1
+            self.slice = rows[0]; self.idxMode = False
+        else: self.rows = rows; self.sortedRows = sorted(rows); self.idxMode = True
         self.inverted = False
-    def _every(self, every): self.every = every; return self
     def __getitem__(self, _slice):
-        s1, s2 = _slice.start, _slice.stop
-        a = (_slice.start or 0) < 0; b = (_slice.stop or 0) < 0
-        c = (_slice.step or 1)
-        if a or b: # at least 1 is negative
-            if c == 1:
-                if b:
-                    if s1 is None: return head(s2) # [None, -3]
-                    else: return ~head(s1) | head(s2) # [5, -3]
-                if a and s2 is None: return ~head(s1) # [-3, None]
-                # else case is [-10, 6], which is weird, so just stick to the long one
-            return rowsList(_slice) # worst case scenario
+        start, stop, step = _slice.start, _slice.stop, _slice.step
+        if step == None or step == 1:
+            if start == None and stop == None: return cli.iden()
+            if start == None: return head(stop)
+            if stop == None: return ~head(start)
+        elif step == 0: return cli.ignore()
         answer = rows(_slice); answer.inverted = self.inverted; return answer
     def __invert__(self): self.inverted = not self.inverted; return self
     def __ror__(self, it:Iterator[str]):
-        super().__ror__(it)
-        true, false = (False, True) if self.inverted else (True, False)
-        def gates():
-            gate = self.domain.intIter(self.every); x = 0
-            for i in gate:
-                while x < i: yield false; x += 1
-                yield true; x += 1
-            while True: yield false
-        return (row for gate, row in zip(gates(), it) if gate)
+        if not self.inverted:
+            if self.idxMode:
+                it = list(it) if self.sortedRows[0] < 0 else lazyList(it)
+                for idx in self.rows: yield it[idx]
+            else: yield from list(it)[self.slice]
+        else:
+            it = list(it); n = len(it)
+            if self.idxMode:
+                idxs = set((e if e >= 0 else n+e) for e in self.rows)
+            else: idxs = set(range(n)[self.slice])
+            yield from (e for i, e in enumerate(it) if i not in idxs)
 class columns(BaseCli):
     def __init__(self, *columns:List[int]):
         """Cuts out specific columns, sliceable. Examples::
@@ -269,11 +253,13 @@ Table[T]."""
     def __invert__(self): self.inverted = not self.inverted; return self
 cut = columns
 class intersection(BaseCli):
-    """Returns the intersection of multiple streams.
+    def __init__(self):
+        """Returns the intersection of multiple streams.
 Example::
 
     # returns set([2, 4, 5])
     [[1, 2, 3, 4, 5], [7, 2, 4, 6, 5]] | intersection()"""
+        super().__init__()
     def __ror__(self, its:Iterator[Iterator[Any]]) -> Set[Any]:
         answer = None
         for it in its:
@@ -281,12 +267,14 @@ Example::
             answer = answer.intersection(it)
         return answer
 class union(BaseCli):
-    """Returns the union of multiple streams.
+    def __init__(self):
+        """Returns the union of multiple streams.
 Example::
 
     # returns {0, 1, 2, 10, 11, 12, 13, 14}
     [range(3), range(10, 15)] | union()
 """
+        super().__init__()
     def __ror__(self, its:Iterator[Iterator[Any]]) -> Set[Any]:
         answer = set()
         for it in its: answer = set.union(answer, set(it))

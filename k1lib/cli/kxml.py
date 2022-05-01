@@ -6,12 +6,25 @@ module name, like this::
     cat("abc.xml") | kxml.node() | kxml.display()
 """
 from k1lib import cli; from typing import Iterator
-import xml.etree.ElementTree as ET; import copy
-__all__ = ["node", "maxDepth", "tag", "pretty", "display"]
+import xml.etree.ElementTree as ET; import copy, xml, k1lib
+from typing import List
+__all__ = ["node", "maxDepth", "tags", "pretty", "display"]
 class node(cli.BaseCli):
-    """Turns lines into a single node"""
-    def __ror__(self, it:Iterator[str]) -> Iterator[ET.Element]:
-        yield ET.fromstring("".join(it))
+    """Turns lines into a single node.
+Example::
+
+    s = \"\"\"
+    <html>
+        <head>
+            <style></style>
+        </head>
+        <body>
+            <div></div>
+        </body>
+    </html>\"\"\"
+    s | kxml.node() # returns root node"""
+    def __ror__(self, it:Iterator[str]) -> ET.Element:
+        return ET.fromstring("".join(it))
 def _maxDepth(node, maxDepth:int, depth:int=0):
     if depth >= maxDepth:
         while len(node) > 0: del node[0]
@@ -19,52 +32,70 @@ def _maxDepth(node, maxDepth:int, depth:int=0):
     return node
 class maxDepth(cli.BaseCli):
     def __init__(self, depth:int=None, copy:bool=True):
-        """Filters out too deep nodes
+        """Filters out too deep nodes.
+Example::
+
+    # returns root node, but prunes children deeper than the specified depth
+    s | kxml.node() | kxml.maxDepth()
 
 :param depth: max depth to include in
 :param copy: whether to limit the nodes itself, or limit a copy"""
-        super().__init__()
-        self.depth = depth or float("inf")
+        self.depth = depth if depth != None else float("inf")
         self.copy = copy
-    def __ror__(self, nodes:Iterator[ET.Element]) -> Iterator[ET.Element]:
-        super().__ror__(nodes)
-        for node in nodes:
-            if self.copy: node = copy.deepcopy(node)
-            yield _maxDepth(node, self.depth)
-def _tag(node, tag:str):
+    def __ror__(self, node:ET.Element) -> ET.Element:
+        if self.copy: node = copy.deepcopy(node)
+        return _maxDepth(node, self.depth)
+def _tags(node, tag:str, nested):
     if node.tag == tag: yield node
-    else:
-        for n in node: yield from _tag(n, tag)
-class tag(cli.BaseCli):
-    def __init__(self, tag:str):
-        """Finds all tags that have a particular name. If
-found, then don't search deeper"""
-        super().__init__(); self.tag = tag
-    def __ror__(self, nodes:Iterator[ET.Element]) -> Iterator[ET.Element]:
-        self.__ror__(nodes)
-        for node in nodes: yield from _tag(node, self.tag)
+    if node.tag != tag or nested:
+        for n in node: yield from _tags(n, tag, nested)
+class tags(cli.BaseCli):
+    def __init__(self, *tags:List[str], nested=False):
+        """Finds all tags that have a particular name.. Example::
+
+    # returns a list of "Pool" tags (with 2 elements) that are 2 levels deep
+    s | kxml.node() | kxml.tags("Pool") | toList()
+    # returns list with 2 tags
+    s | kxml.node() | kxml.tags("EXPERIMENT_PACKAGE")
+    # returns list with 3 tags
+    s | kxml.node() | kxml.tags("EXPERIMENT_PACKAGE", nested=True)
+
+:param nested: whether to search for "div" tag inside of another "div" tag"""
+        self.tags = tags; self.nested = nested
+    def __ror__(self, node:ET.Element) -> Iterator[ET.Element]:
+        return [_tags(node, tag, self.nested) for tag in self.tags] | cli.joinStreams()
 def _pretty(node, depth:int=0, indents=[]):
     attr = "".join([f" {k}=\"{v}\"" for k, v in node.attrib.items()])
+    text = (node.text or "").strip("\t \n\r")
     if len(node) == 0:
-        yield indents[depth] + f"<{node.tag}{attr}/>"
+        if text == "": yield indents[depth] + f"<{node.tag}{attr}/>"
+        else: yield indents[depth] + f"<{node.tag}{attr}>{text}</{node.tag}>"
     else:
         yield indents[depth] + f"<{node.tag}{attr}>"
         for n in node: yield from _pretty(n, depth+1, indents)
         yield indents[depth] + f"</{node.tag}>"
 class pretty(cli.BaseCli):
     def __init__(self, indent:str=None):
-        super().__init__(); self.indent = cli.init.patchDefaultIndent(indent)
-    def __ror__(self, it:Iterator[ET.Element]) -> Iterator[str]:
-        super().__ror__(it)
+        """Converts the element into a list of xml strings, and make them pretty.
+Example::
+
+    # prints out the element
+    s | kxml.node() | kxml.pretty() | stdout()"""
+        self.indent = cli.init.patchDefaultIndent(indent)
+    def __ror__(self, it:ET.Element) -> Iterator[str]:
         indents = [i*self.indent for i in range(100)]
-        for node in it: yield from _pretty(node, indents=indents)
+        return _pretty(it, indents=indents) | cli.filt(cli.op().strip() != "")
 class display(cli.BaseCli):
     def __init__(self, depth:int=3, lines:int=20):
-        """Convenience method for getting head, make it pretty and print it out"""
-        super().__init__(); self.depth = depth; self.lines = lines
-    def __ror__(self, it:Iterator[ET.Element], lines=10):
-        super().__ror__(it)
+        """Convenience method for getting head, make it pretty and print it out.
+Example::
+
+    # prints out the element
+    s | kxml.node() | kxml.display()
+
+:param depth: prune tags deeper than the specified depth. Put "None" to not prune at all
+:param lines: max number of lines to print out. Put "None" if you want to display everything"""
+        self.depth = depth; self.lines = lines
+    def __ror__(self, it:ET.Element, lines=10):
         if self.depth is not None: it = it | maxDepth(self.depth)
-        it = it | pretty()
-        if self.lines is not None: it = it | cli.head(self.lines)
-        it > cli.stdout()
+        it | pretty() | cli.head(self.lines) | cli.stdout()

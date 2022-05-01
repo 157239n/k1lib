@@ -7,7 +7,7 @@ class ProgressBar(Callback):
     """Displays the current progress, epoch and batch while running.
 Deposits variables into :class:`~k1lib.Learner` at checkpoint ``startBatch``:
 
-- progress: single float from 0 to 1"""
+- progress: single float from 0 to 1, guaranteed to increase monotonically"""
     def startRun(self):
         self.startTime = time.time(); self.step = 0; self.l.progress = 0
         self.l.loss = float("inf") # to make sure this variable exist

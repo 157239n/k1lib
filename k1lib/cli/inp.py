@@ -75,8 +75,8 @@ class _ls(BaseCli):
 k1lib.settings.cli.add("quiet", False, "whether to mute extra outputs from clis or not")
 newline = b'\n'[0]
 class lazySt:
-    """Converts byte stream into lazy text/byte stream, with nice __repr__."""
     def __init__(self, st, text:bool):
+        """Converts byte stream into lazy text/byte stream, with nice __repr__."""
         self.st = st; self.text = text;
     def __iter__(self):
         f = (lambda x: x.decode("utf-8")) if self.text else (lambda x: x)
