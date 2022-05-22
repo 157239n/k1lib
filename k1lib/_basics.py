@@ -4,12 +4,12 @@ import numpy as np, matplotlib.pyplot as plt, matplotlib as mpl
 from typing import Any, List, Union, Tuple, Iterator, Dict
 from functools import partial
 __all__ = ["_docsUrl",
-           "textToHtml", "clearLine", "tab", "isNumeric", "close",
+           "textToHtml", "clearLine", "isNumeric", "close",
            "patch", "wrapMod", "wraps", "squeeze", "raiseEx",
            "numDigits", "limitLines",
            "limitChars", "showLog", "cleanDiv", "graph", "digraph",
            "beep", "beepOnAvailable", "dontWrap",
-           "debounce", "scaleSvg"]
+           "debounce", "scaleSvg", "now", "sameStorage"]
 _docsUrl = "https://k1lib.github.io"
 def textToHtml(text:str) -> str:
     """Transform a string so that it looks the same on browsers
@@ -18,11 +18,6 @@ as in `print()`"""
 def clearLine():
     """Prints a character that clears the current line"""
     print("\r" + " "*80 + "\r", end="")
-def tab(text:Union[list, str], pad="    ") -> Union[list, str]:
-    """Adds a tab before each line. str in, str out. List in, list out"""
-    if isinstance(text, str):
-        return "\n".join([pad + line for line in text.split("\n")])
-    else: return [pad + line for line in text]
 def isNumeric(x) -> bool:
     """Returns whether object is actually a number"""
     return isinstance(x, (int, float, np.number))
@@ -170,9 +165,9 @@ Example::
         return graphviz.Graph(graph_attr={"rankdir":"TB"})
 except ImportError:
     digraph = graph = lambda: print("Module `graphviz` not found! Please install it first, something like `pip install graphviz`")
-def beep():
+def beep(seconds=0.3):
     """Plays a beeping sound, may be useful as notification for long-running tasks"""
-    try: import IPython; IPython.core.display.display_html(IPython.display.HTML("""<script>(new Audio('data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU'+Array(1e3).join(123))).play();</script>"""));
+    try: import IPython; IPython.core.display.display_html(IPython.display.HTML(f"""<script>(new Audio('data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU'+Array(Math.round(3.3333e3*{seconds})).join(123))).play();</script>"""));
     except: os.system("printf '\a'")
 def beepOnAvailable(url:str, timeout=5, **kwargs):
     """Tries to connect with a url repeatedly, and if successful, plays
@@ -255,3 +250,27 @@ try:
         """2-sided p value of a particular z score. Requires :mod:`scipy`."""
         return stats.norm.sf(abs(zScore))*2
 except: pass
+import datetime
+def now():
+    """Convenience function for returning a simple time
+string, with timezone and whatnot."""
+    return datetime.datetime.now().astimezone().isoformat()
+now()
+def sameStorage(a, b):
+    """Check whether 2 (:class:`np.ndarray` or :class:`torch.Tensor`)
+has the same storage or not. Example::
+
+    a = np.linspace(2, 3, 50)
+    # returns True
+    k1lib.sameStorage(a, a[:5])
+    # returns True
+    k1lib.sameStorage(a[:10], a[:5])
+    returns false
+    k1lib.sameStorage(a[:10], np.linspace(3, 4))
+
+All examples above should work with PyTorch tensors as well."""
+    if isinstance(a, torch.Tensor) and isinstance(b, torch.Tensor):
+        return a.data_ptr() == b.data_ptr()
+    if isinstance(a, np.ndarray) and isinstance(b, np.ndarray):
+        return a.base is b or b.base is a or a.base is b.base
+    return a is b

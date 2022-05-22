@@ -77,8 +77,8 @@ def __repr__(self):
     plt.axvline(self.startBackwardPoint, linestyle="--")
     ax = plt.gca(); ax.text(0.05, 0.05, "forward", transform=ax.transAxes)
     ax.text(0.95, 0.05, "backward", ha="right", transform=ax.transAxes); plt.show()
-    return f"""MemoryProfiler (params: {fmt.item(self.l.model.nParams)}):
-{k1lib.tab(self.selector.__repr__(intro=False))}
+    c = self.selector.__repr__(intro=False).split("\n") | cli.tab() | cli.join("\n")
+    return f"""MemoryProfiler (params: {fmt.item(self.l.model.nParams)}):\n{c}
 
 Can...
 - mp.css("..."): highlights a particular part of the network

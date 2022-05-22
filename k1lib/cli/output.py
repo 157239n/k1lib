@@ -8,6 +8,7 @@ from k1lib.cli.init import BaseCli, Table
 import torch, numbers, numpy as np, k1lib, tempfile, os, sys, time; from k1lib import cli
 __all__ = ["stdout", "tee", "file", "pretty", "display", "headOut",
            "intercept"]
+settings = k1lib.settings.cli
 class stdout(BaseCli):
     def __init__(self):
         """Prints out all lines. If not iterable, then print out the input
@@ -162,7 +163,7 @@ raises error to stop flow. Example::
         elif isinstance(s, (tuple, list)):
             print(k1lib.tab(f"Length: {len(s)}"))
             for e in s: print(k1lib.tab(f"- {type(e)}"))
-        elif isinstance(s, (np.ndarray, torch.Tensor)):
+        elif isinstance(s, settings.arrayTypes):
             print(k1lib.tab(f"Shape: {s.shape}"))
             if s.numel() < 1000:
                 print(k1lib.tab(f"{s}"))

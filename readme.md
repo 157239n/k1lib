@@ -9,6 +9,12 @@ Also, there's the package `k1lib.cli` which contains nice cli tools originally i
 Just do this:
 
 ```bash
+pip install k1lib[extras]
+```
+
+If you can't install the optional extra dependencies for some reason then do this:
+
+```bash
 pip install k1lib
 ```
 

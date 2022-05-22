@@ -10,7 +10,7 @@ import k1lib.cli as cli
 import itertools, numpy as np, torch, k1lib
 __all__ = ["transpose", "reshape", "joinList", "splitW",
            "joinStreams", "yieldSentinel", "joinStreamsRandom", "activeSamples",
-           "table", "batched", "window", "collate",
+           "table", "batched", "window", "groupBy", "collate",
            "insertRow", "insertColumn", "insertIdColumn",
            "toDict", "toDictF", "expandE", "unsqueeze",
            "count", "permute", "accumulate", "AA_", "peek", "peekF",
@@ -30,7 +30,7 @@ Multidimensional transpose works just like :meth:`torch.transpose` too::
     # returns (2, 7, 5, 3), but detected Tensor, so it will use builtin :meth:`torch.transpose`
     torch.randn(2, 3, 5, 7) | transpose(3, 1) | shape()
     # also returns (2, 7, 5, 3), but actually does every required computation. Can be slow if shape is huge
-    torch.randn(2, 3, 5, 7) | deref(ignoreTensors=False) | transpose(3, 1) | shape()
+    torch.randn(2, 3, 5, 7) | deref(igT=False) | transpose(3, 1) | shape()
 
 Can also work with numpy arrays (although has to be passed in like a function and can't be piped in)::
 
@@ -265,6 +265,14 @@ quite a lot in bioinformatics. Example::
     # returns [['a', 'bd'], ['1', '2', '3']]
     ["a|bd", "1|2|3"] | table("|") | deref()"""
     return cli.op().split(patchDefaultDelim(delim)).all()
+def _batched(it, bs, includeLast):
+    l = []; it = iter(it)
+    try:
+        while True:
+            for i in range(bs): l.append(next(it))
+            yield l; l = []
+    except StopIteration:
+        if includeLast: yield l
 class batched(BaseCli):
     def __init__(self, bs=32, includeLast=False):
         """Batches the input stream.
@@ -277,19 +285,24 @@ Example::
     # returns [[0, 1, 2, 3, 4]]
     range(5) | batched(float("inf"), True) | deref()
     # returns []
-    range(5) | batched(float("inf"), False) | deref()"""
+    range(5) | batched(float("inf"), False) | deref()
+    
+Can work well and fast with :class:`torch.Tensor` and :class:`np.ndarray`::
+
+    # both returns torch.Tensor of shape (2, 3, 4, 5)
+    torch.randn(6, 4, 5) | batched(3)
+    torch.randn(7, 4, 5) | batched(3)
+    """
         super().__init__(); self.bs = bs; self.includeLast = includeLast
     def __ror__(self, it):
-        it = iter(it); l = []; bs = self.bs
+        bs = self.bs; includeLast = self.includeLast
         if bs == float("inf"):
-            if self.includeLast: yield it
-            return
-        try:
-            while True:
-                for i in range(bs): l.append(next(it))
-                yield l; l = []
-        except StopIteration:
-            if self.includeLast: yield l
+            if includeLast: return [it]
+            return []
+        if not includeLast and isinstance(it, k1lib.settings.cli.arrayTypes):
+            n = it.shape[0] // bs; it = it[:n*bs]
+            return it.reshape(n, bs, *it.shape[1:])
+        return _batched(it, bs, includeLast)
 class window(BaseCli):
     def __init__(self, n, newList=False):
         """Slides window of size n forward and yields the windows.
@@ -315,6 +328,53 @@ allocation, which will be slower::
         for e in it:
             q.append(e)
             if len(q) == n: yield listF(q); q.popleft()
+class groupBy(BaseCli): # TODO: doesn't work if groupBy column is a 1D tensor?
+    def __init__(self, column:int, hashable=False):
+        """Groups table by some column.
+Example::
+
+    [[2.3, 5],
+     [3.4, 2],
+     [4.5, 2],
+     [5.6, 5],
+     [6.7, 1]] | groupBy(1) | deref()
+
+This returns::
+
+    [[[2.3, 5],
+      [5.6, 5]],
+     [[3.4, 2],
+      [4.5, 2]],
+     [[6.7, 1]]]
+
+By default, ``hashable`` param is False, which has O(n^2) time complexity,
+but can handle everything. If you benchmark everything and found out that
+this step is the bottlebeck, then you can set ``hashable`` to True, which
+has O(n) time complexity. However, you have to be sure that the column's
+elements are actually hashable, so that it can be converted into a set
+internally. For example, an unhashable class is :class:`torch.Tensor`::
+
+    # returns False
+    torch.tensor(2) in set([torch.tensor(2), torch.tensor(3)])
+    # returns True
+    torch.tensor(2) == torch.tensor(2)
+
+So, you have to convert the 0-d tensors to single ints/floats first, in
+order to use the fast mode.
+
+:param column: which column to group by
+:param hashable: whether the selected column is hashable or not"""
+        self.column = column; self.hashable = hashable
+    def __ror__(self, it):
+        it = it | cli.deref(2); c = self.column
+        if self.hashable:
+            for v in it | cli.cut(c) | cli.toSet():
+                yield it | cli.filt(cli.op()[c] == v)
+        else:
+            vs = [] # why not just convert this to a set? Because we actually want to use the "==" operator, instead of hasing it, because there're some subtle difference
+            for v in it | cli.cut(c):
+                if v not in vs:
+                    vs.append(v); yield it | cli.filt(cli.op()[c] == v)
 def collate():
     """Puts individual columns into a tensor.
 Example::
@@ -569,11 +629,11 @@ iterator probably won't work as you will have used it the first time. Example::
 :param repeat: if None, then repeats indefinitely"""
         super().__init__(); self.limit = limit
     def __ror__(self, o:T) -> Iterator[T]:
-        limit = self.limit or k1lib.settings.cli.inf
+        limit = self.limit if self.limit != None else k1lib.settings.cli.inf
         for i in itertools.count():
             if i >= limit: break
             yield o
-def repeatF(f, limit:int=None):
+def repeatF(f, limit:int=None, **kwargs):
     """Yields a specified amount generated by a specified function.
 Example::
 
@@ -582,13 +642,23 @@ Example::
     # returns 10
     repeatF(lambda: 4) | head() | shape(0)
 
+    f = lambda a: a+2
+    # returns [8, 8, 8]
+    repeatF(f, 3, a=6) | toList()
+
 :param limit: if None, then repeats indefinitely
+:param kwargs: extra keyword arguments that you can pass into the function
 
 See also: :class:`repeatFrom`"""
-    f = fastF(f); limit = limit or k1lib.settings.cli.inf
-    for i in itertools.count():
-        if i >= limit: break
-        yield f()
+    f = fastF(f); limit = limit if limit != None else k1lib.settings.cli.inf
+    if len(kwargs) == 0:
+        for i in itertools.count():
+            if i >= limit: break
+            yield f()
+    else:
+        for i in itertools.count():
+            if i >= limit: break
+            yield f(**kwargs)
 class repeatFrom(BaseCli):
     def __init__(self, limit:int=None):
         """Yields from a list. If runs out of elements, then do it again for

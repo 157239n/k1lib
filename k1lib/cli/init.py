@@ -144,8 +144,8 @@ Example::
     c = apply(op() ** 2) | deref()
     # returns [0, 1, 4, 9, 16]
     range(5) | c"""
-        if isinstance(self, serial): return self._after(cli)
-        if isinstance(cli, serial): return cli._before(self)
+        if isinstance(self, serial): return self._copy()._after(cli)
+        if isinstance(cli, serial): return cli._copy()._before(self)
         return serial(self, cli)
     def __ror__(self, it): return NotImplemented
     def f(self) -> Table[Table[int]]:
@@ -209,6 +209,7 @@ fails to run::
         return it
     def _before(self, c): self.clis = [c] + self.clis; return self._cache()
     def _after(self, c): self.clis = self.clis + [c]; return self._cache()
+    def _copy(self): return serial(*self.clis)
 atomic.add("baseAnd", (Number, np.number, str, dict, bool, bytes, list, tuple, torch.Tensor), "used by BaseCli.__and__")
 def _iterable(it):
     try: iter(it); return True

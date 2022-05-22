@@ -44,6 +44,9 @@ Example::
     def __rmul__(self, x): self.domain *= x; return self
     def __truediv__(self, x): self.domain /= x; return self
     def __rtruediv__(self, x): self * (1.0/x); return self
+    def __radd__(self, v):
+        if isinstance(v, int): return self
+        return NotImplemented
     def __add__(self, s:Union["Fn", str]) -> "Fn":
         """If given :class:`Fn`, then combines the 2 schedules together.
 If it's a string, then sets the current param to it."""

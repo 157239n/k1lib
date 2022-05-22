@@ -13,20 +13,20 @@ If it sounds complicated (convert to PIL image, tensor, ...) then most likely it
 convert object to object. Lastly, there are some that just feels right to input
 an iterator and output a single object (like getting max, min, std, mean values)."""
 from k1lib.cli.init import patchDefaultDelim, BaseCli, Table, T
-import k1lib.cli as cli, numbers, torch, numpy as np
+import k1lib.cli as cli, numbers, torch, numpy as np, dis
 from typing import overload, Iterator, Any, List, Set, Union
-import k1lib, time
+import k1lib, time, math
 __all__ = ["size", "shape", "item", "identity", "iden",
            "toStr", "join", "toNumpy", "toTensor",
            "toList", "wrapList", "toSet", "toIter", "toRange", "toType",
-           "equals", "reverse", "ignore", "rateLimit",
-           "toSum", "toAvg", "toMean", "toMax", "toMin", "toPIL",
+           "equals", "reverse", "ignore", "rateLimit", "tab", "indent",
+           "toSum", "toProd", "toAvg", "toMean", "toMax", "toMin", "toPIL",
            "toImg", "toRgb", "toRgba", "toBin", "toIdx", "clipboard",
-           "lengths", "headerIdx", "deref", "bindec", "smooth"]
+           "lengths", "headerIdx", "deref", "bindec", "smooth", "disassemble"]
 settings = k1lib.settings.cli
 def exploreSize(it):
     """Returns first element and length of array"""
-    if isinstance(it, str): raise TypeError("Just here to terminate shape()")
+    if isinstance(it, str): return None, len(it)
     sentinel = object(); it = iter(it)
     o = next(it, sentinel); count = 1
     if o is sentinel: return None, 0
@@ -53,7 +53,7 @@ Example::
     [2, 3, 5] | size(0)
     # returns (3, 2, 2)
     [[[2, 1], [0, 6, 7]], 3, 5] | size()
-    # returns (1,) and not (1, 3)
+    # returns (1, 3)
     ["abc"] | size()
     # returns (1, 2, 3)
     [torch.randn(2, 3)] | size()
@@ -74,7 +74,7 @@ instead of actually looping over them.
             answer = []
             try:
                 while True:
-                    if isinstance(it, (torch.Tensor, np.ndarray)):
+                    if isinstance(it, settings.arrayTypes):
                         return tuple(answer + list(it.shape))
                     it, s = exploreSize(it); answer.append(s)
             except TypeError: pass
@@ -283,20 +283,40 @@ Example::
     range(5) | rateLimit.cpu() | apply(op()**2) | deref()"""
         import psutil
         return rateLimit(lambda: psutil.cpu_percent() < maxUtilization)
+def tab(pad:str=" "*4):
+    """Indents incoming string iterator.
+Example::
+
+    # prints out indented 0 to 9
+    range(10) | tab() | headOut()"""
+    return cli.apply(lambda x: f"{pad}{x}")
+indent = tab
+settings.add("arrayTypes", (torch.Tensor, np.ndarray), "default array types used to accelerate clis")
 class toSum(BaseCli):
     def __init__(self):
-        """Calculates the sum of list of numbers. Can pipe in :class:`torch.Tensor`.
+        """Calculates the sum of list of numbers. Can pipe in :class:`torch.Tensor` or :class:`np.ndarray`.
 Example::
 
     # returns 45
     range(10) | toSum()"""
         super().__init__()
     def __ror__(self, it:Iterator[float]):
-        if isinstance(it, torch.Tensor): return it.sum()
+        if isinstance(it, settings.arrayTypes): return it.sum()
         return sum(it)
+class toProd(BaseCli):
+    def __init__(self):
+        """Calculates the product of a list of numbers. Can pipe in :class:`torch.Tensor` or :class:`np.ndarray`.
+Example::
+
+    # returns 362880
+    range(1,10) | toProd()"""
+        super().__init__()
+    def __ror__(self, it):
+        if isinstance(it, settings.arrayTypes): return it.prod()
+        else: return math.prod(it)
 class toAvg(BaseCli):
     def __init__(self):
-        """Calculates average of list of numbers. Can pipe in :class:`torch.Tensor`.
+        """Calculates average of list of numbers. Can pipe in :class:`torch.Tensor` or :class:`np.ndarray`.
 Example::
 
     # returns 4.5
@@ -305,7 +325,7 @@ Example::
     [] | toAvg()"""
         super().__init__()
     def __ror__(self, it:Iterator[float]):
-        if isinstance(it, torch.Tensor): return it.mean()
+        if isinstance(it, settings.arrayTypes): return it.mean()
         s = 0; i = -1
         for i, v in enumerate(it): s += v
         i += 1
@@ -314,25 +334,25 @@ Example::
 toMean = toAvg
 class toMax(BaseCli):
     def __init__(self):
-        """Calculates the max of a bunch of numbers. Can pipe in :class:`torch.Tensor`.
+        """Calculates the max of a bunch of numbers. Can pipe in :class:`torch.Tensor` or :class:`np.ndarray`.
 Example::
 
     # returns 6
     [2, 5, 6, 1, 2] | toMax()"""
         super().__init__()
     def __ror__(self, it:Iterator[float]) -> float:
-        if isinstance(it, torch.Tensor): return it.max()
+        if isinstance(it, settings.arrayTypes): return it.max()
         return max(it)
 class toMin(BaseCli):
     def __init__(self):
-        """Calculates the min of a bunch of numbers. Can pipe in :class:`torch.Tensor`.
+        """Calculates the min of a bunch of numbers. Can pipe in :class:`torch.Tensor` or :class:`np.ndarray`.
 Example::
 
     # returns 1
     [2, 5, 6, 1, 2] | toMin()"""
         super().__init__()
     def __ror__(self, it:Iterator[float]) -> float:
-        if isinstance(it, torch.Tensor): return it.min()
+        if isinstance(it, settings.arrayTypes): return it.min()
         return min(it)
 class toPIL(BaseCli):
     def __init__(self):
@@ -417,23 +437,23 @@ Example::
     # returns [[0, 'a'], [1, 'b'], [2, 'c']]
     ["abc"] | headerIdx() | deref()"""
     return item() | cli.wrapList() | cli.transpose() | cli.insertIdColumn(True)
-settings.atomic.add("deref", (numbers.Number, np.number, str, dict, bool, bytes, torch.nn.Module), "used by deref")
+settings.atomic.add("deref", (numbers.Number, np.number, str, dict, bool, bytes, torch.nn.Module, k1lib.UValue), "used by deref")
 Tensor = torch.Tensor; atomic = settings.atomic
 class inv_dereference(BaseCli):
-    def __init__(self, ignoreTensors=False):
+    def __init__(self, igT=False):
         """Kinda the inverse to :class:`dereference`"""
-        super().__init__(); self.ignoreTensors = ignoreTensors
+        super().__init__(); self.igT = igT
     def __ror__(self, it:Iterator[Any]) -> List[Any]:
         for e in it:
             if e is None or isinstance(e, atomic.deref): yield e
-            elif isinstance(e, Tensor):
-                if not self.ignoreTensors and len(e.shape) == 0: yield e.item()
+            elif isinstance(e, settings.arrayTypes):
+                if not self.igT and len(e.shape) == 0: yield e.item()
                 else: yield e
             else:
                 try: yield e | self
                 except: yield e
 class deref(BaseCli):
-    def __init__(self, maxDepth=float("inf"), ignoreTensors=True):
+    def __init__(self, maxDepth=float("inf"), igT=True):
         """Recursively converts any iterator into a list. Only :class:`str`,
 :class:`numbers.Number` and :class:`~torch.nn.Module` are not converted. Example::
 
@@ -466,16 +486,16 @@ will never try to iterate over it. If you wish to change it, do something like::
 
 :param maxDepth: maximum depth to dereference. Starts at 0 for not doing anything
     at all
-:param ignoreTensors: if True, then don't loop over :class:`torch.Tensor`
-    internals"""
-        super().__init__(); self.ignoreTensors = ignoreTensors
+:param igT: short for "ignore tensor". If True, then don't loop over :class:`torch.Tensor`
+    and :class:`numpy.ndarray` internals"""
+        super().__init__(); self.igT = igT
         self.maxDepth = maxDepth; self.depth = 0
+        self.arrayType = (torch.Tensor, np.ndarray) if k1lib.settings.startup.or_patch else torch.Tensor
     def __ror__(self, it:Iterator[T]) -> List[T]:
-        ignoreTensors = self.ignoreTensors
         if self.depth >= self.maxDepth: return it
         elif isinstance(it, atomic.deref): return it
-        elif isinstance(it, Tensor):
-            if ignoreTensors: return it
+        elif isinstance(it, self.arrayType):
+            if self.igT: return it
             if len(it.shape) == 0: return it.item()
         try: iter(it)
         except: return it
@@ -488,7 +508,7 @@ will never try to iterate over it. If you wish to change it, do something like::
         """Returns a :class:`~k1lib.cli.init.BaseCli` that makes
 everything an iterator. Not entirely sure when this comes in handy, but it's
 there."""
-        return inv_dereference(self.ignoreTensors)
+        return inv_dereference(self.igT)
 class bindec(BaseCli):
     def __init__(self, cats:List[Any], f=None):
         """Binary decodes the input.
@@ -506,8 +526,9 @@ Example::
         it = bin(int(it))[2:][::-1]
         return (e for i, e in zip(it, self.cats) if i == '1') | self.f
 settings.add("smooth", 10, "default smooth amount, used in utils.smooth")
-def smooth(consecutives=None):
-    """Smoothes out the input stream.
+class smooth(BaseCli):
+    def __init__(self, consecutives=None):
+        """Smoothes out the input stream.
 Literally just a shortcut for::
 
     batched(consecutives) | toMean().all()
@@ -517,5 +538,67 @@ Example::
     # returns [4.5, 14.5, 24.5]
     range(30) | smooth(10) | deref()
 
+Smoothing over :class:`torch.Tensor` or :class:`np.ndarray` will
+be much faster, and produce high dimensional results::
+
+    # returns torch.Tensor with shape (2, 3, 4)
+    torch.randn(10, 3, 4) | smooth(4)
+
+The default consecutive value is in ``settings.cli.smooth``. This
+is useful if you are smoothing over multiple lists at the same
+time, like this::
+
+    # can change a single smooth value temporarily here, and all sequences will be smoothed in the same way
+    with settings.cli.context(smooth=5):
+        x = list(np.linspace(-2, 2, 50))
+        y = x | apply(op()**2) | deref()
+        plt.plot(x | smooth() | deref(), y | smooth() | deref())
+
 :param consecutives: if not defined, then used the value inside ``settings.cli.smooth``"""
-    return cli.batched(consecutives or settings.smooth) | toMean().all()
+        self.b = cli.batched(consecutives or settings.smooth)
+    def __ror__(self, it):
+        it = it | self.b
+        if isinstance(it, settings.arrayTypes): return it.mean(1)
+        return it | toMean().all()
+def _f(): pass
+_code = type(_f.__code__)
+def disassemble(f=None):
+    """Disassembles anything piped into it.
+Normal usage::
+
+    def f(a, b):
+        return a**2 + b
+    # both of these print out disassembled info
+    f | disassemble()
+    disassemble(f)
+    
+    # you can pass in lambdas
+    disassemble(lambda x: x + 3)
+    
+    # or even raw code
+    "lambda x: x + 3" | disassemble()"""
+    c = f
+    if c is None: return cli.aS(disassemble)
+    if isinstance(c, str): c = compile(c, "", "exec")
+    try: c = c.__code__
+    except: pass
+    if not isinstance(c, _code): raise RuntimeError(f"`{c}` is not a code object/function/class method/string code")
+    print(f"co_argcount: {c.co_argcount}")
+    print(f"co_cellvars: {c.co_cellvars}")
+    print(f"co_consts: {c.co_consts}")
+    print(f"co_filename: {c.co_filename}")
+    print(f"co_firstlineno: {c.co_firstlineno}")
+    print(f"co_flags: {c.co_flags}")
+    print(f"co_freevars: {c.co_freevars}")
+    print(f"co_kwonlyargcount: {c.co_kwonlyargcount}")
+    print(f"co_lnotab: {c.co_lnotab | toStr() | join(' ')}")
+    print(f"co_name: {c.co_name}")
+    print(f"co_names: {c.co_names}")
+    print(f"co_nlocals: {c.co_nlocals}")
+    print(f"co_posonlyargcount: {c.co_posonlyargcount}")
+    print(f"co_stacksize: {c.co_stacksize}")
+    print(f"co_varnames: {c.co_varnames}")
+    print(f"Disassembly:"); dis.disassemble(c)
+    with k1lib.captureStdout() as out:
+        c.co_consts | cli.filt(lambda x: "code" in str(type(x))) | cli.tee(lambda _: "----------------------- inner code object -----------------------\n") | cli.apply(disassemble) | cli.ignore()
+    out() | cli.filt(cli.op().strip() != "") | cli.apply("|" + cli.op()) | cli.indent() | cli.stdout()

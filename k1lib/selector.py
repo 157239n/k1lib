@@ -8,6 +8,7 @@ automatically with::
    selector.select # exposed
 """
 from torch import nn; import k1lib, re, torch
+from k1lib import cli
 from typing import List, Tuple, Dict, Union, Any, Iterator, Callable
 from contextlib import contextmanager; from functools import partial
 __all__ = ["ModuleSelector", "preprocess", "select"]
@@ -234,7 +235,7 @@ def __repr__(self, intro:bool=True, header:Union[str, Tuple[str]]="", footer="",
         answer += h1.ljust(tabs*4, " ") + h2 + "\n"
     answer += f"{self.name}: {self.nn.__class__.__name__}".ljust(tabs*4, " ")
     answer += self.displayF(self) + ("\n" if len(self._children) > 0 else "")
-    answer += k1lib.tab("\n".join([child.__repr__(tabs=tabs-1, intro=False) for name, child in self._children.items()]))
+    answer += self._children.values() | cli.apply(lambda child: child.__repr__(tabs=tabs-1, intro=False).split("\n")) | cli.joinStreams() | cli.tab() | cli.join("\n")
     if footer:
         f1, f2 = ("", footer) if isinstance(footer, str) else footer
         answer += "\n" + f1.ljust(tabs*4, " ") + f2
@@ -260,7 +261,7 @@ def hookF(self, f:Callable[[ModuleSelector, "torch.nn.Module", Tuple[torch.Tenso
     """Context manager for applying forward hooks.
 Example::
 
-    def f(mS, m, i, o):
+    def f(mS, i, o):
         print(i, o)
 
     m = nn.Linear(3, 4)
@@ -269,7 +270,7 @@ Example::
 
 :param f: hook callback, should accept :class:`ModuleSelector`, inputs and output
 :param prop: filter property of module to hook onto. If not specified, then it will print out input and output tensor shapes."""
-    if f is None: f = lambda mS, i, o: print(f"Forward hook {m}:\n" + k1lib.tab(f"Input  {strTensorTuple(i)}\nOutput tensor shape: {o.shape}"))
+    if f is None: f = lambda mS, i, o: print(f"Forward hook {m}:\n" + ([f"Input  {strTensorTuple(i)}", f"Output tensor shape: {o.shape}"] | cli.tab() | cli.join("\n")))
     g = lambda m, i, o: f(self, i, o)
     handles = [m.nn.register_forward_hook(g) for m in self.modules(prop)]
     try: yield
@@ -281,7 +282,7 @@ def hookFp(self, f=None, prop:str="*"):
     """Context manager for applying forward pre hooks.
 Example::
 
-    def f(mS, m, i):
+    def f(mS, i):
         print(i)
 
     m = nn.Linear(3, 4)
@@ -290,7 +291,7 @@ Example::
 
 :param f: hook callback, should accept :class:`ModuleSelector` and inputs
 :param prop: filter property of module to hook onto. If not specified, then it will print out input tensor shapes."""
-    if f is None: f = lambda mS, i: print(f"Forward pre hook {m}:\n" + k1lib.tab(f"Input {strTensorTuple(i)}"))
+    if f is None: f = lambda mS, i: print(f"Forward pre hook {m}:\n" + ([f"Input {strTensorTuple(i)}"] | cli.tab() | cli.join("\n")))
     g = lambda m, i: f(self, i)
     handles = [m.nn.register_forward_pre_hook(g) for m in self.modules(prop)]
     try: yield
@@ -302,7 +303,7 @@ def hookB(self, f=None, prop:str="*"):
     """Context manager for applying backward hooks.
 Example::
 
-    def f(mS, m, i, o):
+    def f(mS, i, o):
         print(i, o)
 
     m = nn.Linear(3, 4)
@@ -311,7 +312,7 @@ Example::
 
 :param f: hook callback, should accept :class:`ModuleSelector`, grad inputs and outputs
 :param prop: filter property of module to hook onto. If not specified, then it will print out input tensor shapes."""
-    if f is None: f = lambda mS, i, o: print(f"Backward hook {m}:\n" + k1lib.tab(f"Input  {strTensorTuple(i)}\nOutput {strTensorTuple(o)}"))
+    if f is None: f = lambda mS, i, o: print(f"Backward hook {m}:\n" + ([f"Input  {strTensorTuple(i)}", f"Output {strTensorTuple(o)}"] | cli.tab() | cli.join("\n")))
     g = lambda m, i, o: f(self, i, o)
     handles = [m.nn.register_full_backward_hook(g) for m in self.modules(prop)]
     try: yield
@@ -352,3 +353,29 @@ the network. Example::
     # returns False
     (l.model.lin1.lin.weight ==  w).all()"""
     return _freeze(self, True, prop)
+class CutOff(nn.Module):
+    def __init__(self, net, m):
+        super().__init__()
+        self.net = net; self.m = m; self._lastOutput = None
+        def f(m, i, o): self._lastOutput = o
+        self.handle = self.m.register_forward_hook(f)
+    def forward(self, *args, **kwargs):
+        self._lastOutput = None
+        self.net(*args, **kwargs)
+        return self._lastOutput
+    def __del__(self): self.handle.remove()
+@k1lib.patch(ModuleSelector)
+def cutOff(self) -> nn.Module:
+    """Creates a new network that returns the selected layer's output.
+Example::
+
+    xb = torch.randn(10, 2)
+    m = nn.Sequential(nn.Linear(2, 5), nn.Linear(5, 4), nn.Linear(4, 6))
+    m0 = m.select("#0").cutOff(); m1 = m.select("#1").cutOff()
+    # returns (10, 6)
+    m(xb).shape
+    # returns (10, 5)
+    m0(xb).shape == torch.Size([10, 5])
+    # returns (10, 4)
+    m1(xb).shape == torch.Size([10, 4])"""
+    return CutOff(self.nn, self.modules("*") | cli.item() | cli.op().nn)

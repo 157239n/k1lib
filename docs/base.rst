@@ -26,6 +26,7 @@ Classes
 - :class:`k1lib.MovingAvg`
 - :class:`k1lib.Absorber`
 - :class:`k1lib.Settings`
+- :class:`k1lib.UValue`
 
 .. autoclass:: k1lib.Learner
    :members:
@@ -92,6 +93,11 @@ Classes
    :undoc-members:
    :show-inheritance:
 
+.. autoclass:: k1lib.UValue
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 .. autoclass:: k1lib.wrapMod
    :members:
    :undoc-members:
@@ -147,7 +153,6 @@ Functions
 
 .. autofunction:: k1lib.textToHtml
 .. autofunction:: k1lib.clearLine
-.. autofunction:: k1lib.tab
 .. autofunction:: k1lib.isNumeric
 .. autofunction:: k1lib.close
 .. autofunction:: k1lib.patch
@@ -163,6 +168,8 @@ Functions
 .. autofunction:: k1lib.debounce
 .. autofunction:: k1lib.scaleSvg
 .. autofunction:: k1lib.pValue
+.. autofunction:: k1lib.now
+.. autofunction:: k1lib.sameStorage
 .. autofunction:: k1lib.perlin3d
 .. autofunction:: k1lib.graph
 .. autofunction:: k1lib.digraph
@@ -174,4 +181,4 @@ Higher order functions
 .. autofunction:: k1lib.derivative
 .. autofunction:: k1lib.optimize
 .. autofunction:: k1lib.inverse
-.. autofunction:: k1lib.integrate
+.. autofunction:: k1lib.integral

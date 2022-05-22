@@ -13,26 +13,44 @@ import torch.multiprocessing as mp; from collections import deque
 from functools import partial, update_wrapper, lru_cache
 import dill, pickle, k1lib, warnings, atexit, signal, time, os, random
 class applyS(BaseCli):
-    def __init__(self, f:Callable[[T], T]):
+    def __init__(self, f:Callable[[T], T], **kwargs):
         """Like :class:`apply`, but much simpler, just operating on the entire input
-object, essentially. The "S" stands for "single". Example::
+object, essentially. The "S" stands for "single". There's
+also an alias shorthand for this called :class:`aS`. Example::
 
     # returns 5
-    3 | applyS(lambda x: x+2)
+    3 | aS(lambda x: x+2)
 
 Like :class:`apply`, you can also use this as a decorator like this::
 
-    @applyS
+    @aS
     def f(x):
         return x+2
     # returns 5
     3 | f
 
 This also decorates the returned object so that it has same qualname, docstring
-and whatnot."""
-        super().__init__(fs=[f]); self.f = f
-        update_wrapper(self, f)
-    def __ror__(self, it:T) -> T: return self.f(it)
+and whatnot.
+
+:param f: the function to be executed
+:param kwargs: other keyword arguments to pass to the function"""
+        super().__init__(fs=[f]); self.kwargs = kwargs
+        self.f = f; update_wrapper(self, f, updated=())
+    def __ror__(self, it:T) -> T: return self.f(it, **self.kwargs)
+    def __invert__(self):
+        """Configures it so that it expand the arguments out.
+Example::
+
+    # returns 5
+    [2, 3] | ~aS(lambda x, y: x + y)
+
+    def f(x, y, a=4):
+        return x*y + a
+    # returns 10
+    [2, 3] | ~aS(f)
+    # returns 11
+    [2, 3] | ~aS(f, a=5)"""
+        f = self.f; kw = self.kwargs; return applyS(lambda x: f(*x, **kw));
 aS = applyS
 class apply(BaseCli):
     def __init__(self, f:Callable[[T], T], column:int=None, cache:int=0):
@@ -290,8 +308,9 @@ def _toop(toOp, c, force, defaultValue):
 def _toFloat(e) -> Union[float, None]:
     try: return float(e)
     except: return None
-def toFloat(*columns:List[int], force=False):
-    """Converts every row into a float. Example::
+class toFloat(BaseCli):
+    def __init__(self, *columns, mode=2):
+        """Converts every row into a float. Example::
 
     # returns [1, 3, -2.3]
     ["1", "3", "-2.3"] | toFloat() | deref()
@@ -305,29 +324,54 @@ With weird rows::
     # returns [[1.0, 'a'], [0.0, 'b'], [8.0, 'c']]
     [["1", "a"], ["c", "b"], [8, "c"]] | toFloat(0, force=True) | deref()
 
+This also works well with :class:`torch.Tensor` and :class:`np.ndarray`,
+as they will not be broken up into an iterator::
+
+    # returns a numpy array, instead of an iterator
+    np.array(range(10)) | toFloat()
+
 :param columns: if nothing, then will convert each row. If available, then
     convert all the specified columns
-:param force: if True, forces weird values to 0.0, else filters out all weird rows"""
-    if len(columns) > 0:
-        return cli.init.serial(*(_toop(_toFloat, c, force, 0.0) for c in columns))
-    else: return _toop(_toFloat, None, force, 0.0)
+:param mode: different conversion styles
+    - 0: simple ``float()`` function, fastest, but will throw errors if it can't be parsed
+    - 1: if there are errors, then replace it with zero
+    - 2: if there are errors, then eliminate the row"""
+        self.columns = columns; self.mode = mode;
+    def __ror__(self, it):
+        columns = self.columns; mode = self.mode
+        if len(columns) == 0:
+            if isinstance(it, np.ndarray): return it.astype(float)
+            if isinstance(it, torch.Tensor): return it.float()
+            if mode == 0: return it | apply(float)
+            return it | _toop(_toFloat, None, mode == 1, 0.0)
+        else: return it | cli.init.serial(*(_toop(_toFloat, c, mode == 1, 0.0) for c in columns))
 def _toInt(e) -> Union[int, None]:
     try: return int(float(e))
     except: return None
-def toInt(*columns:List[int], force=False):
-    """Converts every row into an integer. Example::
+class toInt(BaseCli):
+    def __init__(self, *columns, mode=2):
+        """Converts every row into an integer. Example::
 
     # returns [1, 3, -2]
     ["1", "3", "-2.3"] | toInt() | deref()
 
 :param columns: if nothing, then will convert each row. If available, then
     convert all the specified columns
-:param force: if True, forces weird values to 0, else filters out all weird rows
+:param mode: different conversion styles
+    - 0: simple ``float()`` function, fastest, but will throw errors if it can't be parsed
+    - 1: if there are errors, then replace it with zero
+    - 2: if there are errors, then eliminate the row
 
 See also: :meth:`toFloat`"""
-    if len(columns) > 0:
-        return cli.init.serial(*(_toop(_toInt, c, force, 0) for c in columns))
-    else: return _toop(_toInt, None, force, 0)
+        self.columns = columns; self.mode = mode;
+    def __ror__(self, it):
+        columns = self.columns; mode = self.mode
+        if len(columns) == 0:
+            if isinstance(it, np.ndarray): return it.astype(int)
+            if isinstance(it, torch.Tensor): return it.int()
+            if mode == 0: return it | apply(int)
+            return it | _toop(_toInt, None, mode == 1, 0.0)
+        else: return it | cli.init.serial(*(_toop(_toInt, c, mode == 1, 0.0) for c in columns))
 class sort(BaseCli):
     def __init__(self, column:int=0, numeric=True, reverse=False):
         """Sorts all lines based on a specific `column`.

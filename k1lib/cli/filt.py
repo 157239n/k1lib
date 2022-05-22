@@ -4,13 +4,13 @@ This is for functions that cuts out specific parts of the table
 """
 from typing import Callable, Union, List, overload, Iterator, Any, Set, Tuple
 from k1lib.cli.init import BaseCli, Table, T, fastF
-import k1lib.cli as cli
-import k1lib, os, torch
-from collections import deque
+import k1lib.cli as cli; import k1lib, os, torch
+import numpy as np; from collections import deque
 __all__ = ["filt", "inSet", "contains", "empty",
            "isNumeric", "instanceOf", "inRange",
            "head", "columns", "cut", "rows",
            "intersection", "union", "unique", "breakIf", "mask"]
+settings = k1lib.settings.cli
 class filt(BaseCli):
     def __init__(self, predicate:Callable[[T], bool], column:int=None):
         """Filters out lines.
@@ -320,6 +320,6 @@ Example::
     torch.tensor(range(5)) | mask([True, True, False, True, False])"""
         super().__init__(); self.mask = mask
     def __ror__(self, it):
-        if isinstance(it, torch.Tensor):
+        if isinstance(it, settings.arrayTypes):
             return it[list(self.mask)]
         return (e for e, m in zip(it, self.mask) if m)

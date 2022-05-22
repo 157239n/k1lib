@@ -70,9 +70,12 @@ check over this:
 
    streams
 
-All clis tools should work totally fine with PyTorch tensors, but not numpy arrays.
-This is because numpy arrays actually implements ``__or__`` operator, which overrides
-cli tools' ``__ror__`` operator. Workarounds might look like this::
+All cli tools should work fine with :class:`torch.Tensor`, :class:`numpy.ndarray` and :class:`pandas.core.series.Series`,
+but k1lib actually modifies Numpy arrays and Pandas series deep down for it to work.
+This means that although you can still do normal bitwise or with a numpy float value, and
+they work fine in all regression tests that I have, but you might encounter strange bugs.
+You can disable it manually by changing :attr:`~k1lib.settings`.startup.or_patch. If you
+chooses to do this, you have to becareful and use these workarounds::
 
    # returns (2, 3, 5), works fine
    torch.randn(2, 3, 5) | shape()
@@ -83,7 +86,7 @@ cli tools' ``__ror__`` operator. Workarounds might look like this::
    # returns (2, 3, 5), mitigation strategy #2
    [np.random.randn(2, 3, 5)] | (item() | shape())
 
-All settings are at :attr:`~k1lib.settings` under name "cli".
+All cli-related settings are at :attr:`~k1lib.settings`.cli.
 
 Where to start?
 -------------------------

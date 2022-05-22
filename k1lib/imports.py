@@ -9,21 +9,54 @@ import torch; from torch import nn, optim
 import torch.nn.functional as F, torch.utils.data as data
 import matplotlib.pyplot as plt, matplotlib as mpl
 import numpy as np, dill as pickle, multiprocessing as mp, concurrent.futures as futures
-import math, os, time, sys, random, logging, traceback, re, typing, glob, warnings, dill, json
+import math, os, time, sys, random, logging, traceback, re, typing, glob, warnings, dill, json, inspect
 import functools; from functools import partial, lru_cache
 import contextlib; from contextlib import contextmanager
+from collections import deque
 from typing import List, Tuple, Callable, Union, Iterator, Set, Dict, Any
 import k1lib; from k1lib import schedule, graphEqn, mo, kdata, knn, fmt, selector,\
 viz, Cbs, settings, cli
-from k1lib.cli import *
+from k1lib.cli import *; k1 = k1lib
 for e in cli._scatteredClis: globals()[e.__name__] = e
-if "py_k1lib_in_applyMp" not in os.environ:
-    k1lib.dontWrap()
-    # try: mp.set_start_method("spawn")
-    # except: pass
-inf = float("inf")
+if "py_k1lib_in_applyMp" not in os.environ: k1lib.dontWrap()
 plt.rcParams['figure.dpi'] = 100
 plt.rcParams["animation.html"] = "jshtml"
+from math import e, pi; inf = float("inf"); # this section is for constants
+h = 6.62607015e-34; hbar = h/(2*pi); Na = 6.0221408e23; kb = 1.380649e-23
+c = 299_792_458; qe = 1.60217663e-19; me = 9.1093837e-31; mn = 1.67262192e-27
+e0 = 8.85418782e-12; Dal = u = 1.6605390666e-27; R = 8.3145
+if settings.startup.or_patch:
+    try:
+        import forbiddenfruit; #forbiddenfruit.reverse(np.ndarray, "__or__") # old version
+        oldOr = np.ndarray.__or__
+        def _newNpOr(self, v):
+            if isinstance(v, BaseCli): return NotImplemented
+            return oldOr(self, v)
+        forbiddenfruit.curse(np.ndarray, "__or__", _newNpOr)
+        # patching all numpy's numeric types
+        for _type in list(np.__dict__.keys()) | apply(lambda s: getattr(np, s)) | filt(inspect.isclass) | filt(lambda x: issubclass(x, np.number)) | ~filt(lambda x: issubclass(x, np.integer)):
+            _oldOr = _type.__or__
+            def _typeNewOr(self, v):
+                if isinstance(v, BaseCli): return NotImplemented
+                return _oldOr(self, v)
+            forbiddenfruit.curse(_type, "__or__", _typeNewOr)
+            #forbiddenfruit.reverse(_type, "__or__") # old version
+    except Exception as e:
+        warnings.warn(f"Tried to patch __or__ operator of built-in type `np.ndarray` but can't because: {e}")
+try:
+    import pandas as pd
+    if settings.startup.or_patch:
+        try:
+            import forbiddenfruit
+            oldPdOr = pd.core.series.Series.__or__
+            def _newPdOr(self, v):
+                if isinstance(v, BaseCli): return NotImplemented
+                return oldPdOr(self, v)
+            #forbiddenfruit.curse(pd.core.series.Series, "__or__", _newPdOr)
+            forbiddenfruit.reverse(pd.core.series.Series, "__or__")
+        except Exception as e:
+            warnings.warn(f"Tried to patch __or__ operator of built-in type `pd.core.series.Series` but can't because: {e}")
+except ImportError as e: pass
 def dummy():
     """Does nothing. Only here so that you can read source code of this file
 and see what's up."""

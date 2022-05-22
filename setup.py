@@ -14,12 +14,14 @@ setup(
     name="k1lib",
     packages=["k1lib", "k1lib._hidden",
               "k1lib.cli",
-              "k1lib.callbacks", "k1lib.callbacks.profilers", 
+              "k1lib.callbacks", "k1lib.callbacks.profilers",
               "k1lib.callbacks.lossFunctions",
               "k1lib._mo"],
-    version="0.14",
+    version="0.15",
+    python_requires='>=3.7',
     install_requires=["torch", "numpy>=1.14", "matplotlib>=2.0", "dill"],
-    extras_require={"extras": ["graphviz", "torchvision", "pillow", "scikit-image", "pyperclip"]},
+    extras_require={"extras": ["graphviz", "torchvision",
+                               "pillow", "scikit-image", "pyperclip", "forbiddenfruit"]},
     description="Some nice ML overhaul",
     url="https://github.com/157239n/k1lib",
     author="Quang Ho",
@@ -28,4 +30,3 @@ setup(
     long_description_content_type='text/markdown',
     license="MIT",
 )
-

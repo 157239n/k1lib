@@ -10,7 +10,9 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-import os, sys, k1lib
+import os
+import sys
+import k1lib
 sys.path.insert(0, os.path.abspath('../k1lib'))
 
 
@@ -35,15 +37,20 @@ extensions = [
 
 autodoc_member_order = 'bysource'
 
+
 def skip(app, what, name, obj, would_skip, options):
     if name == "__init__":
-        if (doc := obj.__doc__) is None: return True
+        if (doc := obj.__doc__) is None:
+            return True
         return doc.strip() == ""
-    if name in {"__ror__", "__invert__"}: return False
+    if name in {"__ror__", "__invert__"}:
+        return False
     return would_skip
+
 
 def setup(app):
     app.connect("autodoc-skip-member", skip)
+
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -51,12 +58,13 @@ templates_path = ['_templates']
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', '**/.ipynb_checkpoints', '.ipynb_checkpoints', '**/_*', '_*', "literals/*", "literals/**/*"]
+exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', '**/.ipynb_checkpoints',
+                    '.ipynb_checkpoints', '**/_*', '_*', "literals/*", "literals/**/*"]
 
 
 # -- Options for HTML output -------------------------------------------------
 
-html_theme = 'sphinx_rtd_theme' # 'alabaster'
+html_theme = 'sphinx_rtd_theme'  # 'alabaster'
 html_theme_options = {"navigation_depth": 20}
 
 # Add any paths that contain custom static files (such as style sheets) here,
@@ -72,6 +80,7 @@ intersphinx_mapping = {
     'scipy': ('https://docs.scipy.org/doc/scipy/reference/', None),
     'graphviz': ('https://graphviz.readthedocs.io/en/stable/', None),
     'PIL': ('https://pillow.readthedocs.io/en/stable/', None),
+    'pandas': ('https://pandas.pydata.org/docs/', None),
 }
 
 # generating literals
@@ -79,4 +88,5 @@ intersphinx_mapping = {
 with open("literals/settings.rst", "w") as f:
     with k1lib.captureStdout() as out:
         print(k1lib.settings.__repr__())
-    f.write(".. code-block:: text\n\n" + "\n".join([f"   {e}" for e in out.value]))
+    f.write(".. code-block:: text\n\n" +
+            "\n".join([f"   {e}" for e in out.value]))

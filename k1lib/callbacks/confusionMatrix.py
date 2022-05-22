@@ -25,7 +25,8 @@ variables in :class:`~k1lib.Learner`:
     particular `endLoss` checkpoint."""
         super().__init__(); self.categories = categories
         self.n = len(categories or []) or 2; self.condF = condF
-        self.matrix = torch.zeros(self.n, self.n)
+        self.matrix = torch.zeros(self.n, self.n);
+        self.wipeOnAdd = False # flag to wipe matrix on adding new data points
     def _adapt(self, idxs):
         """Adapts the internal matrix so that it supports new categories"""
         m = idxs.max().item() + 1
@@ -34,9 +35,12 @@ variables in :class:`~k1lib.Learner`:
             matrix[:self.n, :self.n] = self.matrix
             self.matrix = matrix; self.n = len(self.matrix)
         return idxs
-    def startEpoch(self): self.matrix = torch.zeros(self.n, self.n)
+    def startEpoch(self): self.wipeOnAdd = True
     def endLoss(self):
         if self.condF(self):
+            if self.wipeOnAdd:
+                self.matrix = torch.zeros(self.n, self.n);
+                self.wipeOnAdd = False;
             yb = self._adapt(self.l.yb); preds = self._adapt(self.l.preds)
             self.matrix[yb, preds] += 1
     @property

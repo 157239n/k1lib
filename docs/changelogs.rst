@@ -2,13 +2,36 @@
 Changelogs
 ==========
 
+`0.15 </0.15>`_
+---------------
+
+Generic:
+
+- Added :class:`~k1lib.UValue`, :meth:`~k1lib.now`
+- Patched :class:`numpy.ndarray`'s ``__or__`` method to work better with cli tools
+- Added a few mathematical and physics constants in :mod:`k1lib.imports`
+- Added :meth:`selector.ModuleSelector.cutOff`
+- Renamed :meth:`k1lib.integrate` to :meth:`k1lib.integral`, to avoid conflict with existing cli
+- Added :meth:`~k1lib.sameStorage`
+
+.. currentmodule:: k1lib.cli
+
+Cli:
+
+- Moved :meth:`k1lib.tab` to :meth:`utils.tab`.
+- Added keyword arguments to :class:`~modifier.applyS` and :meth:`~structural.repeatF`
+- Added :class:`~structural.groupBy`, :class:`~utils.disassemble`, :class:`~utils.toProd`
+- Added ``mode`` option to :class:`~modifier.toFloat` and :class:`~modifier.toInt`
+- Accelerated :class:`~modifier.toFloat`, :class:`~modifier.toInt`,
+  :class:`~structural.batched` and :class:`~utils.smooth` if it's a
+  :class:`torch.Tensor` or :class:`np.ndarray`
+
 `0.14 </0.14>`_
 ---------------
 
 .. currentmodule:: k1lib.callbacks
 
 Generic:
-
 
 - Added :class:`~shorts.OnProgress` callback
 

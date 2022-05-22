@@ -79,6 +79,10 @@ callback in a cell for more info"""
         """Intended to be called by end user only, to reset
         everything if choose to persist results across runs."""
         self._end(); self._start()
+    def persist(self):
+        """By default, data will be erased and populated on each run. If
+you want the data to persist across runs, call this."""
+        self.persistent = True
     def startRun(self):
         if (not self.persistent) or (len(self.modules) == 0): self._start()
     def startBatch(self): self.every()
