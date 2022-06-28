@@ -5,7 +5,7 @@ from k1lib.cli.init import BaseCli, Table, Row; import k1lib.cli as cli
 from collections import deque; from typing import Iterator
 inf = float("inf")
 class grep(BaseCli):
-    def __init__(self, pattern:str, before:int=0, after:int=0, N:int=float("inf"), sep:bool=False):
+    def __init__(self, pattern:str, before:int=0, after:int=0, N:int=float("inf"), sep:bool=False, col:int=None):
         """Find lines that has the specified pattern.
 Example::
 
@@ -29,14 +29,17 @@ You can also separate out the sections::
     # returns [['1', '2', '3'], ['1', '4', '5']]
     "0123145" | grep("1", sep=True).till() | deref()
 
+See also: :class:`~k1lib.cli.structural.groupBy`
+
 :param pattern: regex pattern to search for in a line
 :param before: lines before the hit. Outputs independent lines
 :param after: lines after the hit. Outputs independent lines
 :param N: max sections to output
-:param sep: whether to separate out the sections as lists"""
+:param sep: whether to separate out the sections as lists
+:param col: searches for pattern in a specific column"""
         super().__init__()
         self.pattern = re.compile(pattern)
-        self.before = before; self.after = after
+        self.before = before; self.after = after; self.col = col
         self.N = N; self.sep = sep; self.tillPattern = None
     def till(self, pattern:str=None):
         """Greps until some other pattern appear. Inclusive, so you might want to
@@ -60,7 +63,7 @@ all. Instead, do something like this::
         self.tillPattern = re.compile(pattern or "\ue000")
         self.tillAfter = self.after; self.after = inf; return self
     def __ror__(self, it:Iterator[str]) -> Iterator[str]:
-        self.sectionIdx = 0; tillPattern = self.tillPattern
+        self.sectionIdx = 0; tillPattern = self.tillPattern; col = self.col
         if self.sep:
             self.sep = False; elems = []; idx = 0
             for line in (it | self):
@@ -68,15 +71,18 @@ all. Instead, do something like this::
                     if len(elems) > 0: yield list(elems)
                     idx = self.sectionIdx; elems = []
                 elems.append(line)
-            yield list(elems); return
+            yield list(elems)
+            self.sep = True; return
         queue = deque([], self.before); counter = 0 # remaining lines after to display
         cRO = k1lib.RunOnce(); cRO.done()
         for line in it:
-            if self.pattern.search(line): # new section
+            if col != None: line = list(line); elem = line[col]
+            else: elem = line
+            if self.pattern.search(elem): # new section
                 self.sectionIdx += 1; counter = self.after+1; cRO.revert()
                 if self.sectionIdx > self.N: return
                 yield from queue; queue.clear(); yield line
-            elif tillPattern is not None and tillPattern.search(line) and counter == inf: # closing section
+            elif tillPattern is not None and tillPattern.search(elem) and counter == inf: # closing section
                 counter = self.tillAfter + 1; cRO.revert(); yield line
             if counter == 0:
                 queue.append(line) # saves recent past lines

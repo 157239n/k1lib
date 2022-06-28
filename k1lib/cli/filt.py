@@ -8,7 +8,7 @@ import k1lib.cli as cli; import k1lib, os, torch
 import numpy as np; from collections import deque
 __all__ = ["filt", "inSet", "contains", "empty",
            "isNumeric", "instanceOf", "inRange",
-           "head", "columns", "cut", "rows",
+           "head", "tail", "columns", "cut", "rows",
            "intersection", "union", "unique", "breakIf", "mask"]
 settings = k1lib.settings.cli
 class filt(BaseCli):
@@ -143,6 +143,24 @@ If you wish to just check against 1 bound, then use filt directly, like this::
     # returns [3, 4]
     range(5) | filt(op() >= 3) | deref()"""
     return filt(lambda e: e >= min and e < max, column)
+def _head(n, inverted, it):
+    it = iter(it)
+    if n is None:
+        if not inverted: yield from it
+        else: return
+    elif n >= 0:
+        if not inverted:
+            for i, line in zip(range(n), it): yield line
+        else:
+            for i, line in zip(range(n), it): pass
+            yield from it
+    else:
+        if not inverted: # head to -3
+            n = abs(n); queue = deque()
+            for line in it:
+                queue.append(line)
+                if len(queue) > n: yield queue.popleft()
+        else: yield from deque(it, -n) # -3 to end
 class head(BaseCli):
     def __init__(self, n:int=10):
         """Only outputs first ``n`` lines. You can also negate it (like
@@ -153,27 +171,26 @@ class head(BaseCli):
     "0123456" | head(-3) | deref() # returns ['0', '1', '2', '3']
     "0123456" | ~head(-3) | deref() # returns ['4', '5', '6']
     "012" | head(None) | deref() # returns ['0', '1', '2']
-    "012" | ~head(None) | deref() # returns []"""
+    "012" | ~head(None) | deref() # returns []
+
+Also works well and fast with :class:`numpy.ndarray` or :class:`torch.Tensor`::
+
+    # returns (10,)
+    np.linspace(1, 3) | head(10) | shape()"""
         super().__init__(); self.n = n; self.inverted = False
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
-        n = self.n; it = iter(it)
-        if n is None:
-            if not self.inverted: yield from it
-            else: return
-        elif n >= 0:
-            if not self.inverted:
-                for i, line in zip(range(n), it): yield line
-            else:
-                for i, line in zip(range(n), it): pass
-                yield from it
-        else:
-            if not self.inverted: # head to -3
-                n = abs(n); queue = deque()
-                for line in it:
-                    queue.append(line)
-                    if len(queue) > n: yield queue.popleft()
-            else: yield from deque(it, -n) # -3 to end
+        n = self.n; inverted = self.inverted
+        if isinstance(it, settings.arrayTypes):
+            if inverted: return it[n:]
+            else: return it[:n]
+        else: return _head(self.n, self.inverted, it)
     def __invert__(self): self.inverted = not self.inverted; return self
+def tail(n:int=10):
+    """Basically an inverted :class:`head`.
+Examples::
+
+    range(10) | tail(3) | deref() # returns [7, 8, 9]"""
+    return ~head(-n)
 class lazyList:
     def __init__(self, it):
         self.it = iter(it); self.elems = []
@@ -241,7 +258,7 @@ Table[T]."""
         sentinel = object(); row = next(it, sentinel)
         if row == sentinel: return []
         row = list(row); rs = range(len(row)+1000) # 1000 for longer rows below
-        it = it | cli.joinList(row)
+        it = it | cli.insert(row)
         if isinstance(columns, slice): columns = set(rs[columns])
         if self.inverted: columns = set(e for e in rs if e not in columns)
         if len(columns) == 1:
@@ -288,7 +305,7 @@ Example::
     [[1, "a"], [2, "a"], [1, "b"]] | unique(0) | deref()
 
 :param column: doesn't have the default case of None, because you can always use
-    :class:`k1lib.cli.utils.toSet`"""
+    :class:`k1lib.cli.conv.toSet`"""
         super().__init__(); self.column = column
     def __ror__(self, it:Table[T]) -> Table[T]:
         terms = set(); c = self.column

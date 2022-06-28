@@ -552,6 +552,44 @@ value and immediately snaps to the first saved value.
     def __repr__(self):
         return f"Moving average: {self.value}, alpha: {self.alpha}"
 sen = "_ab_sentinel"
+jitOpcodes = {"__len__": lambda x: f"len({x})",
+              "__neg__": lambda x: f"(-{x})",
+              "__pos__": lambda x: f"(+{x})",
+              "__abs__": lambda x: f"abs({x})",
+              "__invert__": lambda x: f"(~{x})",
+              "__getattr__": lambda x, idx: f"getattr({x},{idx})",
+              "__getitem__": lambda x, idx: f"({x}[{idx}])",
+              "__add__": lambda x, o: f"({x}+{o})",
+              "__radd__": lambda x, o: f"({o}+{x})",
+              "__mul__": lambda x, o: f"({x}*{o})",
+              "__rmul__": lambda x, o: f"({o}*{x})",
+              "__matmul__": lambda x, o: f"({x}@{o})",
+              "__rmatmul__": lambda x, o: f"({o}@{x})",
+              "__truediv__": lambda x, o: f"({x}/{o})",
+              "__rtruediv__": lambda x, o: f"({o}/{x})",
+              "__floordiv__": lambda x, o: f"({x}//{o})",
+              "__rfloordiv__": lambda x, o: f"({o}//{x})",
+              "__mod__": lambda x, o: f"({x}%{o})",
+              "__rmod__": lambda x, o: f"({o}%{x})",
+              "__pow__": lambda x, o: f"({x}**{o})",
+              "__rpow__": lambda x, o: f"({o}**{x})",
+              "__lshift__": lambda x, o: f"({x}<<{o})",
+              "__rlshift__": lambda x, o: f"({o}<<{x})",
+              "__rshift__": lambda x, o: f"({x}>>{o})",
+              "__rrshift__": lambda x, o: f"({o}>>{x})",
+              "__and__": lambda x, o: f"({x}&{o})",
+              "__rand__": lambda x, o: f"({o}&{x})",
+              "__xor__": lambda x, o: f"({x}^{o})",
+              "__rxor__": lambda x, o: f"({o}^{x})",
+              "__or__": lambda x, o: f"({x}|{o})",
+              "__ror__": lambda x, o: f"({o}|{x})",
+              "__lt__": lambda x, o: f"({x}<{o})",
+              "__le__": lambda x, o: f"({x}<={o})",
+              "__eq__": lambda x, o: f"({x}=={o})",
+              "__ne__": lambda x, o: f"({x}!={o})",
+              "__gt__": lambda x, o: f"({x}>{o})",
+              "__ge__": lambda x, o: f"({x}>={o})",}
+opcodeAuto = AutoIncrement(prefix="_op_var_")
 class Absorber:
     """Creates an object that absorbes every operation done on it. Could be
 useful in some scenarios::
@@ -602,6 +640,20 @@ but much faster, suitable for high performance tasks. Example::
     # returns 6
     f(3)"""
         s = self._ab_steps; l = len(s)
+        try: # jit compilation
+            ss = "x"; values = {}
+            for (opcode, *o), *_ in s:
+                if opcode == "__call__":
+                    va = opcodeAuto(); vk = opcodeAuto()
+                    values[va], values[vk] = o[0]
+                    ss = f"({ss}(*{va}, **{vk}))"
+                elif len(o) > 0:
+                    varname = opcodeAuto();
+                    values[varname] = o[0]
+                    ss = jitOpcodes[opcode](ss, varname)
+                else: ss = jitOpcodes[opcode](ss, 0)
+            return eval(compile(f"lambda x: {ss}", "", "eval"), values)
+        except: pass
         if l == 0: return lambda x: x
         if l == 1: return s[0][1]
         if l == 2:
@@ -618,7 +670,7 @@ but much faster, suitable for high performance tasks. Example::
             return lambda x: e(d(c(b(a(x)))))
         return self.ab_operate
     def __getattr__(self, idx):
-        if isinstance(idx, str) and idx.startswith("_"): raise AttributeError()
+        if isinstance(idx, str) and idx.startswith("_"): raise AttributeError("Getting attributes starting with underscore is prohibited. If you're using `op`, consider using `aS(lambda x: x._field)` instead.")
         self._ab_steps.append([["__getattr__", idx], lambda x: getattr(x, idx)]); return self
     def __setattr__(self, k, v):
         """Only allows legit variable setting when '_ab_sentinel' is True. Absorbs

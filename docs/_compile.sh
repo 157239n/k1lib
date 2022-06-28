@@ -18,9 +18,14 @@ make html
 
 rm -r _build/html/_static/fonts
 
-echo Building tutorials --------------------
-tutorials/build.py
-cp -r tutorials/tutorials _build/html/tutorials
+if [[ "$2" == "0" ]]
+then
+  echo "Skip building tutorials --------------------"
+else
+  echo "Building tutorials --------------------"
+  tutorials/build.py
+  cp -r tutorials/tutorials _build/html/tutorials
+fi
 
 # copying over to k1lib.github,io/ folder. Expected this to not be inside any
 # folders, as there are lots of absolute references

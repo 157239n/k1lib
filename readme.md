@@ -34,3 +34,5 @@ Read over some tutorials in the docs to get a feel of how things work.
 ## Contacts?
 
 If you found bugs, open a new issue on the repo itself. If you want to have a chat, then email me at 157239q@gmail.com
+
+If you want to get an overview of how the repo is structured, read [contributing.md](contributing.md)

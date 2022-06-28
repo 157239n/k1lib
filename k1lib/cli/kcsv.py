@@ -6,9 +6,15 @@ module name, like this::
     kcsv.cat("file.csv") | display()
 """
 from k1lib import cli
-import csv
+from k1lib.cli import BaseCli
+import csv, os
 __all__ = ["cat"]
-def cat(file:str) -> cli.Table[str]:
+class _cat(BaseCli):
+    def __ror__(self, file):
+        file = os.path.expanduser(file)
+        with open(file) as f:
+            yield from csv.reader(f)
+def cat(file:str=None) -> cli.Table[str]:
     """Opens a csv file, and turns them into nice row elements"""
-    with open(file) as f:
-        yield from csv.reader(f)
+    if file is None: return _cat()
+    return file | _cat()

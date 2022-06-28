@@ -14,15 +14,12 @@ convert object to object. Lastly, there are some that just feels right to input
 an iterator and output a single object (like getting max, min, std, mean values)."""
 from k1lib.cli.init import patchDefaultDelim, BaseCli, Table, T
 import k1lib.cli as cli, numbers, torch, numpy as np, dis
-from typing import overload, Iterator, Any, List, Set, Union
-import k1lib, time, math
-__all__ = ["size", "shape", "item", "identity", "iden",
-           "toStr", "join", "toNumpy", "toTensor",
-           "toList", "wrapList", "toSet", "toIter", "toRange", "toType",
-           "equals", "reverse", "ignore", "rateLimit", "tab", "indent",
-           "toSum", "toProd", "toAvg", "toMean", "toMax", "toMin", "toPIL",
-           "toImg", "toRgb", "toRgba", "toBin", "toIdx", "clipboard",
-           "lengths", "headerIdx", "deref", "bindec", "smooth", "disassemble"]
+from typing import overload, Iterator, Any, List, Set, Union, Callable
+import k1lib, time, math, os
+__all__ = ["size", "shape", "item", "iden", "join", "wrapList",
+           "equals", "reverse", "ignore", "rateLimit", "timeLimit", "tab", "indent",
+           "clipboard", "headerIdx", "deref", "bindec", "smooth", "disassemble",
+           "tree", "lookup"]
 settings = k1lib.settings.cli
 def exploreSize(it):
     """Returns first element and length of array"""
@@ -103,33 +100,15 @@ Example::
         if self.amt != 1:
             return it | cli.serial(*(item(fill=self.fill) for _ in range(self.amt)))
         return next(iter(it), *self.fillP)
-class identity(BaseCli):
+class iden(BaseCli):
     def __init__(self):
         """Yields whatever the input is. Useful for multiple streams.
 Example::
 
     # returns range(5)
-    range(5) | identity()"""
+    range(5) | iden()"""
         super().__init__()
     def __ror__(self, it:Iterator[Any]): return it
-iden = identity
-class toStr(BaseCli):
-    def __init__(self, column:int=None):
-        """Converts every line to a string.
-Example::
-
-    # returns ['2', 'a']
-    [2, "a"] | toStr() | deref()
-    # returns [[2, 'a'], [3, '5']]
-    assert [[2, "a"], [3, 5]] | toStr(1) | deref()"""
-        super().__init__(); self.column = column
-    def __ror__(self, it:Iterator[str]):
-        c = self.column
-        if c is None:
-            for line in it: yield str(line)
-        else:
-            for row in it:
-                yield [e if i != c else str(e) for i, e in enumerate(row)]
 class join(BaseCli):
     def __init__(self, delim:str=None):
         r"""Merges all strings into 1, with `delim` in the middle. Basically
@@ -139,72 +118,13 @@ class join(BaseCli):
     [2, "a"] | join("\n")"""
         super().__init__(); self.delim = patchDefaultDelim(delim)
     def __ror__(self, it:Iterator[str]):
-        return self.delim.join(it | toStr())
-class toNumpy(BaseCli):
-    def __init__(self):
-        """Converts generator to numpy array. Essentially ``np.array(list(it))``"""
-        super().__init__()
-    def __ror__(self, it:Iterator[float]) -> np.array:
-        return np.array(list(it))
-class toTensor(BaseCli):
-    def __init__(self, dtype=torch.float32):
-        """Converts generator to :class:`torch.Tensor`. Essentially
-``torch.tensor(list(it))``.
-
-Also checks if input is a PIL Image. If yes, turn it into a :class:`torch.Tensor`
-and return."""
-        self.dtype = dtype
-    def __ror__(self, it:Iterator[float]) -> torch.Tensor:
-        try:
-            import PIL; pic=it
-            if isinstance(pic, PIL.Image.Image): # stolen from torchvision ToTensor transform
-                mode_to_nptype = {'I': np.int32, 'I;16': np.int16, 'F': np.float32}
-                img = torch.from_numpy(np.array(pic, mode_to_nptype.get(pic.mode, np.uint8), copy=True))
-                if pic.mode == '1': img = 255 * img
-                img = img.view(pic.size[1], pic.size[0], len(pic.getbands()))
-                return img.permute((2, 0, 1)).contiguous().to(self.dtype) # put it from HWC to CHW format
-        except: pass
-        return torch.tensor(list(it)).to(self.dtype)
-class toList(BaseCli):
-    def __init__(self):
-        """Converts generator to list. :class:`list` would do the
-same, but this is just to maintain the style"""
-        super().__init__()
-    def __ror__(self, it:Iterator[Any]) -> List[Any]: return list(it)
+        return self.delim.join(it | cli.toStr())
 class wrapList(BaseCli):
     def __init__(self):
         """Wraps inputs inside a list. There's a more advanced cli tool
 built from this, which is :meth:`~k1lib.cli.structural.unsqueeze`."""
         super().__init__()
     def __ror__(self, it:T) -> List[T]: return [it]
-class toSet(BaseCli):
-    def __init__(self):
-        """Converts generator to set. :class:`set` would do the
-same, but this is just to maintain the style"""
-        super().__init__()
-    def __ror__(self, it:Iterator[T]) -> Set[T]: return set(it)
-class toIter(BaseCli):
-    def __init__(self):
-        """Converts object to iterator. `iter()` would do the
-same, but this is just to maintain the style"""
-        super().__init__()
-    def __ror__(self, it:List[T]) -> Iterator[T]: return iter(it)
-class toRange(BaseCli):
-    def __init__(self):
-        """Returns iter(range(len(it))), effectively"""
-        super().__init__()
-    def __ror__(self, it:Iterator[Any]) -> Iterator[int]:
-        for i, _ in enumerate(it): yield i
-class toType(BaseCli):
-    def __init__(self):
-        """Converts object to its type.
-Example::
-
-    # returns [int, float, str, torch.Tensor]
-    [2, 3.5, "ah", torch.randn(2, 3)] | toType() | deref()"""
-        super().__init__()
-    def __ror__(self, it:Iterator[T]) -> Iterator[type]:
-        for e in it: yield type(e)
 class _EarlyExp(Exception): pass
 class equals:
     def __init__(self):
@@ -283,6 +203,19 @@ Example::
     range(5) | rateLimit.cpu() | apply(op()**2) | deref()"""
         import psutil
         return rateLimit(lambda: psutil.cpu_percent() < maxUtilization)
+class timeLimit(BaseCli):
+    def __init__(self, t):
+        """Caps the flow after a specified amount of time has
+passed. Example::
+
+    # returns 20, or roughly close to that
+    repeatF(lambda: time.sleep(0.1)) | timeLimit(2) | shape(0)"""
+        self.t = t
+    def __ror__(self, it):
+        _time = time.time; endTime = _time() + self.t
+        for e in it:
+            yield e
+            if _time() > endTime: break
 def tab(pad:str=" "*4):
     """Indents incoming string iterator.
 Example::
@@ -291,121 +224,6 @@ Example::
     range(10) | tab() | headOut()"""
     return cli.apply(lambda x: f"{pad}{x}")
 indent = tab
-settings.add("arrayTypes", (torch.Tensor, np.ndarray), "default array types used to accelerate clis")
-class toSum(BaseCli):
-    def __init__(self):
-        """Calculates the sum of list of numbers. Can pipe in :class:`torch.Tensor` or :class:`np.ndarray`.
-Example::
-
-    # returns 45
-    range(10) | toSum()"""
-        super().__init__()
-    def __ror__(self, it:Iterator[float]):
-        if isinstance(it, settings.arrayTypes): return it.sum()
-        return sum(it)
-class toProd(BaseCli):
-    def __init__(self):
-        """Calculates the product of a list of numbers. Can pipe in :class:`torch.Tensor` or :class:`np.ndarray`.
-Example::
-
-    # returns 362880
-    range(1,10) | toProd()"""
-        super().__init__()
-    def __ror__(self, it):
-        if isinstance(it, settings.arrayTypes): return it.prod()
-        else: return math.prod(it)
-class toAvg(BaseCli):
-    def __init__(self):
-        """Calculates average of list of numbers. Can pipe in :class:`torch.Tensor` or :class:`np.ndarray`.
-Example::
-
-    # returns 4.5
-    range(10) | toAvg()
-    # returns nan
-    [] | toAvg()"""
-        super().__init__()
-    def __ror__(self, it:Iterator[float]):
-        if isinstance(it, settings.arrayTypes): return it.mean()
-        s = 0; i = -1
-        for i, v in enumerate(it): s += v
-        i += 1
-        if not k1lib.settings.cli.strict and i == 0: return float("nan")
-        return s / i
-toMean = toAvg
-class toMax(BaseCli):
-    def __init__(self):
-        """Calculates the max of a bunch of numbers. Can pipe in :class:`torch.Tensor` or :class:`np.ndarray`.
-Example::
-
-    # returns 6
-    [2, 5, 6, 1, 2] | toMax()"""
-        super().__init__()
-    def __ror__(self, it:Iterator[float]) -> float:
-        if isinstance(it, settings.arrayTypes): return it.max()
-        return max(it)
-class toMin(BaseCli):
-    def __init__(self):
-        """Calculates the min of a bunch of numbers. Can pipe in :class:`torch.Tensor` or :class:`np.ndarray`.
-Example::
-
-    # returns 1
-    [2, 5, 6, 1, 2] | toMin()"""
-        super().__init__()
-    def __ror__(self, it:Iterator[float]) -> float:
-        if isinstance(it, settings.arrayTypes): return it.min()
-        return min(it)
-class toPIL(BaseCli):
-    def __init__(self):
-        """Converts a path to a PIL image.
-Example::
-
-    ls(".") | toPIL().all() | item() # get first image"""
-        import PIL; self.PIL = PIL
-    def __ror__(self, path) -> "PIL.Image.Image":
-        return self.PIL.Image.open(path)
-toImg = toPIL
-class toRgb(BaseCli):
-    def __init__(self):
-        """Converts greyscale/rgb PIL image to rgb image.
-Example::
-
-    # reads image file and converts it to rgb
-    "a.png" | toPIL() | toRgb()"""
-        import PIL; self.PIL = PIL
-    def __ror__(self, i):
-        rgbI = self.PIL.Image.new("RGB", i.size)
-        rgbI.paste(i); return rgbI
-class toRgba(BaseCli):
-    def __init__(self):
-        """Converts random PIL image to rgba image.
-Example::
-
-    # reads image file and converts it to rgba
-    "a.png" | toPIL() | toRgba()"""
-        import PIL; self.PIL = PIL
-    def __ror__(self, i):
-        rgbI = self.PIL.Image.new("RGBA", i.size)
-        rgbI.paste(i); return rgbI
-class toBin(BaseCli):
-    def __init__(self):
-        """Converts integer to binary string.
-Example::
-
-    # returns "101"
-    5 | toBin()"""
-        super().__init__()
-    def __ror__(self, it): return bin(int(it))[2:]
-class toIdx(BaseCli):
-    def __init__(self, chars:str):
-        """Get index of characters according to a reference.
-Example::
-
-    # returns [1, 4, 4, 8]
-    "#&&*" | toIdx("!#$%&'()*+") | deref()"""
-        self.chars = {v:k for k, v in enumerate(chars)}
-    def __ror__(self, it):
-        chars = self.chars
-        for e in it: yield chars[e]
 class clipboard(BaseCli):
     def __init__(self):
         """Saves the input to clipboard.
@@ -415,19 +233,6 @@ Example::
     "abc" | clipboard()"""
         import pyperclip; self.pyperclip = pyperclip
     def __ror__(self, s): self.pyperclip.copy(s)
-class lengths(BaseCli):
-    def __init__(self):
-        """Returns the lengths of each element.
-Example::
-
-    [range(5), range(10)] | lengths() == [5, 10]
-
-This is a simpler (and faster!) version of :class:`shape`. It assumes each element
-can be called with ``len(x)``, while :class:`shape` iterates through every elements
-to get the length, and thus is much slower."""
-        super().__init__()
-    def __ror__(self, it:Iterator[List[Any]]) -> Iterator[int]:
-        for e in it: yield len(e)
 def headerIdx():
     """Cuts out first line, put an index column next to it, and prints it
 out. Useful when you want to know what your column's index is to cut it
@@ -437,7 +242,7 @@ Example::
     # returns [[0, 'a'], [1, 'b'], [2, 'c']]
     ["abc"] | headerIdx() | deref()"""
     return item() | cli.wrapList() | cli.transpose() | cli.insertIdColumn(True)
-settings.atomic.add("deref", (numbers.Number, np.number, str, dict, bool, bytes, torch.nn.Module, k1lib.UValue), "used by deref")
+settings.atomic.add("deref", (numbers.Number, np.number, str, bool, bytes, torch.nn.Module, k1lib.UValue), "used by deref")
 Tensor = torch.Tensor; atomic = settings.atomic
 class inv_dereference(BaseCli):
     def __init__(self, igT=False):
@@ -478,12 +283,6 @@ will never try to iterate over it. If you wish to change it, do something like::
 
     settings.cli.atomic.deref = (int, float, ...)
 
-.. warning::
-
-    Can work well with PyTorch Tensors, but not Numpy arrays as they screw things up
-    with the __ror__ operator, so do torch.from_numpy(...) first. Don't worry about
-    unnecessary copying, as numpy and torch both utilizes the buffer protocol.
-
 :param maxDepth: maximum depth to dereference. Starts at 0 for not doing anything
     at all
 :param igT: short for "ignore tensor". If True, then don't loop over :class:`torch.Tensor`
@@ -497,6 +296,8 @@ will never try to iterate over it. If you wish to change it, do something like::
         elif isinstance(it, self.arrayType):
             if self.igT: return it
             if len(it.shape) == 0: return it.item()
+        elif isinstance(it, dict):
+            self.depth += 1; _d = {k: self.__ror__(v) for k, v in it.items()}; self.depth -= 1; return _d
         try: iter(it)
         except: return it
         self.depth += 1; answer = []
@@ -521,7 +322,7 @@ Example::
 
 :param cats: categories
 :param f: transformation function of the selected elements. Defaulted to :class:`toList`, but others like :class:`join` is useful too"""
-        self.cats = cats; self.f = f or toList()
+        self.cats = cats; self.f = f or cli.toList()
     def __ror__(self, it):
         it = bin(int(it))[2:][::-1]
         return (e for i, e in zip(it, self.cats) if i == '1') | self.f
@@ -538,7 +339,7 @@ Example::
     # returns [4.5, 14.5, 24.5]
     range(30) | smooth(10) | deref()
 
-Smoothing over :class:`torch.Tensor` or :class:`np.ndarray` will
+Smoothing over :class:`torch.Tensor` or :class:`numpy.ndarray` will
 be much faster, and produce high dimensional results::
 
     # returns torch.Tensor with shape (2, 3, 4)
@@ -559,7 +360,7 @@ time, like this::
     def __ror__(self, it):
         it = it | self.b
         if isinstance(it, settings.arrayTypes): return it.mean(1)
-        return it | toMean().all()
+        return it | cli.toMean().all()
 def _f(): pass
 _code = type(_f.__code__)
 def disassemble(f=None):
@@ -591,7 +392,7 @@ Normal usage::
     print(f"co_flags: {c.co_flags}")
     print(f"co_freevars: {c.co_freevars}")
     print(f"co_kwonlyargcount: {c.co_kwonlyargcount}")
-    print(f"co_lnotab: {c.co_lnotab | toStr() | join(' ')}")
+    print(f"co_lnotab: {c.co_lnotab | cli.toStr() | join(' ')}")
     print(f"co_name: {c.co_name}")
     print(f"co_names: {c.co_names}")
     print(f"co_nlocals: {c.co_nlocals}")
@@ -602,3 +403,35 @@ Normal usage::
     with k1lib.captureStdout() as out:
         c.co_consts | cli.filt(lambda x: "code" in str(type(x))) | cli.tee(lambda _: "----------------------- inner code object -----------------------\n") | cli.apply(disassemble) | cli.ignore()
     out() | cli.filt(cli.op().strip() != "") | cli.apply("|" + cli.op()) | cli.indent() | cli.stdout()
+shortName = lambda s: s.split(os.sep)[-1]
+def tree(fL=10, dL=10, depth=float("inf"), ff:Callable[[str], bool]=(lambda s: True), df:Callable[[str], bool]=(lambda s: True)):
+    """Recursively gets all files and folders. Output format might be a bit
+strange, so this is mainly for visualization. Example::
+
+    "." | tree() | deref()
+
+:param fL: max number of file per directory included in output
+:param dL: max number of child directories per directory included in output
+:param depth: explore depth
+:param ff: optional file filter function
+:param df: optional directory filter function"""
+    processFolders = cli.apply(lambda x: [shortName(x), x]) | cli.apply(lambda x: x | tree(fL, dL, depth-1, ff, df) if depth > 0 else [], 1) | cli.transpose() | cli.toDict()
+    return cli.ls() | ~cli.sortF(os.path.isfile) | ((cli.filt(os.path.isfile) | cli.filt(ff) | cli.head(fL) | cli.apply(shortName)) & (~cli.filt(os.path.isfile) | cli.filt(df) | cli.head(dL) | processFolders))
+class lookup(BaseCli):
+    def __init__(self, d:dict, col:int=None):
+        """Looks up items from a dictionary/object. Example::
+
+    d = {"a": 3, "b": 5, "c": 52}
+    # returns [3, 5, 52, 52, 3]
+    "abcca" | lookup(d) | deref()
+    
+    # returns [[0, 3], [1, 5], [2, 52], [3, 52], [4, 3]]
+    [range(5), "abcca"] | transpose() | lookup(d, 1) | deref()
+
+:param d: any object that can be sliced with the inputs
+:param col: if None, lookup on each row, else lookup a specific
+    column only"""
+        self.d = d; self.col = col
+    def __ror__(self, it):
+        d = self.d
+        return it | cli.apply(lambda e: d[e], self.col)

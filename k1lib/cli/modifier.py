@@ -2,7 +2,8 @@
 """
 This is for quick modifiers, think of them as changing formats
 """
-__all__ = ["applyS", "aS", "apply", "applyMp", "applyTh", "applySerial",
+__all__ = ["applyS", "aS", "apply", "applyMp", "parallel",
+           "applyTh", "applySerial",
            "toFloat", "toInt",
            "sort", "sortF", "consume", "randomize", "stagger", "op",
            "integrate"]
@@ -219,6 +220,7 @@ if you run into problems, try doing this."""
             if self.p in applyMp._pools: applyMp._pools.remove(self.p)
 # apparently, this doesn't do anything, at least in jupyter environment
 atexit.register(lambda: applyMp.clearPools())
+parallel = applyMp
 thEmptySentinel = object()
 class applyTh(BaseCli):
     def __init__(self, f, prefetch:int=2, timeout:float=5, bs:int=1):
@@ -324,7 +326,7 @@ With weird rows::
     # returns [[1.0, 'a'], [0.0, 'b'], [8.0, 'c']]
     [["1", "a"], ["c", "b"], [8, "c"]] | toFloat(0, force=True) | deref()
 
-This also works well with :class:`torch.Tensor` and :class:`np.ndarray`,
+This also works well with :class:`torch.Tensor` and :class:`numpy.ndarray`,
 as they will not be broken up into an iterator::
 
     # returns a numpy array, instead of an iterator
@@ -547,11 +549,11 @@ But that's kinda long and may not be obvious. This can be surprisingly resilient
 you can still combine with other cli tools as usual, for example::
 
     # returns [2, 3], demonstrating "&" operator
-    torch.randn(2, 3) | (op().shape & identity()) | deref() | item()
+    torch.randn(2, 3) | (op().shape & iden()) | deref() | item()
 
     a = torch.tensor([[1, 2, 3], [7, 8, 9]])
     # returns torch.tensor([4, 5, 6]), demonstrating "+" operator for clis and not clis
-    (a | op() + 3 + identity() | item() == torch.tensor([4, 5, 6])).all()
+    (a | op() + 3 + iden() | item() == torch.tensor([4, 5, 6])).all()
 
     # returns [[3], [3]], demonstrating .all() and "|" serial chaining
     torch.randn(2, 3) | (op().shape.all() | deref())

@@ -2,6 +2,27 @@
 Changelogs
 ==========
 
+`0.16 </0.16>`_
+---------------
+
+.. currentmodule:: k1lib.cli
+
+Cli:
+
+- Accelerated :class:`~filt.head` if input's a :class:`torch.Tensor` or :class:`np.ndarray`.
+- Added :meth:`~utils.tree`, :class:`~utils.timeLimit`, :class:`~output.split`,
+  :class:`~utils.lookup`.
+- Renamed :class:`~structural.joinList` to :class:`~structural.insert`, cause that's more intuitive
+- Removed :class:`structural.insertRow`, as ``insertRow(1, 2)`` can be achieved using ``~insert(1, 2)``
+- Souped up :class:`~structural.insertColumn`
+- Added column mode in :class:`~grep.grep`.
+- Added JIT compilation for :class:`~modifier.op`
+- Added alias :class:`~modifier.parallel` and :class:`~conv.toLens`
+- Accelerated :class:`~structural.batched` if input's a :class:`range`
+- Added accelerated mode to :meth:`~inp.cat`
+- Grouped ``to__`` clis into the module :mod:`~k1lib.cli.conv`.
+- Removed redundant :class:`~utils.toType` and :class:`~utils.identity`
+
 `0.15 </0.15>`_
 ---------------
 

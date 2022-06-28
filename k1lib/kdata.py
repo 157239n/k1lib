@@ -42,7 +42,7 @@ Example::
 
     "path/img.png" | toPIL() | kdata.tfImg(224)"""
     import torchvision.transforms as tf
-    op = identity()
+    op = iden()
     if size: op |= aS(tf.Resize(size)) | aS(tf.CenterCrop(size))
     op |= aS(tf.ColorJitter(0.2, 0.2, 0.2)) | aS(tf.RandomAffine(5))
     if flip: op |= aS(tf.RandomHorizontalFlip())

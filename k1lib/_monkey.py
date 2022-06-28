@@ -49,7 +49,7 @@ with the same standard deviation as the original parameter"""
         b = param.std() if param.numel() > 1 else 1
         answer.append(a * b)
     return answer
-from k1lib.cli import apply, deref, op, identity, item
+from k1lib.cli import apply, deref, op, item
 @k1lib.patch(nn.Module)
 @contextmanager
 def deviceContext(self:nn.Module, buffers:bool=True) -> ContextManager:

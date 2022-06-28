@@ -12,7 +12,7 @@
 #
 import os
 import sys
-import k1lib
+from k1lib.imports import *
 sys.path.insert(0, os.path.abspath('../k1lib'))
 
 
@@ -90,3 +90,45 @@ with open("literals/settings.rst", "w") as f:
         print(k1lib.settings.__repr__())
     f.write(".. code-block:: text\n\n" +
             "\n".join([f"   {e}" for e in out.value]))
+
+# --- cli tables
+
+
+def _genColumn(l):
+    n = (l | lengths() | toMax()) + 2
+    tmp = "{:" + str(n) + "s}"
+    for e in l:
+        yield "| " + tmp.format(e) + " |"
+
+
+def genColumn(l, pad=0):
+    res = _genColumn(l)
+    h = next(res)
+    n = len(h)-2
+    yield "+" + "-"*n + "+"
+    yield h
+    yield "+" + "="*n + "+"
+    for e in res:
+        yield e
+        yield "+" + "-"*n + "+"
+    for i in range(pad//2):
+        yield "|" + " "*n + "|"
+        yield "+" + "-"*n + "+"
+
+
+def combineColumns(_ls):
+    lens = _ls | lengths()
+    maxLen = lens | toMax()
+    return _ls | apply(lambda x: genColumn(x, (maxLen-len(x))*2)) | transpose() | join("").all()\
+        | op().replace("-++-", "-+-").replace("=++=", "=+=").replace(" || ", " | ").all() | deref()
+
+
+toCliTable = apply("k1lib.cli." + op())\
+    | apply(lambda x: [x, sys.modules[x], sys.modules[x].__all__]) | ~sortF(lambda x: len(x[2])) | apply(op().split(".")[-1], 0)\
+    | apply(~aS(lambda x, m, zs: [x, *zs | apply(lambda z: f":class:`~{x}.{z}`" if inspect.isclass(getattr(m, z)) else f":meth:`~{x}.{z}`")]))\
+    | batched(5, True) | apply(combineColumns) | apply(insert("", begin=False)) | joinStreams()
+
+["filt", "conv", "grep", "init", "inp", "kcsv", "kxml", "modifier", "nb", "output",
+    "structural", "trace", "utils"] | toCliTable | file("literals/cli-tables.rst")
+["bio", "entrez", "mgi", "gb", "sam"] | toCliTable | file(
+    "literals/cli-bio-tables.rst")

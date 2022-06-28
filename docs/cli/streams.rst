@@ -28,7 +28,7 @@ get the #rows of every file, but we can't pipe the input directly to
 :class:`~utils.shape`, as it will count how many files are there instead. So, the
 operator :meth:`~init.BaseCli.all` will return a new cli object that will apply
 :class:`~utils.shape` to every stream. The output of that will be ``Iterator[int]``,
-which we can convert to a list easily with :class:`~utils.toList`. ``.all()`` is
+which we can convert to a list easily with :class:`~conv.toList`. ``.all()`` is
 pretty much the same as :class:`~modifier.apply`, but is more intuitive.
 
 This is pretty powerful, as you can be as meta as you'd like. Something crazy like
@@ -41,7 +41,7 @@ this works::
 
 Here, the inner block ``cat().all() | shape(0).all() | toList()`` is just like last
 time. This time, it's applied on all ``List[str]`` elements in ``fileNames``, and
-:class:`~utils.toList` just dereferences the iterator. The maximum meta level is
+:class:`~conv.toList` just dereferences the iterator. The maximum meta level is
 actually ``Iterator[Iterator[Iterator[str]]]`` here.
 
 You can also join different streams into just 1, by doing something like this::
@@ -62,7 +62,7 @@ like the examples above::
     ["a", "b", "c"] | (toRange() & identity()) | joinColumns() | display()
 
 Here, a list of strings is piped into ``(toRange() & identity())`` operator. This will
-effectively split the input into 2 streams. 1 gets passed through :class:`~utils.toRange`,
+effectively split the input into 2 streams. 1 gets passed through :class:`~conv.toRange`,
 and 1 through :class:`~utils.identity`. So, the output is effectively
 ``[Iterator[int], Iterator[str]]``, which we can join together just like before.
 

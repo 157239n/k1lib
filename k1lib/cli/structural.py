@@ -8,11 +8,11 @@ from collections import defaultdict, Counter, deque
 from k1lib.cli.init import patchDefaultDelim, BaseCli, oneToMany, T, Table, fastF
 import k1lib.cli as cli
 import itertools, numpy as np, torch, k1lib
-__all__ = ["transpose", "reshape", "joinList", "splitW",
+__all__ = ["transpose", "reshape", "insert", "splitW",
            "joinStreams", "yieldSentinel", "joinStreamsRandom", "activeSamples",
            "table", "batched", "window", "groupBy", "collate",
-           "insertRow", "insertColumn", "insertIdColumn",
-           "toDict", "toDictF", "expandE", "unsqueeze",
+           "insertColumn", "insertIdColumn",
+           "expandE", "unsqueeze",
            "count", "permute", "accumulate", "AA_", "peek", "peekF",
            "repeat", "repeatF", "repeatFrom"]
 class transpose(BaseCli):
@@ -77,7 +77,7 @@ Example::
         return transpose(dim1, dim2, fill=fill) | transpose(dim1, dim2, fill=fill)
     @staticmethod
     def wrap(f, dim1:int=0, dim2:int=1, fill=None):
-        """Wraps ``f`` around 2 :class:`transpose`s, can be useful in combination with
+        """Wraps ``f`` around 2 :class:`transpose`, can be useful in combination with
 :class:`k1lib.cli.init.mtmS`. Example::
 
     # returns [[1, 4, 3, 4], [8, 81, 10, 11]]
@@ -126,27 +126,40 @@ iterator with :class:`joinStreams` first, like this::
             except StopIteration: pass
         else:
             for i in range(self.dims[0]): yield _formStructure(it, self.dims, 1)
-class joinList(BaseCli):
-    def __init__(self, element=None, begin=True):
+class insert(BaseCli):
+    def __init__(self, *elements, begin=True):
         """Join element into list.
 Example::
 
     # returns [5, 2, 6, 8]
-    [5, [2, 6, 8]] | joinList() | deref()
-    # also returns [5, 2, 6, 8]
-    [2, 6, 8] | joinList(5) | deref()
+    [5, [2, 6, 8]] | insert() | deref()
+    # returns [5, 2, 6, 8]
+    [2, 6, 8] | insert(5) | deref()
+    # returns [2, 6, 8, 5]
+    [2, 6, 8] | insert(5, begin=False) | deref()
+    
+    # returns [[3, 1], 2, 6, 8]
+    [2, 6, 8] | insert([3, 1]) | deref()
+    # returns [[3, 1], 2, 6, 8]
+    [2, 6, 8] | ~insert(3, 1) | deref()
+    # returns [[3, 1], 2, 6, 8]
+    [[3, 1], [2, 6, 8]] | ~insert() | deref()
 
 :param element: the element to insert. If None, then takes the input [e, [...]],
     else takes the input [...] as usual"""
-        super().__init__(); self.element = element; self.begin = begin
+        super().__init__(); self.elements = elements; self.begin = begin; self.expand = False
     def __ror__(self, it:Tuple[T, Iterator[T]]) -> Iterator[T]:
-        it = iter(it)
-        if self.element is None:
+        elements = self.elements; it = iter(it)
+        if len(elements) == 0:
             if self.begin: yield next(it); yield from next(it)
             else: e = next(it); yield from next(it); yield e
         else:
-            if self.begin: yield self.element; yield from it
-            else: yield from it; yield self.element
+            if not self.expand: elements = elements[0]
+            if self.begin: yield elements; yield from it
+            else: yield from it; yield elements
+    def __invert__(self):
+        ans = insert(*self.elements, begin=self.begin)
+        ans.expand = True; return ans
 class splitW(BaseCli):
     def __init__(self, *weights:List[float]):
         """Splits elements into multiple weighted lists. If no weights are provided,
@@ -265,14 +278,22 @@ quite a lot in bioinformatics. Example::
     # returns [['a', 'bd'], ['1', '2', '3']]
     ["a|bd", "1|2|3"] | table("|") | deref()"""
     return cli.op().split(patchDefaultDelim(delim)).all()
-def _batched(it, bs, includeLast):
+def _batch(it, bs, includeLast):
     l = []; it = iter(it)
     try:
         while True:
             for i in range(bs): l.append(next(it))
             yield l; l = []
     except StopIteration:
-        if includeLast: yield l
+        if includeLast and len(l) > 0: yield l
+def _batchRange(it, bs, includeLast):
+    start, stop, step = it.start, it.stop, it.step
+    lastCur = start; cur = lastCur + bs*step
+    while cur <= stop:
+        yield range(lastCur, cur, step)
+        lastCur = cur; cur += bs*step
+    if includeLast and lastCur < stop:
+        yield range(lastCur, stop, step)
 class batched(BaseCli):
     def __init__(self, bs=32, includeLast=False):
         """Batches the input stream.
@@ -287,12 +308,18 @@ Example::
     # returns []
     range(5) | batched(float("inf"), False) | deref()
     
-Can work well and fast with :class:`torch.Tensor` and :class:`np.ndarray`::
+Can work well and fast with :class:`torch.Tensor` and :class:`numpy.ndarray`::
 
     # both returns torch.Tensor of shape (2, 3, 4, 5)
     torch.randn(6, 4, 5) | batched(3)
     torch.randn(7, 4, 5) | batched(3)
-    """
+
+Also, if input is a :class:`range`, then to save time, a bunch of other
+ranges will be returned, instead of a bunch of lists, for performance::
+
+    # returns [range(0, 3), range(3, 6), range(6, 9)]
+    range(11) | batched(3) | toList()
+"""
         super().__init__(); self.bs = bs; self.includeLast = includeLast
     def __ror__(self, it):
         bs = self.bs; includeLast = self.includeLast
@@ -302,7 +329,8 @@ Can work well and fast with :class:`torch.Tensor` and :class:`np.ndarray`::
         if not includeLast and isinstance(it, k1lib.settings.cli.arrayTypes):
             n = it.shape[0] // bs; it = it[:n*bs]
             return it.reshape(n, bs, *it.shape[1:])
-        return _batched(it, bs, includeLast)
+        if isinstance(it, range): return _batchRange(it, bs, includeLast)
+        return _batch(it, bs, includeLast)
 class window(BaseCli):
     def __init__(self, n, newList=False):
         """Slides window of size n forward and yields the windows.
@@ -328,7 +356,7 @@ allocation, which will be slower::
         for e in it:
             q.append(e)
             if len(q) == n: yield listF(q); q.popleft()
-class groupBy(BaseCli): # TODO: doesn't work if groupBy column is a 1D tensor?
+class groupBy(BaseCli):
     def __init__(self, column:int, hashable=False):
         """Groups table by some column.
 Example::
@@ -362,6 +390,8 @@ internally. For example, an unhashable class is :class:`torch.Tensor`::
 So, you have to convert the 0-d tensors to single ints/floats first, in
 order to use the fast mode.
 
+See also: :class:`~k1lib.cli.grep.grep`
+
 :param column: which column to group by
 :param hashable: whether the selected column is hashable or not"""
         self.column = column; self.hashable = hashable
@@ -382,16 +412,25 @@ Example::
     # returns [tensor([ 0, 10, 20]), tensor([ 1, 11, 21]), tensor([ 2, 12, 22])]
     [range(0, 3), range(10, 13), range(20, 23)] | collate() | toList()"""
     return transpose() | cli.apply(lambda row: torch.tensor(row))
-def insertRow(*row:List[T]):
-    """Inserts a row right before every other rows. See also: :meth:`joinList`."""
-    return joinList(row)
-def insertColumn(*column, begin=True, fill=""):
-    """Inserts a column at beginning or end.
+class insertColumn(BaseCli):
+    def __init__(self, *columns, begin=True, fill=""):
+        """Inserts a column at beginning or end.
 Example::
 
     # returns [['a', 1, 2], ['b', 3, 4]]
-    [[1, 2], [3, 4]] | insertColumn("a", "b") | deref()"""
-    return transpose(fill=fill) | joinList(column, begin) | transpose(fill=fill)
+    [[1, 2], [3, 4]] | ~insertColumn("a", "b") | deref()
+    # returns [['a', 1, 2], ['b', 3, 4]]
+    [[1, 2], [3, 4]] | insertColumn(["a", "b"]) | deref()
+    # returns [[1, 2, 'a'], [3, 4, 'b']]
+    [[1, 2], [3, 4]] | ~insertColumn("a", "b", begin=False) | deref()"""
+        self.columns = columns; self.begin = begin; self.fill = fill; self.expand = False
+    def __ror__(self, it):
+        f = insert(*self.columns, begin=self.begin);
+        if self.expand: f = ~f
+        return it | transpose(fill=self.fill) | f | transpose(fill=self.fill)
+    def __invert__(self):
+        ans = insertColumn(*self.columns, begin=self.begin, fill=self.fill)
+        ans.expand = True; return ans
 def insertIdColumn(table=False, begin=True, fill=""):
     """Inserts an id column at the beginning (or end).
 Example::
@@ -403,33 +442,9 @@ Example::
 
 :param table: if False, then insert column to an Iterator[str], else treat
     input as a full fledged table"""
-    f = (cli.toRange() & transpose(fill=fill)) | joinList(begin=begin) | transpose(fill=fill)
+    f = (cli.toRange() & transpose(fill=fill)) | insert(begin=begin) | transpose(fill=fill)
     if table: return f
     else: return cli.wrapList() | transpose() | f
-class toDict(BaseCli):
-    def __init__(self):
-        """Converts 2 Iterators, 1 key, 1 value into a dictionary.
-Example::
-
-    # returns {1: 3, 2: 4}
-    [[1, 2], [3, 4]] | toDict()"""
-        pass
-    def __ror__(self, it:Tuple[Iterator[T], Iterator[T]]) -> dict:
-        return {_k:_v for _k, _v in zip(*it)}
-class toDictF(BaseCli):
-    def __init__(self, keyF:Callable[[Any], str]=None, valueF:Callable[[Any], Any]=None):
-        """Transform an incoming stream into a dict using a function for
-values. Example::
-
-    names = ["wanda", "vision", "loki", "mobius"]
-    names | toDictF(valueF=lambda s: len(s)) # will return {"wanda": 5, "vision": 6, ...}
-    names | toDictF(lambda s: s.title(), lambda s: len(s)) # will return {"Wanda": 5, "Vision": 6, ...}
-"""
-        super().__init__(fs=[keyF, valueF]); self.keyF = keyF or (lambda s: s)
-        self.valueF = valueF or (lambda s: s)
-    def __ror__(self, keys:Iterator[Any]) -> Dict[Any, Any]:
-        keyF = self.keyF; valueF = self.valueF
-        return {keyF(key):valueF(key) for key in keys}
 class expandE(BaseCli):
     def __init__(self, f:Callable[[T], List[T]], column:int):
         """Expands table element to multiple columns.

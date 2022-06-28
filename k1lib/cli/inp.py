@@ -4,23 +4,30 @@ from typing import Iterator, Union, Any
 import urllib, subprocess, warnings, os, k1lib, threading
 from k1lib.cli import BaseCli; import k1lib.cli as cli
 __all__ = ["cat", "curl", "wget", "ls", "cmd", "requireCli"]
-def _catSimple(fileName:str=None, text:bool=True) -> Iterator[Union[str, bytes]]:
+def _catSimple(fileName:str=None, text:bool=True, _all:bool=False) -> Iterator[Union[str, bytes]]:
     fileName = os.path.expanduser(fileName)
     if text:
-        with open(fileName) as f:
-            for line in f.readlines():
-                if line[-1] == "\n": yield line[:-1]
-                else: yield line
+        if _all:
+            with open(fileName) as f:
+                lines = f.read().splitlines()
+                yield lines
+        else:
+            with open(fileName) as f:
+                while True:
+                    line = f.readline()
+                    if line == "": return
+                    if line[-1] == "\n": yield line[:-1]
+                    else: yield line
     else:
         with open(fileName, "rb") as f: yield f.read()
-def _catWrapper(fileName:str, text:bool):
-    res = _catSimple(fileName, text)
-    return res if text else next(res)
+def _catWrapper(fileName:str, text:bool, _all:bool):
+    res = _catSimple(fileName, text, _all)
+    return res if text and (not _all) else next(res)
 class _cat(BaseCli):
-    def __init__(self, text): self.text = text
+    def __init__(self, text, _all:bool): self.text = text; self._all = _all
     def __ror__(self, fileName:str) -> Union[Iterator[str], bytes]:
-        return _catWrapper(fileName, self.text)
-def cat(fileName:str=None, text:bool=True):
+        return _catWrapper(fileName, self.text, self._all)
+def cat(fileName:str=None, text:bool=True, _all=False):
     """Reads a file line by line.
 Example::
 
@@ -34,9 +41,12 @@ Example::
 
 :param fileName: if None, then return a :class:`~k1lib.cli.init.BaseCli`
     that accepts a file name and outputs Iterator[str]
-:param text: if True, read text file, else read binary file"""
-    if fileName is None: return _cat(text)
-    else: return _catWrapper(fileName, text)
+:param text: if True, read text file, else read binary file
+:param _all: if True, read entire file at once, instead of reading
+    line-by-line. Faster, but uses more memory. Only works with text
+    mode, binary mode always read the entire file"""
+    if fileName is None: return _cat(text, _all)
+    else: return _catWrapper(fileName, text, _all)
 def curl(url:str) -> Iterator[str]:
     """Gets file from url. File can't be a binary blob.
 Example::
@@ -93,7 +103,7 @@ def executeCmd(cmd:str, inp:bytes, text):
 def printStderr(err):
     if not k1lib.settings.cli.quiet:
         e, it = err | cli.peek()
-        if it != []: it | cli.joinList("\nError encountered:\n") | cli.apply(k1lib.fmt.txt.red) | cli.stdout()
+        if it != []: it | cli.insert("\nError encountered:\n") | cli.apply(k1lib.fmt.txt.red) | cli.stdout()
 def requireCli(cliTool:str):
     """Searches for a particular cli tool (eg. "ls"), throws ImportError if not
 found, else do nothing"""

@@ -5,9 +5,10 @@ For operations that feel like the termination
 from collections import defaultdict
 from typing import Iterator, Any
 from k1lib.cli.init import BaseCli, Table
-import torch, numbers, numpy as np, k1lib, tempfile, os, sys, time; from k1lib import cli
+import torch, numbers, numpy as np, k1lib, tempfile, os, sys, time, shutil
+from k1lib import cli
 __all__ = ["stdout", "tee", "file", "pretty", "display", "headOut",
-           "intercept"]
+           "intercept", "split"]
 settings = k1lib.settings.cli
 class stdout(BaseCli):
     def __init__(self):
@@ -42,18 +43,18 @@ specified stream, while yielding the elements. Example::
             print(f(e), end="", file=s)
             yield e
     @staticmethod
-    def cr():
+    def cr(f=lambda x: x):
         """Tee, but replaces the previous line. "cr" stands for carriage return.
 Example::
 
     # prints "4" and returns [0, 1, 4, 9, 16]. Does print all the numbers in the middle, but is overriden
     range(5) | tee.cr() | apply(op() ** 2) | deref()"""
-        return tee(lambda s: f"\r{s}")
+        return tee(lambda s: f"\r{f(s)}")
     @staticmethod
-    def crt():
+    def crt(f=lambda x: x):
         """Like :meth:`tee.cr`, but includes an elapsed time text at the end"""
         beginTime = time.time()
-        return tee(lambda s: f"\r{s}, {int(time.time() - beginTime)}s elapsed")
+        return tee(lambda s: f"\r{f(s)}, {int(time.time() - beginTime)}s elapsed")
 class file(BaseCli):
     def __init__(self, fileName:str=None, text:bool=True):
         """Opens a new file for writing.
@@ -169,3 +170,34 @@ raises error to stop flow. Example::
                 print(k1lib.tab(f"{s}"))
         if self.raiseError: raise RuntimeError("intercepted")
         return s
+a = k1lib.AutoIncrement()
+class split(BaseCli):
+    def __init__(self, n=10, baseFolder="/tmp"):
+        """Splits a large file into multiple fragments, and returns the
+path to those files. Example::
+
+    # returns a list of 20 files
+    "big-file.csv" | split(20)
+
+This uses the underlying ``split`` linux cli tool. This also means that
+it's not guaranteed to work on macos or windows.
+
+Overtime, there will be lots of split files after a session, so be sure
+to clean them up to reduce disk size::
+
+    split.clear()
+
+:param n: Number of files to split into
+:param baseFolder: Base folder where all the splitted files are"""
+        self.folder = f"{baseFolder}/k1lib_split/{int(time.time())}_{a()}"
+        try: shutil.rmtree(self.folder)
+        except: pass
+        os.makedirs(self.folder, exist_ok=True); self.n = n
+    def __ror__(self, file):
+        if not isinstance(file, str): raise RuntimeError("Not a file name!")
+        None | cli.cmd(f"split -n l/{self.n} \"{os.path.expanduser(file)}\" \"{self.folder}/pr-\"") | cli.ignore()
+        return [f"{self.folder}/{f}" for f in os.listdir(self.folder)]
+    @staticmethod
+    def clear(baseFolder="/tmp"):
+        """Clears all splitted temporary files."""
+        shutil.rmtree(f"{baseFolder}/k1lib_split")

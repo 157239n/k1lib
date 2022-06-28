@@ -9,7 +9,8 @@ import torch; from torch import nn, optim
 import torch.nn.functional as F, torch.utils.data as data
 import matplotlib.pyplot as plt, matplotlib as mpl
 import numpy as np, dill as pickle, multiprocessing as mp, concurrent.futures as futures
-import math, os, time, sys, random, logging, traceback, re, typing, glob, warnings, dill, json, inspect
+import math, os, time, sys, random, logging, traceback, re, typing, glob, warnings
+import dill, json, inspect, xml
 import functools; from functools import partial, lru_cache
 import contextlib; from contextlib import contextmanager
 from collections import deque
@@ -24,7 +25,7 @@ plt.rcParams["animation.html"] = "jshtml"
 from math import e, pi; inf = float("inf"); # this section is for constants
 h = 6.62607015e-34; hbar = h/(2*pi); Na = 6.0221408e23; kb = 1.380649e-23
 c = 299_792_458; qe = 1.60217663e-19; me = 9.1093837e-31; mn = 1.67262192e-27
-e0 = 8.85418782e-12; Dal = u = 1.6605390666e-27; R = 8.3145
+e0 = 8.85418782e-12; Dal = u = 1.6605390666e-27; R = 8.3145; sb = 5.670374e-8
 if settings.startup.or_patch:
     try:
         import forbiddenfruit; #forbiddenfruit.reverse(np.ndarray, "__or__") # old version

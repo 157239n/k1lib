@@ -23,7 +23,7 @@ class feats(cli.BaseCli):
         """Filters for specific terms in all the features texts. If there
 are multiple terms, then filters for first term, then second, then third,
 so the term's order might matter to you"""
-        if len(terms) == 0: return cli.identity()
+        if len(terms) == 0: return cli.iden()
         if len(terms) > 1: return cli.deref() | cli.init.serial(*(feats.filt(term) for term in terms))
         return cli.toList().all() | cli.filt(lambda F: F | cli.grep(terms[0]) | cli.shape(0) > 0)
     @staticmethod

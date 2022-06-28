@@ -102,10 +102,30 @@ There are several `written tutorials <../tutorials.html>`_ about cli here, and I
 also made some `video tutorials <https://www.youtube.com/playlist?list=PLP1sw-g877osNI_dMXwR72kVDREeHsYnt>`_
 as well, so go check those out.
 
+Summary
+-------------------------
+
+.. include:: ../literals/cli-tables.rst
+
+Biology-related clis
+***********************
+
+I separated these out because they might not be interesting to the majority of users.
+
+.. include:: ../literals/cli-bio-tables.rst
+
 bio module
 -------------------------
 
 .. automodule:: k1lib.cli.bio
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+conv module
+-------------------------
+
+.. automodule:: k1lib.cli.conv
    :members:
    :undoc-members:
    :show-inheritance:

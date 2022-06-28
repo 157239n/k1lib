@@ -33,7 +33,7 @@ You can change the header labels like this::
 :param long: whether to use a long descriptive header, or a short one"""
         super().__init__(); self.long = long
     def __ror__(self, it):
-        return it | cli.insertRow(*(settings.header.long if self.long else settings.header.short))
+        return it | ~cli.insert(*(settings.header.long if self.long else settings.header.short))
 settings.add("flags", ['PAIRED', 'PROPER_PAIR', 'UNMAP', 'MUNMAP', 'REVERSE', 'MREVERSE', 'READ1', 'READ2', 'SECONDARY', 'QCFAIL', 'DUP', 'SUPPLEMENTARY'], "list of flags")
 class flag(cli.bindec):
     def __init__(self, f=None):
