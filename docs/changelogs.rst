@@ -2,6 +2,26 @@
 Changelogs
 ==========
 
+`0.17 </0.17>`_
+---------------
+
+.. currentmodule:: k1lib.cli
+
+Cli:
+
+- Accelerated :class:`~filt.head` for all sliceable types
+- Add fractional mode to :class:`~filt.head`
+- Added expanded arguments mode to :class:`~modifier.apply`
+- Added column mode to :class:`~modifier.sortF`
+- Added :meth:`gb.feats.root`, :meth:`gb.feats.tags`
+- Removed :meth:`gb.feats.tag`, use :meth:`gb.feats.tags` instead
+- Added predicate mode to :class:`~grep.grep`
+- Added :class:`~utils.dictFields`
+- Accelerated :class:`~structural.groupBy` significantly
+- Removed :meth:`~structural.collate`, as there's no use for it
+- Accelerated :class:`~utils.shape`, thus removing :class:`conv.lengths` and
+  :class:`conv.toLens` as ``shape(0).all()`` is just as good
+
 `0.16 </0.16>`_
 ---------------
 

@@ -169,6 +169,17 @@ as the process outputs it, so you get real time feedback. However, this will
 convert the entire input into a :class:`bytes` object, and not feed it bit by
 bit lazily, so if you have a humongous input, it might slow you down a little.
 
+Also, because stdout and stderr yield values right away, it means that if you
+want the operation to be blocking until finished, you have to consume the output::
+
+    None | cmd("mkdir abc")
+    # might fail, because this might get executed before the previous line
+    None | cmd("echo a>abc/rg.txt")
+    
+    None | cmd("mkdir abc") | ignore()
+    # will succeed, because this will be guaranteed to execute after the previous line
+    None | cmd("echo a>abc/rg.txt")
+
 Settings:
 - cli.quiet: if True, won't display errors in mode 1
 

@@ -10,8 +10,8 @@ import xml.etree.ElementTree as ET; import copy, xml, k1lib
 from typing import List
 __all__ = ["node", "maxDepth", "tags", "pretty", "display"]
 class node(cli.BaseCli):
-    """Turns lines into a single node.
-Example::
+    """Turns lines into a single
+node. Example::
 
     s = \"\"\"
     <html>
@@ -22,7 +22,11 @@ Example::
             <div></div>
         </body>
     </html>\"\"\"
-    s | kxml.node() # returns root node"""
+    # returns root node
+    s | kxml.node()
+    # same thing as above, demonstrating you can pipe in list of strings
+    s.split(\"\\n\") | kxml.node()
+"""
     def __ror__(self, it:Iterator[str]) -> ET.Element:
         return ET.fromstring("".join(it))
 def _maxDepth(node, maxDepth:int, depth:int=0):
@@ -52,6 +56,19 @@ def _tags(node, tag:str, nested):
 class tags(cli.BaseCli):
     def __init__(self, *tags:List[str], nested=False):
         """Finds all tags that have a particular name.. Example::
+
+    s = \"\"\"
+    <EXPERIMENT_PACKAGE_SET>
+      <EXPERIMENT_PACKAGE>
+        <EXPERIMENT_PACKAGE/>
+        <Pool/>
+        <RUN_SET/>
+      </EXPERIMENT_PACKAGE>
+      <EXPERIMENT_PACKAGE>
+        <Pool/>
+        <RUN_SET/>
+      </EXPERIMENT_PACKAGE>
+    </EXPERIMENT_PACKAGE_SET>\"\"\"
 
     # returns a list of "Pool" tags (with 2 elements) that are 2 levels deep
     s | kxml.node() | kxml.tags("Pool") | toList()

@@ -102,6 +102,8 @@ There are several `written tutorials <../tutorials.html>`_ about cli here, and I
 also made some `video tutorials <https://www.youtube.com/playlist?list=PLP1sw-g877osNI_dMXwR72kVDREeHsYnt>`_
 as well, so go check those out.
 
+You can also just read over the summary below, see what catches your eye and check that cli out.
+
 Summary
 -------------------------
 

@@ -2,6 +2,7 @@
 from typing import List, Iterator, Any, NewType, TypeVar, Generic
 import k1lib.cli as cli; from numbers import Number
 import k1lib, itertools, copy, torch, xml; import numpy as np
+import xml.etree.ElementTree
 
 __all__ = ["BaseCli", "Table", "T", "fastF",
            "serial", "oneToMany", "manyToMany", "mtmS"]
@@ -97,8 +98,7 @@ example of why this is useful. Currently, it will:
         for f in fs:
             if f is True: f = cli.op._op_pop_contains()
             if f is False: f = cli.op._op_pop_contains_inv()
-            if f.__class__.__name__.split(".")[-1] == "op":
-                f.op_solidify()
+            cli.op.solidify(f)
             l.append(f)
         fs.clear(); fs.extend(l)
     def __and__(self, cli:"BaseCli") -> "oneToMany":

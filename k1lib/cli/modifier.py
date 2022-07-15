@@ -4,7 +4,6 @@ This is for quick modifiers, think of them as changing formats
 """
 __all__ = ["applyS", "aS", "apply", "applyMp", "parallel",
            "applyTh", "applySerial",
-           "toFloat", "toInt",
            "sort", "sortF", "consume", "randomize", "stagger", "op",
            "integrate"]
 from typing import Callable, Iterator, Any, Union, List
@@ -14,7 +13,7 @@ import torch.multiprocessing as mp; from collections import deque
 from functools import partial, update_wrapper, lru_cache
 import dill, pickle, k1lib, warnings, atexit, signal, time, os, random
 class applyS(BaseCli):
-    def __init__(self, f:Callable[[T], T], **kwargs):
+    def __init__(self, f:Callable[[T], T], *args, **kwargs):
         """Like :class:`apply`, but much simpler, just operating on the entire input
 object, essentially. The "S" stands for "single". There's
 also an alias shorthand for this called :class:`aS`. Example::
@@ -34,10 +33,10 @@ This also decorates the returned object so that it has same qualname, docstring
 and whatnot.
 
 :param f: the function to be executed
-:param kwargs: other keyword arguments to pass to the function"""
-        super().__init__(fs=[f]); self.kwargs = kwargs
+:param kwargs: other keyword arguments to pass to the function, together with ``args``"""
+        super().__init__(fs=[f]); self.args = args; self.kwargs = kwargs
         self.f = f; update_wrapper(self, f, updated=())
-    def __ror__(self, it:T) -> T: return self.f(it, **self.kwargs)
+    def __ror__(self, it:T) -> T: return self.f(it, *self.args, **self.kwargs)
     def __invert__(self):
         """Configures it so that it expand the arguments out.
 Example::
@@ -51,7 +50,7 @@ Example::
     [2, 3] | ~aS(f)
     # returns 11
     [2, 3] | ~aS(f, a=5)"""
-        f = self.f; kw = self.kwargs; return applyS(lambda x: f(*x, **kw));
+        f = self.f; a = self.args; kw = self.kwargs; return applyS(lambda x: f(*x, *a, **kw));
 aS = applyS
 class apply(BaseCli):
     def __init__(self, f:Callable[[T], T], column:int=None, cache:int=0):
@@ -81,14 +80,21 @@ You can also add a cache, like this::
 
 :param column: if not None, then applies the function to that column only
 :param cache: if specified, then caches this much number of values"""
-        super().__init__(fs=[f]);
-        self.f = f; self.column = column; self._fC = fastF(f)
+        super().__init__(fs=[f]); self.f = f;
+        self.column = column; self.cache = cache; self._fC = fastF(f)
         if cache > 0: self._fC = lru_cache(cache)(self._fC)
     def __ror__(self, it:Iterator[str]):
         c = self.column; f = self._fC
         if c is None: return (f(line) for line in it)
         else: return ([(e if i != c else f(e)) 
                        for i, e in enumerate(row)] for row in it)
+    def __invert__(self):
+        """Same mechanism as in :class:`applyS`, it expands the
+arguments out. Just for convenience really. Example::
+
+    # returns [10, 12, 14, 16, 18]
+    [range(5), range(10, 15)] | transpose() | ~apply(lambda x, y: x+y) | deref()"""
+        return apply(lambda x: self.f(*x), self.column, self.cache)
 def executeFunc(common, line):
     import dill
     f, kwargs = dill.loads(common)
@@ -162,6 +168,14 @@ transfers a lot of data back and forth (compared to the amount of computation do
 the child processes don't have a lot of stuff to do before returning, it may very well
 be a lot slower than :class:`apply`.
 
+There's a potential loophole here that can make your code faster. Because the main
+process is forked (at least on linux), every variable is still there, even the big
+ones. So, you can potentially do something like this::
+
+    bigData = [] # 1B items in the list
+    # summing up all items together. No input data transfers (because it's forked instead)
+    range(1_000_000_000) | batched(100) | applyMp(lambda r: r | apply(lambda i: bigData[i]) | toSum()) | toSum()
+
 :param prefetch: if not specified, schedules all jobs at the same time. If
     specified, schedules jobs so that there'll only be a specified amount of
     jobs, and will only schedule more if results are actually being used.
@@ -215,6 +229,7 @@ if you run into problems, try doing this."""
         """Get set of all pools. Meant for debugging purposes only."""
         return applyMp._pools
     def __del__(self):
+        return
         if hasattr(self, "p"):
             self.p.terminate();
             if self.p in applyMp._pools: applyMp._pools.remove(self.p)
@@ -305,75 +320,6 @@ If the result of your operation is an iterator, you might want to
         else:
             if not self.includeFirst: it = f(it)
             while True: yield it; it = f(it)
-def _toop(toOp, c, force, defaultValue):
-    return apply(toOp, c) | (apply(lambda x: x or defaultValue, c) if force else cli.filt(cli.op() != None, c))
-def _toFloat(e) -> Union[float, None]:
-    try: return float(e)
-    except: return None
-class toFloat(BaseCli):
-    def __init__(self, *columns, mode=2):
-        """Converts every row into a float. Example::
-
-    # returns [1, 3, -2.3]
-    ["1", "3", "-2.3"] | toFloat() | deref()
-    # returns [[1.0, 'a'], [2.3, 'b'], [8.0, 'c']]
-    [["1", "a"], ["2.3", "b"], [8, "c"]] | toFloat(0) | deref()
-
-With weird rows::
-
-    # returns [[1.0, 'a'], [8.0, 'c']]
-    [["1", "a"], ["c", "b"], [8, "c"]] | toFloat(0) | deref()
-    # returns [[1.0, 'a'], [0.0, 'b'], [8.0, 'c']]
-    [["1", "a"], ["c", "b"], [8, "c"]] | toFloat(0, force=True) | deref()
-
-This also works well with :class:`torch.Tensor` and :class:`numpy.ndarray`,
-as they will not be broken up into an iterator::
-
-    # returns a numpy array, instead of an iterator
-    np.array(range(10)) | toFloat()
-
-:param columns: if nothing, then will convert each row. If available, then
-    convert all the specified columns
-:param mode: different conversion styles
-    - 0: simple ``float()`` function, fastest, but will throw errors if it can't be parsed
-    - 1: if there are errors, then replace it with zero
-    - 2: if there are errors, then eliminate the row"""
-        self.columns = columns; self.mode = mode;
-    def __ror__(self, it):
-        columns = self.columns; mode = self.mode
-        if len(columns) == 0:
-            if isinstance(it, np.ndarray): return it.astype(float)
-            if isinstance(it, torch.Tensor): return it.float()
-            if mode == 0: return it | apply(float)
-            return it | _toop(_toFloat, None, mode == 1, 0.0)
-        else: return it | cli.init.serial(*(_toop(_toFloat, c, mode == 1, 0.0) for c in columns))
-def _toInt(e) -> Union[int, None]:
-    try: return int(float(e))
-    except: return None
-class toInt(BaseCli):
-    def __init__(self, *columns, mode=2):
-        """Converts every row into an integer. Example::
-
-    # returns [1, 3, -2]
-    ["1", "3", "-2.3"] | toInt() | deref()
-
-:param columns: if nothing, then will convert each row. If available, then
-    convert all the specified columns
-:param mode: different conversion styles
-    - 0: simple ``float()`` function, fastest, but will throw errors if it can't be parsed
-    - 1: if there are errors, then replace it with zero
-    - 2: if there are errors, then eliminate the row
-
-See also: :meth:`toFloat`"""
-        self.columns = columns; self.mode = mode;
-    def __ror__(self, it):
-        columns = self.columns; mode = self.mode
-        if len(columns) == 0:
-            if isinstance(it, np.ndarray): return it.astype(int)
-            if isinstance(it, torch.Tensor): return it.int()
-            if mode == 0: return it | apply(int)
-            return it | _toop(_toInt, None, mode == 1, 0.0)
-        else: return it | cli.init.serial(*(_toop(_toInt, c, mode == 1, 0.0) for c in columns))
 class sort(BaseCli):
     def __init__(self, column:int=0, numeric=True, reverse=False):
         """Sorts all lines based on a specific `column`.
@@ -403,12 +349,12 @@ Example::
         def sortF(row):
             if len(row) > c: return f(row[c])
             return float("inf")
-        return iter(sorted(rows, key=sortF, reverse=self.reverse))
+        return sorted(rows, key=sortF, reverse=self.reverse)
     def __invert__(self):
         """Creates a clone that has the opposite sort order"""
         return sort(self.column, self.numeric, not self.reverse)
 class sortF(BaseCli):
-    def __init__(self, f:Callable[[T], float], reverse=False):
+    def __init__(self, f:Callable[[T], float], column:int=None, reverse=False):
         """Sorts rows using a function.
 Example::
 
@@ -416,11 +362,17 @@ Example::
     ["a", "aaa", "aaaaa", "aa", "aaaa"] | sortF(lambda r: len(r)) | deref()
     # returns ['aaaaa', 'aaaa', 'aaa', 'aa', 'a']
     ["a", "aaa", "aaaaa", "aa", "aaaa"] | ~sortF(lambda r: len(r)) | deref()"""
-        fs = [f]; super().__init__(fs=fs); self.f = fs[0]; self.reverse = reverse
+        fs = [f]; super().__init__(fs=fs); self.f = fs[0]
+        self.column = column; self.reverse = reverse
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
-        return iter(sorted(list(it), key=self.f, reverse=self.reverse))
+        c = self.column; f = self.f
+        if c is None: return sorted(list(it), key=f, reverse=self.reverse)
+        def sortF(row):
+            if len(row) > c: return f(row[c])
+            return float("inf")
+        return sorted(list(it), key=sortF, reverse=self.reverse)
     def __invert__(self) -> "sortF":
-        return sortF(self.f, not self.reverse)
+        return sortF(self.f, self.column, not self.reverse)
 class consume(BaseCli):
     def __init__(self, f:Union[BaseCli, Callable[[T], None]]):
         r"""Consumes the iterator in a side stream. Returns the iterator.
@@ -564,8 +516,8 @@ you can still combine with other cli tools as usual, for example::
 This can only deal with simple operations only. For complex operations, resort
 to the longer version ``applyS(lambda x: ...)`` instead!
 
-Performance-wise, there are some, but not a lot of degradation, so don't worry
-about it. Simple operations executes pretty much on par with native lambdas::
+Performance-wise, in most cases, there are no degradation, so don't worry
+about it. Everything is pretty much on par with native lambdas::
 
     n = 10_000_000
     # takes 1.48s
@@ -577,14 +529,14 @@ about it. Simple operations executes pretty much on par with native lambdas::
     # takes 1.86s
     range(n) | (op()**2).all() | ignore()
 
-More complex operations can take more of a hit::
+More complex operations still retains the same speeds, as there's a JIT compiler embedded in::
 
-    # takes 1.66s
-    for i in range(n): i**2-3
-    # takes 2.02s, 1.22x worse than for loop
-    range(n) | apply(lambda x: x**2-3) | ignore()
-    # takes 2.81s, 1.69x worse than for loop
-    range(n) | apply(op()**2-3) | ignore()
+    # takes 2.15s
+    for i in range(n): (i**2-3)*0.1
+    # takes 2.53s, 1.18x worse than for loop
+    range(n) | apply(lambda x: (x**2-3)*0.1) | ignore()
+    # takes 2.46s, 1.14x worse than for loop
+    range(n) | apply((op()**2-3)*0.1) | ignore()
 
 Experimental features:
 
@@ -601,6 +553,18 @@ Reserved operations that are not absorbed are:
 - __ror__ (__or__ still works!)
 - op_solidify"""
         super().__init__({"_op_solidified": False, "_op_in_set": set()})
+    @staticmethod
+    def solidify(f):
+        """Static equivalent of ``a.op_solidify()``.
+Example::
+        
+    f = op()**2
+    f = op.solidify(f)
+
+If ``f`` is not an ``op``, then just return it without doing anything to it"""
+        if f.__class__.__name__.split(".")[-1] == "op":
+            f.op_solidify()
+        return f
     def op_solidify(self):
         """Use this to not absorb ``__call__`` operations anymore and makes it
 feel like a regular function (still absorbs other operations though)::

@@ -17,7 +17,7 @@ setup(
               "k1lib.callbacks", "k1lib.callbacks.profilers",
               "k1lib.callbacks.lossFunctions",
               "k1lib._mo"],
-    version="0.16",
+    version="0.17",
     python_requires='>=3.7',
     install_requires=["torch", "numpy>=1.14", "matplotlib>=2.0", "dill"],
     extras_require={"extras": ["graphviz", "torchvision",

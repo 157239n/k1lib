@@ -2,10 +2,10 @@
 __all__ = ["grep", "grepTemplate"]
 import re, k1lib
 from k1lib.cli.init import BaseCli, Table, Row; import k1lib.cli as cli
-from collections import deque; from typing import Iterator
+from collections import deque; from typing import Iterator, Union, Callable, Any
 inf = float("inf")
 class grep(BaseCli):
-    def __init__(self, pattern:str, before:int=0, after:int=0, N:int=float("inf"), sep:bool=False, col:int=None):
+    def __init__(self, pattern:Union[str, Callable[[Any], bool]], before:int=0, after:int=0, N:int=float("inf"), sep:bool=False, col:int=None):
         """Find lines that has the specified pattern.
 Example::
 
@@ -29,7 +29,22 @@ You can also separate out the sections::
     # returns [['1', '2', '3'], ['1', '4', '5']]
     "0123145" | grep("1", sep=True).till() | deref()
 
+You can also put in predicates instead of regex patterns::
+
+    # returns ['d', 'd']
+    "abcde12d34" | grep(lambda x: x == "d") | deref()
+    # also returns ['d', 'd']
+    "abcde12d34" | filt(lambda x: x == "d") | deref()
+    # returns ['d', 'e', 'd', '3', '4']
+    "abcde12d34" | grep(lambda x: x == "d").till(lambda x: x == "e") | deref()
+
+The first scenario looks like a regular filter function, already implemented by :class:`~k1lib.cli.filt.filt`,
+but :class:`grep` brings in more clustering features for the price of reduced
+execution speed. So for simple scenarios it's advised that you use :class:`~k1lib.cli.filt.filt`.
+
 See also: :class:`~k1lib.cli.structural.groupBy`
+
+Also, there's a `whole tutorial <../tutorials/cli.html>`_ devoted to just this cli
 
 :param pattern: regex pattern to search for in a line
 :param before: lines before the hit. Outputs independent lines
@@ -38,10 +53,12 @@ See also: :class:`~k1lib.cli.structural.groupBy`
 :param sep: whether to separate out the sections as lists
 :param col: searches for pattern in a specific column"""
         super().__init__()
-        self.pattern = re.compile(pattern)
-        self.before = before; self.after = after; self.col = col
-        self.N = N; self.sep = sep; self.tillPattern = None
-    def till(self, pattern:str=None):
+        if isinstance(pattern, str):
+            self._f = re.compile(pattern).search # make func quickly accessible
+        else: self._f = cli.op.solidify(pattern)
+        self.before = before; self.after = after; self.col = col; self.N = N; self.sep = sep
+        self.tillPattern = None; self.tillAfter = None; self._tillF = lambda x: False
+    def till(self, pattern:Union[str, Callable[[Any], bool]]=None):
         """Greps until some other pattern appear. Inclusive, so you might want to
 trim the last line. Example::
 
@@ -57,38 +74,43 @@ all. Instead, do something like this::
 
     # returns ['1', '2', '3']
     "0123145" | grep("1", after=1e9, N=1) | deref()"""
-        if pattern == self.pattern.pattern: pattern = None
-        # "\ue000" is in unicode's private use area, so extremely unlikely that we
-        # will actually run into it in normal text processing, because it's not text
-        self.tillPattern = re.compile(pattern or "\ue000")
+        if pattern is None:
+            self._tillF = self._f
+        elif isinstance(pattern, str):
+            self._tillF = re.compile(pattern).search
+        else:
+            self._tillF = cli.op.solidify(pattern)
         self.tillAfter = self.after; self.after = inf; return self
     def __ror__(self, it:Iterator[str]) -> Iterator[str]:
-        self.sectionIdx = 0; tillPattern = self.tillPattern; col = self.col
+        self.sectionIdx = 0; col = self.col; _f = self._f; _tillF = self._tillF
         if self.sep:
-            self.sep = False; elems = []; idx = 0
-            for line in (it | self):
-                if self.sectionIdx > idx: # outputs whatever remaining
+            elems = []; idx = 0
+            s = self._clone(); s.sep = False
+            for line in (it | s):
+                if s.sectionIdx > idx: # outputs whatever remaining
                     if len(elems) > 0: yield list(elems)
-                    idx = self.sectionIdx; elems = []
+                    idx = s.sectionIdx; elems = []
                 elems.append(line)
-            yield list(elems)
-            self.sep = True; return
+            yield list(elems); return
         queue = deque([], self.before); counter = 0 # remaining lines after to display
         cRO = k1lib.RunOnce(); cRO.done()
         for line in it:
             if col != None: line = list(line); elem = line[col]
             else: elem = line
-            if self.pattern.search(elem): # new section
+            if _f(elem): # new section
                 self.sectionIdx += 1; counter = self.after+1; cRO.revert()
                 if self.sectionIdx > self.N: return
                 yield from queue; queue.clear(); yield line
-            elif tillPattern is not None and tillPattern.search(elem) and counter == inf: # closing section
+            elif _tillF(elem) and counter == inf: # closing section
                 counter = self.tillAfter + 1; cRO.revert(); yield line
             if counter == 0:
                 queue.append(line) # saves recent past lines
             elif counter > 0: # yielding "after" section
                 if cRO.done(): yield line
                 counter -= 1
+    def _clone(self):
+        answer = grep(self._f, self.before, self.after, self.N, self.sep, self.col)
+        answer._tillF = self._tillF; answer.tillAfter = self.tillAfter; return answer
 class grepTemplate(BaseCli):
     def __init__(self, pattern:str, template:str):
         """Searches over all lines, pick out the match, and expands

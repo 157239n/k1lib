@@ -561,6 +561,8 @@ jitOpcodes = {"__len__": lambda x: f"len({x})",
               "__getitem__": lambda x, idx: f"({x}[{idx}])",
               "__add__": lambda x, o: f"({x}+{o})",
               "__radd__": lambda x, o: f"({o}+{x})",
+              "__sub__": lambda x, o: f"({x}-{o})",
+              "__rsub__": lambda x, o: f"({o}-{x})",
               "__mul__": lambda x, o: f"({x}*{o})",
               "__rmul__": lambda x, o: f"({o}*{x})",
               "__matmul__": lambda x, o: f"({x}@{o})",
@@ -648,12 +650,15 @@ but much faster, suitable for high performance tasks. Example::
                     values[va], values[vk] = o[0]
                     ss = f"({ss}(*{va}, **{vk}))"
                 elif len(o) > 0:
-                    varname = opcodeAuto();
-                    values[varname] = o[0]
-                    ss = jitOpcodes[opcode](ss, varname)
-                else: ss = jitOpcodes[opcode](ss, 0)
+                    varname = opcodeAuto(); v = o[0]
+                    if isinstance(v, (int, float)):
+                        ss = jitOpcodes[opcode](ss, v)
+                    else:
+                        values[varname] = v
+                        ss = jitOpcodes[opcode](ss, varname)
+                else: ss = jitOpcodes[opcode](ss)
             return eval(compile(f"lambda x: {ss}", "", "eval"), values)
-        except: pass
+        except Exception as e: pass
         if l == 0: return lambda x: x
         if l == 1: return s[0][1]
         if l == 2:
@@ -809,7 +814,7 @@ documentation for the variable. Example::
     def __repr__(self):
         """``includeDocs`` mainly used internally when generating docs in sphinx."""
         ks = list(k for k in self.__dict__ if not k.startswith("_"))
-        kSpace = max([1, *(ks | k1lib.cli.lengths())]); s = "Settings:\n"
+        kSpace = max([1, *(ks | k1lib.cli.shape(0).all())]); s = "Settings:\n"
         for k, v in self._simpleSettings():
             s += f"- {k.ljust(kSpace)} = {k1lib.limitChars(str(v), settings.displayCutoff)}{sep}{self._docsOf(k)}\n"
         for k, v in self._subSettings():
@@ -826,7 +831,7 @@ def oschdir(path): settings.wd = path
 _oschdir = os.chdir; os.chdir = oschdir; os.chdir.__doc__ = _oschdir.__doc__
 settings.add("wd", os.getcwd(), "default working directory, will get from `os.getcwd()`. Will update using `os.chdir()` automatically when changed", _cb_wd)
 settings.add("cancelRun_newLine", True, "whether to add a new line character at the end of the cancel run/epoch/batch message")
-startup = Settings().add("or_patch", True, "whether to remove __or__() method from numpy array and pandas data frame and series. This would make cli operations with them a lot more pleasant, but also means you have to convert numpy floats to normal floats before doing a bitwise or to it")
+startup = Settings().add("or_patch", True, "whether to patch __or__() method from numpy array and pandas data frame and series. This would make cli operations with them a lot more pleasant, but might cause strange bugs. Haven't met them myself though")
 settings.add("startup", startup, "these settings have to be applied like this: `import k1lib; k1lib.settings.startup.or_patch = False; from k1lib.imports import *` to ensure that the values are set")
 def sign(v): return 1 if v > 0 else -1
 def roundOff(a, b):

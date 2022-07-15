@@ -17,6 +17,7 @@ Cli related:
 - `osic <tutorials/osic.html>`_: Analyze dicom images
 - `mp <tutorials/mp.html>`_: Supplementary for osic, demonstrating multiprocessing
 - `trace <tutorials/trace.html>`_: Go over :meth:`~trace.trace` visualizations
+- `grep <tutorials/grep.html>`_: Go over :meth:`~grep.grep` for finding strings in complex data
 
 Others:
 

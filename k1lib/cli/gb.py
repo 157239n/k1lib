@@ -6,15 +6,36 @@
     cat("abc.gb") | gb.feats()
 """
 from k1lib import cli
+from typing import Any, Union, List
 __all__ = ["feats", "origin"]
 class feats(cli.BaseCli):
-    """Fetches features, each on a separate stream"""
+    """Fetches features, each on a separate stream.
+Example::
+
+    cat("a.gb") | gb.feats()
+
+Output example::
+
+    [['     source          1..248956422',
+      '                     /organism="Homo sapiens"',
+      '                     /mol_type="genomic DNA"',
+      '                     /db_xref="taxon:9606"',
+      '                     /chromosome="1"'],
+     ['     gene            11874..14409',
+      '                     /gene="DDX11L1"',
+      '                     /note="DEAD/H-box helicase 11 like 1 (pseudogene); Derived',
+      '                     by automated computational analysis using gene prediction',
+      '                     method: BestRefSeq."',
+      '                     /pseudo',
+      '                     /db_xref="GeneID:100287102"',
+      '                     /db_xref="HGNC:HGNC:37102"']]
+"""
     def __ror__(self, it):
         it = it | cli.grep("FEATURES", 0, 1e9).till("ORIGIN") | cli.rows()[1:-1]
         cache = []
         for line in it:
             if line[4:9] != "     ": # new section detected
-                if len(cache) > 0: yield iter(cache)
+                if len(cache) > 0: yield cache
                 cache = []
             cache.append(line)
         if len(cache) > 0: yield iter(cache)
@@ -22,23 +43,109 @@ class feats(cli.BaseCli):
     def filt(*terms:str) -> cli.BaseCli:
         """Filters for specific terms in all the features texts. If there
 are multiple terms, then filters for first term, then second, then third,
-so the term's order might matter to you"""
+so the term's order might matter to you. Example::
+
+    [['     source          1..248956422',
+      '                     /organism="Homo sapiens"',
+      '                     /mol_type="genomic DNA"',
+      '                     /db_xref="taxon:9606"',
+      '                     /chromosome="1"'],
+     ['     gene            11874..14409',
+      '                     /gene="DDX11L1"',
+      '                     /note="DEAD/H-box helicase 11 like 1 (pseudogene); Derived',
+      '                     by automated computational analysis using gene prediction',
+      '                     method: BestRefSeq."',
+      '                     /pseudo',
+      '                     /db_xref="GeneID:100287102"',
+      '                     /db_xref="HGNC:HGNC:37102"']] | gb.feats.filt("mol_type")
+
+Output::
+
+    [['     source          1..248956422',
+      '                     /organism="Homo sapiens"',
+      '                     /mol_type="genomic DNA"',
+      '                     /db_xref="taxon:9606"',
+      '                     /chromosome="1"']]
+"""
         if len(terms) == 0: return cli.iden()
         if len(terms) > 1: return cli.deref() | cli.init.serial(*(feats.filt(term) for term in terms))
         return cli.toList().all() | cli.filt(lambda F: F | cli.grep(terms[0]) | cli.shape(0) > 0)
     @staticmethod
-    def tag(tag:str) -> cli.BaseCli:
-        """Gets a single tag out. Applies this on a single feature only"""
-        class _tag(cli.BaseCli):
-            def __ror__(self, it):
-                lines = it | cli.grep(f"/{tag}").till(f"/(?!{tag})") | cli.deref()
-                # check if on same line
-                if len(lines) > 1 and lines[-1].lstrip().startswith("/"): lines.pop()
-                return (lines | cli.op().split(f"/{tag}=\"").all() | cli.joinStreams() | ~cli.head(1)\
-                | cli.op().strip().all() | cli.join("")).rstrip("\"")
-        return _tag()
+    def root() -> cli.BaseCli:
+        """Gets root (top most unnamed tag) of a feature.
+Example::
+
+     ['     misc_RNA        complement(join(14362..14829,14970..15038,15796..15947,',
+      '                     16607..16765,16858..17055,17233..17368,17606..17742,',
+      '                     17915..18061,18268..18366,24738..24891,29321..29370))',
+      '                     /gene="WASH7P"',
+      '                     /gene_synonym="FAM39F; WASH5P"',
+      '                     /product="WASP family homolog 7, pseudogene"',
+      '                     /note="Derived by automated computational analysis using',
+      '                     gene prediction method: BestRefSeq."',
+      '                     /pseudo',
+      '                     /transcript_id="NR_024540.1"',
+      '                     /db_xref="GeneID:653635"',
+      '                     /db_xref="HGNC:HGNC:38034"'] | feats.root()
+
+Output::
+
+    ['misc_RNA',
+     ['complement(join(14362..14829,14970..15038,15796..15947,',
+      '16607..16765,16858..17055,17233..17368,17606..17742,',
+      '17915..18061,18268..18366,24738..24891,29321..29370))']]
+"""
+        return cli.apply(lambda x: x.strip()) | cli.breakIf(lambda x: x.startswith("/")) | ~cli.aS(lambda a, *b: [a.split(" ")[0], [" ".join(a.split(" ")[1:]).strip(), *b]])
+    @staticmethod
+    def tags(*tags:List[str]) -> cli.BaseCli:
+        """Grabs a list of tags.
+Example::
+
+    s = ['     misc_RNA        complement(join(14362..14829,14970..15038,15796..15947,',
+         '                     16607..16765,16858..17055,17233..17368,17606..17742,',
+         '                     17915..18061,18268..18366,24738..24891,29321..29370))',
+         '                     /gene="WASH7P"',
+         '                     /gene_synonym="FAM39F; WASH5P"',
+         '                     /product="WASP family homolog 7, pseudogene"',
+         '                     /note="Derived by automated computational analysis using',
+         '                     gene prediction method: BestRefSeq."',
+         '                     /pseudo',
+         '                     /transcript_id="NR_024540.1"',
+         '                     /db_xref="GeneID:653635"',
+         '                     /db_xref="HGNC:HGNC:38034"']
+    s | feats.tags()
+
+Output::
+
+    [['gene', 'WASH7P'],
+     ['gene_synonym', 'FAM39F; WASH5P'],
+     ['product', 'WASP family homolog 7, pseudogene'],
+     ['note',
+      'Derived by automated computational analysis using gene prediction method: BestRefSeq.'],
+     ['pseudo', ''],
+     ['transcript_id', 'NR_024540.1'],
+     ['db_xref', 'GeneID:653635'],
+     ['db_xref', 'HGNC:HGNC:38034']]
+
+With filters::
+
+    # returns [['gene', 'WASH7P'], ['db_xref', 'HGNC:HGNC:38034'], ['organism', '']]
+    s | feats.tags("gene", "db_xref", "organism")
+"""
+        f = cli.op().strip().all() | cli.grep("^/", sep=True).till() | cli.join(" ").all()\
+            | (cli.op().split("=") | ~cli.aS(lambda a, *b: [a[1:], b[0][1:-1] if len(b) > 0 else ""])).all()
+        if len(tags) == 0: return f | cli.deref()
+        def g(it):
+            d = it | f | cli.transpose() | cli.toDict()
+            return [[tag, d[tag] if tag in d else ""] for tag in tags]
+        return cli.aS(g)
 class origin(cli.BaseCli):
-    """Return the origin section of the genbank file"""
+    """Return the origin section of the genbank file.
+Example::
+
+    # returns single fasta string
+    cat("a.gb") | gb.origin()
+"""
     def __ror__(self, it):
         return it | cli.grep("ORIGIN", 0, 1e9) | ~cli.head(1) | cli.op().strip().all()\
         | cli.op().split(" ").all() | cli.cut()[1:] | cli.join("").all()\

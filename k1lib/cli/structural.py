@@ -10,7 +10,7 @@ import k1lib.cli as cli
 import itertools, numpy as np, torch, k1lib
 __all__ = ["transpose", "reshape", "insert", "splitW",
            "joinStreams", "yieldSentinel", "joinStreamsRandom", "activeSamples",
-           "table", "batched", "window", "groupBy", "collate",
+           "table", "batched", "window", "groupBy",
            "insertColumn", "insertIdColumn",
            "expandE", "unsqueeze",
            "count", "permute", "accumulate", "AA_", "peek", "peekF",
@@ -294,6 +294,12 @@ def _batchRange(it, bs, includeLast):
         lastCur = cur; cur += bs*step
     if includeLast and lastCur < stop:
         yield range(lastCur, stop, step)
+def _batchSliceable(it, bs, includeLast):
+    cur = 0; n = len(it)
+    while (cur+1)*bs <= n:
+        yield it[cur*bs:(cur+1)*bs]
+        cur += 1
+    if includeLast: yield it[cur*bs:(cur+1)*bs]
 class batched(BaseCli):
     def __init__(self, bs=32, includeLast=False):
         """Batches the input stream.
@@ -330,7 +336,8 @@ ranges will be returned, instead of a bunch of lists, for performance::
             n = it.shape[0] // bs; it = it[:n*bs]
             return it.reshape(n, bs, *it.shape[1:])
         if isinstance(it, range): return _batchRange(it, bs, includeLast)
-        return _batch(it, bs, includeLast)
+        try: it[0]; len(it); return _batchSliceable(it, bs, includeLast)
+        except: return _batch(it, bs, includeLast)
 class window(BaseCli):
     def __init__(self, n, newList=False):
         """Slides window of size n forward and yields the windows.
@@ -357,7 +364,7 @@ allocation, which will be slower::
             q.append(e)
             if len(q) == n: yield listF(q); q.popleft()
 class groupBy(BaseCli):
-    def __init__(self, column:int, hashable=False):
+    def __init__(self, column:int):
         """Groups table by some column.
 Example::
 
@@ -375,43 +382,23 @@ This returns::
       [4.5, 2]],
      [[6.7, 1]]]
 
-By default, ``hashable`` param is False, which has O(n^2) time complexity,
-but can handle everything. If you benchmark everything and found out that
-this step is the bottlebeck, then you can set ``hashable`` to True, which
-has O(n) time complexity. However, you have to be sure that the column's
-elements are actually hashable, so that it can be converted into a set
-internally. For example, an unhashable class is :class:`torch.Tensor`::
-
-    # returns False
-    torch.tensor(2) in set([torch.tensor(2), torch.tensor(3)])
-    # returns True
-    torch.tensor(2) == torch.tensor(2)
-
-So, you have to convert the 0-d tensors to single ints/floats first, in
-order to use the fast mode.
+Should have O(n log(n)) time complexity
 
 See also: :class:`~k1lib.cli.grep.grep`
 
-:param column: which column to group by
-:param hashable: whether the selected column is hashable or not"""
-        self.column = column; self.hashable = hashable
+:param column: which column to group by"""
+        self.column = column
     def __ror__(self, it):
         it = it | cli.deref(2); c = self.column
-        if self.hashable:
-            for v in it | cli.cut(c) | cli.toSet():
-                yield it | cli.filt(cli.op()[c] == v)
-        else:
-            vs = [] # why not just convert this to a set? Because we actually want to use the "==" operator, instead of hasing it, because there're some subtle difference
-            for v in it | cli.cut(c):
-                if v not in vs:
-                    vs.append(v); yield it | cli.filt(cli.op()[c] == v)
-def collate():
-    """Puts individual columns into a tensor.
-Example::
-
-    # returns [tensor([ 0, 10, 20]), tensor([ 1, 11, 21]), tensor([ 2, 12, 22])]
-    [range(0, 3), range(10, 13), range(20, 23)] | collate() | toList()"""
-    return transpose() | cli.apply(lambda row: torch.tensor(row))
+        it = it | cli.sort(c, False)
+        it = iter(it); a = [next(it)]; v = a[0][c]
+        try:
+            while True:
+                e = next(it)
+                if e[c] == v: a.append(e)
+                else: yield a; a = [e]; v = a[0][c]
+        except StopIteration:
+            if len(a) > 0: yield a
 class insertColumn(BaseCli):
     def __init__(self, *columns, begin=True, fill=""):
         """Inserts a column at beginning or end.

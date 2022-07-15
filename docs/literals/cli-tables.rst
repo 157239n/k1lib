@@ -15,39 +15,37 @@
 +------------------------------------------+---------------------------+------------------------------+-------------------------------+----------------------------------+
 | :class:`~structural.joinStreamsRandom`   | :class:`~conv.toRange`    | :class:`~utils.equals`       | :meth:`~filt.inRange`         | :class:`~modifier.applySerial`   |
 +------------------------------------------+---------------------------+------------------------------+-------------------------------+----------------------------------+
-| :class:`~structural.activeSamples`       | :class:`~conv.toSum`      | :class:`~utils.reverse`      | :class:`~filt.head`           | :class:`~modifier.toFloat`       |
+| :class:`~structural.activeSamples`       | :class:`~conv.toSum`      | :class:`~utils.reverse`      | :class:`~filt.head`           | :class:`~modifier.sort`          |
 +------------------------------------------+---------------------------+------------------------------+-------------------------------+----------------------------------+
-| :meth:`~structural.table`                | :class:`~conv.toProd`     | :class:`~utils.ignore`       | :meth:`~filt.tail`            | :class:`~modifier.toInt`         |
+| :meth:`~structural.table`                | :class:`~conv.toProd`     | :class:`~utils.ignore`       | :meth:`~filt.tail`            | :class:`~modifier.sortF`         |
 +------------------------------------------+---------------------------+------------------------------+-------------------------------+----------------------------------+
-| :class:`~structural.batched`             | :class:`~conv.toAvg`      | :class:`~utils.rateLimit`    | :class:`~filt.columns`        | :class:`~modifier.sort`          |
+| :class:`~structural.batched`             | :class:`~conv.toAvg`      | :class:`~utils.rateLimit`    | :class:`~filt.columns`        | :class:`~modifier.consume`       |
 +------------------------------------------+---------------------------+------------------------------+-------------------------------+----------------------------------+
-| :class:`~structural.window`              | :class:`~conv.toMean`     | :class:`~utils.timeLimit`    | :class:`~filt.cut`            | :class:`~modifier.sortF`         |
+| :class:`~structural.window`              | :class:`~conv.toMean`     | :class:`~utils.timeLimit`    | :class:`~filt.cut`            | :class:`~modifier.randomize`     |
 +------------------------------------------+---------------------------+------------------------------+-------------------------------+----------------------------------+
-| :class:`~structural.groupBy`             | :class:`~conv.toMax`      | :meth:`~utils.tab`           | :class:`~filt.rows`           | :class:`~modifier.consume`       |
+| :class:`~structural.groupBy`             | :class:`~conv.toMax`      | :meth:`~utils.tab`           | :class:`~filt.rows`           | :class:`~modifier.stagger`       |
 +------------------------------------------+---------------------------+------------------------------+-------------------------------+----------------------------------+
-| :meth:`~structural.collate`              | :class:`~conv.toMin`      | :meth:`~utils.indent`        | :class:`~filt.intersection`   | :class:`~modifier.randomize`     |
+| :class:`~structural.insertColumn`        | :class:`~conv.toMin`      | :meth:`~utils.indent`        | :class:`~filt.intersection`   | :class:`~modifier.op`            |
 +------------------------------------------+---------------------------+------------------------------+-------------------------------+----------------------------------+
-| :class:`~structural.insertColumn`        | :class:`~conv.toPIL`      | :class:`~utils.clipboard`    | :class:`~filt.union`          | :class:`~modifier.stagger`       |
+| :meth:`~structural.insertIdColumn`       | :class:`~conv.toPIL`      | :class:`~utils.clipboard`    | :class:`~filt.union`          | :class:`~modifier.integrate`     |
 +------------------------------------------+---------------------------+------------------------------+-------------------------------+----------------------------------+
-| :meth:`~structural.insertIdColumn`       | :class:`~conv.toImg`      | :meth:`~utils.headerIdx`     | :class:`~filt.unique`         | :class:`~modifier.op`            |
+| :class:`~structural.expandE`             | :class:`~conv.toImg`      | :meth:`~utils.headerIdx`     | :class:`~filt.unique`         |                                  |
 +------------------------------------------+---------------------------+------------------------------+-------------------------------+----------------------------------+
-| :class:`~structural.expandE`             | :class:`~conv.toRgb`      | :class:`~utils.deref`        | :class:`~filt.breakIf`        | :class:`~modifier.integrate`     |
+| :meth:`~structural.unsqueeze`            | :class:`~conv.toRgb`      | :class:`~utils.deref`        | :class:`~filt.breakIf`        |                                  |
 +------------------------------------------+---------------------------+------------------------------+-------------------------------+----------------------------------+
-| :meth:`~structural.unsqueeze`            | :class:`~conv.toRgba`     | :class:`~utils.bindec`       | :class:`~filt.mask`           |                                  |
+| :class:`~structural.count`               | :class:`~conv.toRgba`     | :class:`~utils.bindec`       | :class:`~filt.mask`           |                                  |
 +------------------------------------------+---------------------------+------------------------------+-------------------------------+----------------------------------+
-| :class:`~structural.count`               | :class:`~conv.toBin`      | :class:`~utils.smooth`       |                               |                                  |
+| :class:`~structural.permute`             | :class:`~conv.toBin`      | :class:`~utils.smooth`       |                               |                                  |
 +------------------------------------------+---------------------------+------------------------------+-------------------------------+----------------------------------+
-| :class:`~structural.permute`             | :class:`~conv.toIdx`      | :meth:`~utils.disassemble`   |                               |                                  |
+| :class:`~structural.accumulate`          | :class:`~conv.toIdx`      | :meth:`~utils.disassemble`   |                               |                                  |
 +------------------------------------------+---------------------------+------------------------------+-------------------------------+----------------------------------+
-| :class:`~structural.accumulate`          | :class:`~conv.lengths`    | :meth:`~utils.tree`          |                               |                                  |
+| :class:`~structural.AA_`                 | :class:`~conv.toDict`     | :meth:`~utils.tree`          |                               |                                  |
 +------------------------------------------+---------------------------+------------------------------+-------------------------------+----------------------------------+
-| :class:`~structural.AA_`                 | :class:`~conv.toLens`     | :class:`~utils.lookup`       |                               |                                  |
+| :class:`~structural.peek`                | :class:`~conv.toDictF`    | :class:`~utils.lookup`       |                               |                                  |
 +------------------------------------------+---------------------------+------------------------------+-------------------------------+----------------------------------+
-| :class:`~structural.peek`                | :class:`~conv.toDict`     |                              |                               |                                  |
+| :class:`~structural.peekF`               | :class:`~conv.toFloat`    | :class:`~utils.dictFields`   |                               |                                  |
 +------------------------------------------+---------------------------+------------------------------+-------------------------------+----------------------------------+
-| :class:`~structural.peekF`               | :class:`~conv.toDictF`    |                              |                               |                                  |
-+------------------------------------------+---------------------------+------------------------------+-------------------------------+----------------------------------+
-| :class:`~structural.repeat`              |                           |                              |                               |                                  |
+| :class:`~structural.repeat`              | :class:`~conv.toInt`      |                              |                               |                                  |
 +------------------------------------------+---------------------------+------------------------------+-------------------------------+----------------------------------+
 | :meth:`~structural.repeatF`              |                           |                              |                               |                                  |
 +------------------------------------------+---------------------------+------------------------------+-------------------------------+----------------------------------+

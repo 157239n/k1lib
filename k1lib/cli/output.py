@@ -140,7 +140,10 @@ Example::
         for row in table:
             yield self.delim.join(e.rstrip(" ").ljust(w+3) for w, e in zip(widths.values(), row))
 def display(lines:int=10):
-    """Convenience method for displaying a table"""
+    """Convenience method for displaying a table.
+Pretty much equivalent to ``head() | pretty() | stdout()``.
+
+See also: :class:`pretty`"""
     f = pretty() | stdout()
     if lines is None: return f
     else: return cli.head(lines) | f
@@ -189,15 +192,18 @@ to clean them up to reduce disk size::
 
 :param n: Number of files to split into
 :param baseFolder: Base folder where all the splitted files are"""
+        baseFolder = os.path.expanduser(baseFolder); self.n = n
         self.folder = f"{baseFolder}/k1lib_split/{int(time.time())}_{a()}"
         try: shutil.rmtree(self.folder)
         except: pass
-        os.makedirs(self.folder, exist_ok=True); self.n = n
     def __ror__(self, file):
+        os.makedirs(self.folder, exist_ok=True)
         if not isinstance(file, str): raise RuntimeError("Not a file name!")
         None | cli.cmd(f"split -n l/{self.n} \"{os.path.expanduser(file)}\" \"{self.folder}/pr-\"") | cli.ignore()
         return [f"{self.folder}/{f}" for f in os.listdir(self.folder)]
     @staticmethod
     def clear(baseFolder="/tmp"):
         """Clears all splitted temporary files."""
-        shutil.rmtree(f"{baseFolder}/k1lib_split")
+        baseFolder = os.path.expanduser(baseFolder)
+        try: shutil.rmtree(f"{baseFolder}/k1lib_split")
+        except: pass

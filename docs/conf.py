@@ -95,7 +95,7 @@ with open("literals/settings.rst", "w") as f:
 
 
 def _genColumn(l):
-    n = (l | lengths() | toMax()) + 2
+    n = (l | shape(0).all() | toMax()) + 2
     tmp = "{:" + str(n) + "s}"
     for e in l:
         yield "| " + tmp.format(e) + " |"
@@ -117,7 +117,7 @@ def genColumn(l, pad=0):
 
 
 def combineColumns(_ls):
-    lens = _ls | lengths()
+    lens = _ls | shape(0).all()
     maxLen = lens | toMax()
     return _ls | apply(lambda x: genColumn(x, (maxLen-len(x))*2)) | transpose() | join("").all()\
         | op().replace("-++-", "-+-").replace("=++=", "=+=").replace(" || ", " | ").all() | deref()

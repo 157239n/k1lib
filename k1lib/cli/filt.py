@@ -36,6 +36,8 @@ You can also pass in :class:`~k1lib.cli.modifier.op`, for extra intuitiveness::
     # returns [0, 1, 4]. Does not support `filt(op() not in [2, 8, 3])`. Use inverted filt instead!
     range(5) | ~filt(op() in [2, 8, 3]) | deref()
 
+If you need more extensive filtering capabilities, check out :class:`~k1lib.cli.grep.grep`
+
 :param column:
     - if integer, then predicate(row[column])
     - if None, then predicate(row)"""
@@ -143,6 +145,9 @@ If you wish to just check against 1 bound, then use filt directly, like this::
     # returns [3, 4]
     range(5) | filt(op() >= 3) | deref()"""
     return filt(lambda e: e >= min and e < max, column)
+def sliceable(it):
+    try: it[0]; len(it); return True
+    except: return False
 def _head(n, inverted, it):
     it = iter(it)
     if n is None:
@@ -162,7 +167,7 @@ def _head(n, inverted, it):
                 if len(queue) > n: yield queue.popleft()
         else: yield from deque(it, -n) # -3 to end
 class head(BaseCli):
-    def __init__(self, n:int=10):
+    def __init__(self, n=10):
         """Only outputs first ``n`` lines. You can also negate it (like
 ``~head(5)``), which then only outputs after first ``n`` lines. Examples::
 
@@ -173,16 +178,24 @@ class head(BaseCli):
     "012" | head(None) | deref() # returns ['0', '1', '2']
     "012" | ~head(None) | deref() # returns []
 
-Also works well and fast with :class:`numpy.ndarray` or :class:`torch.Tensor`::
+You can also pass in fractional head::
+
+    range(20) | head(0.25) | deref() # returns [0, 1, 2, 3, 4], or the first 25% of samples
+
+Also works well and fast with :class:`numpy.ndarray`, :class:`torch.Tensor`
+and other sliceable types::
 
     # returns (10,)
     np.linspace(1, 3) | head(10) | shape()"""
         super().__init__(); self.n = n; self.inverted = False
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
         n = self.n; inverted = self.inverted
-        if isinstance(it, settings.arrayTypes):
-            if inverted: return it[n:]
-            else: return it[:n]
+        if n is not None and round(n) != n: # fractional head
+            if not sliceable(it): raise Exception(f"Can't do fractional head (`head({n})`) if input is not sliceable (aka not a list, tuple, numpy array or pytorch tensors, etc). Convert to a list first by passing through `toList()`")
+            i = int(len(it)*n)
+            return it[i:] if inverted else it[:i]
+        if inverted and n is None: return [] # special case
+        if sliceable(it): return it[n:] if inverted else it[:n]
         else: return _head(self.n, self.inverted, it)
     def __invert__(self): self.inverted = not self.inverted; return self
 def tail(n:int=10):
@@ -207,13 +220,13 @@ constructed (unless you're using some really weird slices).
 
 Example::
 
-    "0123456789" | rows(2) | deref() # returns ["2"]
-    "0123456789" | rows(5, 8) | deref() # returns ["5", "8"]
-    "0123456789" | rows()[2:5] | deref() # returns ["2", "3", "4"]
-    "0123456789" | ~rows()[2:5] | deref() # returns ["0", "1", "5", "6", "7", "8", "9"]
-    "0123456789" | ~rows()[:7:2] | deref() # returns ['1', '3', '5', '7', '8', '9']
-    "0123456789" | rows()[:-4] | deref() # returns ['0', '1', '2', '3', '4', '5']
-    "0123456789" | ~rows()[:-4] | deref() # returns ['6', '7', '8', '9']"""
+    "0123456789" | rows(2) | toList() # returns ["2"]
+    "0123456789" | rows(5, 8) | toList() # returns ["5", "8"]
+    "0123456789" | rows()[2:5] | toList() # returns ["2", "3", "4"]
+    "0123456789" | ~rows()[2:5] | toList() # returns ["0", "1", "5", "6", "7", "8", "9"]
+    "0123456789" | ~rows()[:7:2] | toList() # returns ['1', '3', '5', '7', '8', '9']
+    "0123456789" | rows()[:-4] | toList() # returns ['0', '1', '2', '3', '4', '5']
+    "0123456789" | ~rows()[:-4] | toList() # returns ['6', '7', '8', '9']"""
         if len(rows) == 1 and isinstance(rows[0], slice):
             self.slice = rows[0]; self.idxMode = False
         else: self.rows = rows; self.sortedRows = sorted(rows); self.idxMode = True
@@ -320,7 +333,7 @@ Example::
 
     # returns [0, 1, 2, 3, 4, 5]
     [*range(10), 2, 3] | breakIf(lambda x: x > 5) | deref()"""
-        super().__init__(); self.f = f
+        fs = [f]; super().__init__(fs); self.f = fs[0]
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
         f = self.f
         for line in it:

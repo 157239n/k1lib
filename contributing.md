@@ -15,7 +15,7 @@ upload.sh - script to upload to PyPI
 - Open notebook files and change as necessary
 - Run preconfigured `./export.py` cell at the end of each notebook to extract to `.py` files
 - Run unit/integration/regression tests at `k1lib/tests.ipynb`
-- Run tests against multiple Python versions using `test-envs/test.py`
+- Run tests against multiple Python versions using `test-envs/build.sh`
 - Generate docs using `docs/compile.py`
 - Commit everything to github
 - Commit docs to github (at `~/repos/labs/k1lib.github.io`)
