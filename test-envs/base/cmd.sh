@@ -1,5 +1,9 @@
 #!/bin/bash
 
+cd /k1a
+
+pip install . >> /base/log 2>&1
+
 cd /k1lib
 
 pip install .[extras] >> /base/log 2>&1

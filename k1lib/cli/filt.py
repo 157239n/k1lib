@@ -5,9 +5,10 @@ This is for functions that cuts out specific parts of the table
 from typing import Callable, Union, List, overload, Iterator, Any, Set, Tuple
 from k1lib.cli.init import BaseCli, Table, T, fastF
 import k1lib.cli as cli; import k1lib, os, torch
+from k1lib.cli.typehint import *
 import numpy as np; from collections import deque
 __all__ = ["filt", "inSet", "contains", "empty",
-           "isNumeric", "instanceOf", "inRange",
+           "isNumeric", "instanceOf",
            "head", "tail", "columns", "cut", "rows",
            "intersection", "union", "unique", "breakIf", "mask"]
 settings = k1lib.settings.cli
@@ -29,12 +30,8 @@ You can also pass in :class:`~k1lib.cli.modifier.op`, for extra intuitiveness::
     [2, 3, 5, 6] | filt(op() % 2 == 0) | deref()
     # returns ['abc', 'a12']
     ["abc", "def", "a12"] | filt(op().startswith("a")) | deref()
-    # returns ['abcd', '2bcr']
-    ["abcd", "0123", "2bcr"] | filt("bc" in op()) | deref()
-    # returns [2, 3]
-    range(5) | filt(op() in [2, 8, 3]) | deref()
-    # returns [0, 1, 4]. Does not support `filt(op() not in [2, 8, 3])`. Use inverted filt instead!
-    range(5) | ~filt(op() in [2, 8, 3]) | deref()
+    # returns [3, 4, 5, 6, 7, 8, 9]
+    range(100) | filt(3 <= op() < 10) | deref()
 
 If you need more extensive filtering capabilities, check out :class:`~k1lib.cli.grep.grep`
 
@@ -131,20 +128,6 @@ Example::
     [2, 2.3, "a"] | instanceOf((int, float)) | deref()"""
     if isinstance(cls, list): cls = tuple(cls)
     return filt(lambda e: isinstance(e, cls), column)
-def inRange(min:float=float("-inf"), max:float=float("inf"), column:int=None) -> filt:
-    """Checks whether a column is in range or not.
-Example::
-
-    # returns [-2, 3, 6]
-    [-2, -8, 3, 6] | inRange(-3, 10) | deref()
-    # returns [-8]
-    [-2, -8, 3, 6] | ~inRange(-3, 10) | deref()
-
-If you wish to just check against 1 bound, then use filt directly, like this::
-
-    # returns [3, 4]
-    range(5) | filt(op() >= 3) | deref()"""
-    return filt(lambda e: e >= min and e < max, column)
 def sliceable(it):
     try: it[0]; len(it); return True
     except: return False
@@ -188,6 +171,11 @@ and other sliceable types::
     # returns (10,)
     np.linspace(1, 3) | head(10) | shape()"""
         super().__init__(); self.n = n; self.inverted = False
+    def _typehint(self, inp):
+        if isinstance(inp, tListIter): return inp
+        if isinstance(inp, tArrayTypes): return inp
+        if inp == str: return str
+        return tIter(tAny())
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
         n = self.n; inverted = self.inverted
         if n is not None and round(n) != n: # fractional head
@@ -290,6 +278,19 @@ Example::
     # returns set([2, 4, 5])
     [[1, 2, 3, 4, 5], [7, 2, 4, 6, 5]] | intersection()"""
         super().__init__()
+    def _typehint(self, inp):
+        if isinstance(inp, tArrayTypes): return tSet(inp.child)
+        if isinstance(inp, tListIterSet):
+            if isinstance(inp.child, tListIterSet):
+                return tSet(inp.child.child)
+            return tSet(tAny())
+        if isinstance(inp, tCollection):
+            a = inp.children[0]
+            for e in inp.children:
+                if not isinstance(e, tListIterSet): return tSet(tAny())
+                if e.child != a.child: return tSet(tAny())
+            return tSet(a.child)
+        return tSet(tAny());
     def __ror__(self, its:Iterator[Iterator[Any]]) -> Set[Any]:
         answer = None
         for it in its:
@@ -305,6 +306,8 @@ Example::
     [range(3), range(10, 15)] | union()
 """
         super().__init__()
+    def _typehint(self, inp):
+        return intersection()._typehint(inp)
     def __ror__(self, its:Iterator[Iterator[Any]]) -> Set[Any]:
         answer = set()
         for it in its: answer = set.union(answer, set(it))
@@ -334,6 +337,9 @@ Example::
     # returns [0, 1, 2, 3, 4, 5]
     [*range(10), 2, 3] | breakIf(lambda x: x > 5) | deref()"""
         fs = [f]; super().__init__(fs); self.f = fs[0]
+    def _typehint(self, inp):
+        if isinstance(inp, tListIterSet): return tIter(inp.child)
+        return tIter(tAny())
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
         f = self.f
         for line in it:

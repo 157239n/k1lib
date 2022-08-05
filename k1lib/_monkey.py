@@ -319,12 +319,12 @@ something called marching cubes.
         """Use the same aspect ratio for all axes."""
         self.set_box_aspect([ub - lb for lb, ub in (getattr(self, f'get_{a}lim')() for a in 'xyz')])
     @k1lib.patch(plt)
-    def k3d(size=8, labels=True):
+    def k3d(size=8, labels=True, *args, **kwargs):
         """Convenience function to get an :class:`~mpl_toolkits.mplot3d.axes3d.Axes3D`.
 
 :param labels: whether to include xyz labels or not
 :param size: figure size"""
-        fig = plt.figure(figsize=(size,size))
+        fig = plt.figure(figsize=(size,size), constrained_layout=True, *args, **kwargs)
         ax = fig.add_subplot(projection="3d")
         if labels:
             ax.set_xlabel('x')
@@ -332,7 +332,7 @@ something called marching cubes.
             ax.set_zlabel('z')
         return ax
     @k1lib.patch(plt)
-    def animate(azimSpeed=1, azimStart=0, elevSpeed=0.3, elevStart=0, frames=60, close=True):
+    def animate(azimSpeed=3, azimStart=0, elevSpeed=0.9, elevStart=0, frames=20, close=True):
         """Animates the existing 3d axes.
 Example::
 

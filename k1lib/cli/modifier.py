@@ -11,6 +11,7 @@ from k1lib.cli.init import patchDefaultDelim, BaseCli, T, fastF
 import k1lib.cli as cli, numpy as np, torch, threading
 import torch.multiprocessing as mp; from collections import deque
 from functools import partial, update_wrapper, lru_cache
+from k1lib.cli.typehint import *
 import dill, pickle, k1lib, warnings, atexit, signal, time, os, random
 class applyS(BaseCli):
     def __init__(self, f:Callable[[T], T], *args, **kwargs):
@@ -36,6 +37,10 @@ and whatnot.
 :param kwargs: other keyword arguments to pass to the function, together with ``args``"""
         super().__init__(fs=[f]); self.args = args; self.kwargs = kwargs
         self.f = f; update_wrapper(self, f, updated=())
+    def _typehint(self, inp):
+        if self.hasHint: return self._hint
+        try: return self.f._typehint(inp)
+        except: return tAny()
     def __ror__(self, it:T) -> T: return self.f(it, *self.args, **self.kwargs)
     def __invert__(self):
         """Configures it so that it expand the arguments out.
@@ -83,6 +88,13 @@ You can also add a cache, like this::
         super().__init__(fs=[f]); self.f = f;
         self.column = column; self.cache = cache; self._fC = fastF(f)
         if cache > 0: self._fC = lru_cache(cache)(self._fC)
+        self.normal = self.column is None and self.cache == 0 # cached value to say that this apply is just being used as a wrapper, nothing out of the ordinary
+    def _typehint(self, inp):
+        if self.column is None:
+            if isinstance(inp, tListIterSet):
+                try: return tIter(self.f._typehint(inp.child))
+                except: return tIter(tAny())
+        return super()._typehint(inp)
     def __ror__(self, it:Iterator[str]):
         c = self.column; f = self._fC
         if c is None: return (f(line) for line in it)
@@ -148,8 +160,9 @@ away.
         # returns [['ab', 'ac']]
         [["ab", "cd", "ac"]] | applyMp(filt(op().startswith("a")) | deref()) | deref()
 
-    Also remember that the return result of ``f`` should not be a generator.
-    That's why in the example above, there's a ``deref()`` inside f.
+    Also remember that the return result of ``f`` should be serializable, meaning it
+    should not be a generator. That's why in the example above, there's a ``deref()``
+    inside f. You should also convert PyTorch tensors into Numpy arrays
 
 Most of the time, you would probably want to specify ``bs`` to something bigger than 1
 (may be 32 or sth like that). This will executes ``f`` multiple times in a single job,
@@ -280,7 +293,7 @@ All examples from :class:`applyMp` should work perfectly here."""
                 raise RuntimeError("Thread timed out!")
             yield data[1].value
 class applySerial(BaseCli):
-    def __init__(self, f, includeFirst=False, unpack=False):
+    def __init__(self, f, includeFirst=False):
         """Applies a function repeatedly. First yields input iterator ``x``. Then
 yields ``f(x)``, then ``f(f(x))``, then ``f(f(f(x)))`` and so on. Example::
 
@@ -296,7 +309,7 @@ If the result of your operation is an iterator, you might want to
     # returns []. This is because all the elements are taken by the previous deref()
     next(rs) | deref()
     # returns [[10, -6], [4, 16], [20, -12]]
-    [2, 8] | applySerial(lambda a, b: (a + b, a - b), unpack=True) | head(3) | deref()
+    [2, 8] | ~applySerial(lambda a, b: (a + b, a - b)) | head(3) | deref()
 
     rs = iter(range(8)) | applySerial(rows()[::2] | deref())
     # returns [0, 2, 4, 6]
@@ -307,11 +320,9 @@ If the result of your operation is an iterator, you might want to
     next(rs)
 
 :param f: function to apply repeatedly
-:param includeFirst: whether to include the raw input value or not
-:param unpack: whether to unpack values into the function or not for
-    aesthetic purposes"""
+:param includeFirst: whether to include the raw input value or not"""
         fs = [f]; super().__init__(fs=fs); self.f = fs[0]
-        self.includeFirst = includeFirst; self.unpack = unpack
+        self.includeFirst = includeFirst; self.unpack = False
     def __ror__(self, it):
         f = fastF(self.f)
         if self.unpack:
@@ -320,6 +331,9 @@ If the result of your operation is an iterator, you might want to
         else:
             if not self.includeFirst: it = f(it)
             while True: yield it; it = f(it)
+    def __invert__(self):
+        ans = applySerial(self.f, self.includeFirst)
+        ans.unpack = True; return ans
 class sort(BaseCli):
     def __init__(self, column:int=0, numeric=True, reverse=False):
         """Sorts all lines based on a specific `column`.
@@ -384,7 +398,9 @@ Kinda like the bash command ``tee``. Example::
     range(3) | consume(lambda it: print(it)) | toList()
 
 This is useful whenever you want to mutate something, but don't want to
-include the function result into the main stream."""
+include the function result into the main stream.
+
+See also: :class:`~output.tee`"""
         fs = [f]; super().__init__(fs=fs); self.f = fs[0]
     def __ror__(self, it:T) -> T:
         self.f(it); return it
@@ -481,9 +497,8 @@ Example::
     # returns [[16], [4]]
     [range(100)]*2 | stagger.tv(20) | shape().all() | deref()"""
         return stagger(round(every*ratio)) + stagger(round(every*(1-ratio)))
+compareOps = {"__lt__", "__le__", "__eq__", "__ne__", "__gt__", "__ge__"}
 class op(k1lib.Absorber, BaseCli):
-    _op_contains = deque([], 1) # last op in the form `4 in op()`
-    _op_contains_inv = deque([], 1) # last op in the form `op() in [1, 2, 3]`
     def __init__(self):
         """Absorbs operations done on it and applies it on the stream. Based
 on :class:`~k1lib.Absorber`. Example::
@@ -512,9 +527,18 @@ you can still combine with other cli tools as usual, for example::
     
     # returns [[8, 18], [9, 19]], demonstrating you can treat `op()` as a regular function
     [range(10), range(10, 20)] | transpose() | filt(op() > 7, 0) | deref()
+    
+    # returns [3, 4, 5, 6, 7, 8, 9], demonstrating bounds comparison
+    range(100) | filt(3 <= op() < 10) | deref()
 
 This can only deal with simple operations only. For complex operations, resort
 to the longer version ``applyS(lambda x: ...)`` instead!
+
+There are also operations that are difficult to achieve, like
+``len(op())``, as Python is expecting an integer output, so
+``op()`` can't exactly take over. Instead, you have to use ``applyS``,
+or do ``op().ab_len()``. Get a list of all of these special operations
+in the source of :class:`~k1lib.Absorber`.
 
 Performance-wise, in most cases, there are no degradation, so don't worry
 about it. Everything is pretty much on par with native lambdas::
@@ -538,45 +562,24 @@ More complex operations still retains the same speeds, as there's a JIT compiler
     # takes 2.46s, 1.14x worse than for loop
     range(n) | apply((op()**2-3)*0.1) | ignore()
 
-Experimental features:
-
-    # returns [2, 3, 4]
-    range(10) | filt(op() in range(2, 5)) | deref()
-    # returns [0, 1, 5, 6, 7, 8, 9]
-    range(10) | ~filt(op() in range(2, 5)) | deref()
-    # will not work, so if your set potentially does not have any element, then don't use op()
-    range(10) | filt(op() in []) | deref()
-
 Reserved operations that are not absorbed are:
 
 - all
 - __ror__ (__or__ still works!)
-- op_solidify"""
-        super().__init__({"_op_solidified": False, "_op_in_set": set()})
+- ab_solidify
+- op_hint"""
+        super().__init__({"_hint": None})
     @staticmethod
     def solidify(f):
-        """Static equivalent of ``a.op_solidify()``.
+        """Static equivalent of ``a.ab_solidify()``.
 Example::
         
     f = op()**2
     f = op.solidify(f)
 
 If ``f`` is not an ``op``, then just return it without doing anything to it"""
-        if f.__class__.__name__.split(".")[-1] == "op":
-            f.op_solidify()
+        if f.__class__.__name__.split(".")[-1] == "op": f.ab_solidify()
         return f
-    def op_solidify(self):
-        """Use this to not absorb ``__call__`` operations anymore and makes it
-feel like a regular function (still absorbs other operations though)::
-
-    f = op()**2
-    3 | f # returns 9, but may be you don't want to pipe it in
-    f.op_solidify()
-    f(3)  # returns 9"""
-        self._ab_sentinel = True
-        self._op_solidified = True
-        self._ab_sentinel = False
-        return self
     def __ror__(self, it):
         return self.ab_operate(it)
     def __or__(self, o):
@@ -589,31 +592,14 @@ feel like a regular function (still absorbs other operations though)::
         if isinstance(o, BaseCli): return super(k1lib.Absorber, self).__and__(o)
         return super().__and__(o)
     def __call__(self, *args, **kwargs):
-        if self._op_solidified: return self.ab_operate(*args, **kwargs)
+        if self._ab_solidified: return self.ab_operate(*args, **kwargs)
         return super().__call__(*args, **kwargs)
-    def __contains__(self, k):
-        cli.op._op_contains.append(self.ab_contains(k)); return True
-    @staticmethod
-    def _op_pop_contains(): # mechanism for `4 in op()`
-        s = "Supposed to be unreachable, tried to recover `4 in op()`, but couldn't find any."
-        if len(cli.op._op_contains) == 0:
-            raise RuntimeError(f"""{s} May be you're doing something like `filt(op() not in [1, 2, 3])`? Use `~filt(op() in [1, 2, 3])` instead!""")
-        return cli.op._op_contains.pop()
-    @staticmethod
-    def _op_pop_contains_inv(): # mechanism for `op() in [1, 2, 3]`
-        s = "Supposed to be unreachable, tried to recover `op() in [1, 2, 3]`, but couldn't find any."
-        if len(cli.op._op_contains_inv) == 0:
-            if len(cli.op._op_contains) > 0:
-                raise RuntimeError(f"""{s} May be you're doing something like `filt(4 not in op())`? Use `~filt(4 in op())` instead!""")
-            else: raise RuntimeError(f"{s} Seems like you're doing something like `filt(op() in [])`? Because of complicated reasons, the set can't be empty. Just use vanilla `inSet([])` instead")
-        return op._op_contains_inv.pop()
-    def __bool__(self): # pops last eq from the operators, mechanism for `op() in [1, 2, 3]`
-        step = self._ab_steps[-1]; _op_in_set = self._op_in_set
-        if step[0][0] != "__eq__": raise RuntimeError(f"Supposed to be unreachable, tried to pop last __eq__ step from _ab_steps, but it's actually a {step[0][0]} operator instead")
-        self._op_in_set.add(step[0][1]); self._ab_steps.pop()
-        if len(_op_in_set) == 1 and (len(self._ab_steps) == 0 or self._ab_steps[-1][0][0] != "<in set>"):
-            self._ab_steps.append([["<in set>", _op_in_set], lambda x: x in _op_in_set])
-        cli.op._op_contains_inv.append(self); return False
+    def _typehint(self, inp):
+        return self._hint if self._hint is not None else tAny()
+    def op_hint(self, _hint):
+        """Specify output type hint"""
+        self._ab_sentinel = True; self._hint = _hint
+        self._ab_sentinel = False; return self
 cli.op = op
 class integrate(BaseCli):
     def __init__(self, dt=1):

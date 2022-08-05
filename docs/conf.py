@@ -129,6 +129,6 @@ toCliTable = apply("k1lib.cli." + op())\
     | batched(5, True) | apply(combineColumns) | apply(insert("", begin=False)) | joinStreams()
 
 ["filt", "conv", "grep", "init", "inp", "kcsv", "kxml", "modifier", "nb", "output",
-    "structural", "trace", "utils"] | toCliTable | file("literals/cli-tables.rst")
-["bio", "entrez", "mgi", "gb", "sam"] | toCliTable | file(
+    "structural", "trace", "utils", "typehint", "optimizations"] | toCliTable | file("literals/cli-tables.rst")
+["bio", "cif", "mgi", "gb", "sam"] | toCliTable | file(
     "literals/cli-bio-tables.rst")

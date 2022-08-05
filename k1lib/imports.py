@@ -13,11 +13,11 @@ import math, os, time, sys, random, logging, traceback, re, typing, glob, warnin
 import dill, json, inspect, xml
 import functools; from functools import partial, lru_cache
 import contextlib; from contextlib import contextmanager
-from collections import deque
+from collections import deque, defaultdict
 from typing import List, Tuple, Callable, Union, Iterator, Set, Dict, Any
 import k1lib; from k1lib import schedule, graphEqn, mo, kdata, knn, fmt, selector,\
-viz, Cbs, settings, cli
-from k1lib.cli import *; k1 = k1lib
+viz, Cbs, settings, cli, _k1a
+from k1lib.cli import *; k1 = k1lib; k1a = _k1a
 for e in cli._scatteredClis: globals()[e.__name__] = e
 if "py_k1lib_in_applyMp" not in os.environ: k1lib.dontWrap()
 plt.rcParams['figure.dpi'] = 100
@@ -67,6 +67,5 @@ try:
     import torchvision.datasets as tvDs
     import torchvision.transforms as tf
 except: pass
-try:
-    import IPython
+try: import IPython
 except: pass

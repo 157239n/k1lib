@@ -8,6 +8,7 @@ module name, like this::
 from k1lib import cli; from typing import Iterator
 import xml.etree.ElementTree as ET; import copy, xml, k1lib
 from typing import List
+from k1lib.cli.typehint import *
 __all__ = ["node", "maxDepth", "tags", "pretty", "display"]
 class node(cli.BaseCli):
     """Turns lines into a single
@@ -27,8 +28,16 @@ node. Example::
     # same thing as above, demonstrating you can pipe in list of strings
     s.split(\"\\n\") | kxml.node()
 """
+    def _typehint(self, inp): return ET.Element
     def __ror__(self, it:Iterator[str]) -> ET.Element:
         return ET.fromstring("".join(it))
+def oCatNode(cs, ts, _):
+    c, n = cs
+    if c.text:
+        def inner(fn):
+            with open(fn) as f: return ET.fromstring(f.read())
+        return [cli.aS(inner).hint(ET.Element)]
+tOpt.addPass(oCatNode, [cli.cat().__class__, node])
 def _maxDepth(node, maxDepth:int, depth:int=0):
     if depth >= maxDepth:
         while len(node) > 0: del node[0]

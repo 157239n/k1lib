@@ -2,7 +2,7 @@
 from .callbacks import Callback, Callbacks, Cbs
 import k1lib, time
 __all__ = ["BatchLimit", "EpochLimit", "TimeLimit", "CancelOnExplosion",
-           "CancelOnLowLoss", "CancelOnHighAccuracy", "DontTrain",
+           "CancelOnLowLoss", "CancelOnHighAccuracy", "CancelOnOverfit", "DontTrain",
            "GradientClipping", "GradientClippingNorm", "TrainOnly", "ValidOnly"]
 @k1lib.patch(Cbs)
 class BatchLimit(Callback):
@@ -84,6 +84,26 @@ class CancelOnHighAccuracy(Callback):
         a = self.l.Accuracy.valid[-1]
         if a > self.accuracy:
             raise k1lib.CancelRunException(f"High accuracy {self.accuracy} ({a} actual) achieved!")
+@k1lib.patch(Cbs)
+class CancelOnOverfit(Callback):
+    def __init__(self, ratio:float=1.2, alpha:float=0.99, after:int=10):
+        """Cancels the run if overfit is detected.
+
+:param ratio: Max ratio between the lowest loss and the current loss before cancelling the run
+:param alpha: Moving average's alpha, used for both minLoss and loss estimates
+:param after: After how many epochs should the overfit detection be activated?"""
+        super().__init__(); self.ratio = ratio
+        self.minLoss = k1lib.MovingAvg(alpha=alpha, debias=True)
+        self.loss = k1lib.MovingAvg(alpha=alpha, debias=True)
+        self.count = 0; self.after = after
+    def startRun(self): self.count = 0
+    def endEpoch(self): self.count += 1
+    def endBatch(self):
+        if not self.l.model.training:
+            loss = self.l.loss; self.loss(loss)
+            if self.loss.value < self.minLoss.value or self.minLoss.value == 0: self.minLoss(self.loss.value)
+            if self.count > self.after and self.loss.value > self.minLoss.value * self.ratio:
+                raise k1lib.CancelRunException(f"Overfit detected! Smoothed min loss: {self.minLoss.value}, loss: {loss}")
 @k1lib.patch(Cbs)
 class DontTrain(Callback):
     """Don't allow the network to train at all"""

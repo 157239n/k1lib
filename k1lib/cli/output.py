@@ -6,7 +6,7 @@ from collections import defaultdict
 from typing import Iterator, Any
 from k1lib.cli.init import BaseCli, Table
 import torch, numbers, numpy as np, k1lib, tempfile, os, sys, time, shutil
-from k1lib import cli
+from k1lib import cli; from k1lib.cli.typehint import *
 __all__ = ["stdout", "tee", "file", "pretty", "display", "headOut",
            "intercept", "split"]
 settings = k1lib.settings.cli
@@ -18,47 +18,58 @@ raw. Example::
     # prints out "0\\n1\\n2"
     range(3) | stdout()
     # same as above, but (maybe?) more familiar
-    range(3) > stdout()"""
+    range(3) > stdout()
+
+This is rarely used alone. It's more common to use :meth:`headOut`
+for list of items, and :meth:`display` for tables."""
         super().__init__()
+    def _typehint(self, inp): return None
     def __ror__(self, it:Iterator[str]):
         try:
             it = iter(it)
             for line in it: print(line)
         except TypeError: print(it)
+_defaultTeeF = lambda s: f"{s}\n"
 class tee(BaseCli):
-    def __init__(self, f=(lambda s: f"{s}\n"), s=None):
+    def __init__(self, f=_defaultTeeF, s=None, every=1):
         """Like the Linux ``tee`` command, this prints the elements to another
 specified stream, while yielding the elements. Example::
 
     # prints "0\\n1\\n2\\n3\\n4\\n" and returns [0, 1, 4, 9, 16]
     range(5) | tee() | apply(op() ** 2) | deref()
 
+See also: :class:`~modifier.consume`
+
 :param f: element transform function. Defaults to just adding a new
     line at the end
-:param s: stream to write to. Defaults to :attr:`sys.stdout`"""
-        self.s = s or sys.stdout; self.f = f
+:param s: stream to write to. Defaults to :attr:`sys.stdout`
+:param every: only prints out 1 line in ``every`` lines, to limit print rate"""
+        self.s = s or sys.stdout; self.f = f; self.every = every
     def __ror__(self, it):
-        s = self.s; f = self.f
-        for e in it:
-            print(f(e), end="", file=s)
+        s = self.s; f = self.f; every = self.every
+        for i, e in enumerate(it):
+            if i % every == 0: print(f(e), end="", file=s)
             yield e
-    @staticmethod
-    def cr(f=lambda x: x):
+    def cr(self):
         """Tee, but replaces the previous line. "cr" stands for carriage return.
 Example::
 
     # prints "4" and returns [0, 1, 4, 9, 16]. Does print all the numbers in the middle, but is overriden
-    range(5) | tee.cr() | apply(op() ** 2) | deref()"""
-        return tee(lambda s: f"\r{f(s)}")
-    @staticmethod
-    def crt(f=lambda x: x):
-        """Like :meth:`tee.cr`, but includes an elapsed time text at the end"""
-        beginTime = time.time()
-        return tee(lambda s: f"\r{f(s)}, {int(time.time() - beginTime)}s elapsed")
-class file(BaseCli):
-    def __init__(self, fileName:str=None, text:bool=True):
-        """Opens a new file for writing.
+    range(5) | tee().cr() | apply(op() ** 2) | deref()"""
+        f = (lambda x: x) if self.f == _defaultTeeF else self.f
+        self.f = lambda s: f"\r{f(s)}"; return self
+    def crt(self):
+        """Like :meth:`tee.cr`, but includes an elapsed time text at the end.
 Example::
+
+    range(5) | tee().cr() | apply(op() ** 2) | deref()"""
+        beginTime = time.time()
+        f = (lambda x: x) if self.f == _defaultTeeF else self.f
+        self.f = lambda s: f"\r{f(s)}, {int(time.time() - beginTime)}s elapsed"; return self
+class file(BaseCli):
+    def __init__(self, fileName:str=None):
+        """Opens a new file for writing. This will iterate through
+the iterator fed to it and put each element on a separate line. Example::
 
     # writes "0\\n1\\n2\\n" to file
     range(3) | file("test/f.txt")
@@ -67,12 +78,23 @@ Example::
     # returns ['0', '1', '2']
     cat("folder/f.txt") | deref()
 
+If the input is a string, then it will just put the string into the
+file and does not iterate through the string::
+
+    # writes "some text\\n123" to file, default iterator mode like above
+    ["some text", "123"] | file("test/f.txt")
+    # same as above, but this is a special case when it detects you're piping in a string
+    "some text\\n123" | file("test/f.txt")
+
+If the input is a :class:`bytes` object, then it will open the file
+in binary mode and dumps the bytes in::
+
     # writes bytes to file
-    b'5643' | file("test/a.bin", False)
+    b'5643' | file("test/a.bin")
     # returns ['5643']
     cat("test/a.bin") | deref()
 
-You can create temporary files on the fly::
+You can create temporary files on the fly by not specifying a file name::
 
     # creates temporary file
     url = range(3) > file()
@@ -85,7 +107,7 @@ read in a file::
     seq1 = "CCAAACCCCCCCTCCCCCGCTTC"
     seq2 = "CCAAACCCCCCCCTCCCCCCGCTTC"
     # use "needle" program to locally align 2 sequences
-    None | cmd(f"needle {[seq1] > file()} {[seq2] > file()} -filter")
+    None | cmd(f"needle {seq1 > file()} {seq2 > file()} -filter")
 
 You can also append to file with the ">>" operator::
 
@@ -96,10 +118,8 @@ You can also append to file with the ">>" operator::
     cat(url) | deref()
 
 :param fileName: if not specified, create new temporary file and returns the url
-    when pipes into it
-:param text: if True, accepts Iterator[str], and prints out each string on a
-    new line. Else accepts bytes and write in 1 go."""
-        super().__init__(); self.fileName = fileName; self.text = text
+    when pipes into it"""
+        super().__init__(); self.fileName = fileName
         self.append = False # whether to append to file rather than erasing it
     def __ror__(self, it:Iterator[str]) -> None:
         super().__ror__(it); fileName = self.fileName
@@ -107,7 +127,10 @@ You can also append to file with the ">>" operator::
             f = tempfile.NamedTemporaryFile()
             fileName = f.name; f.close()
         fileName = os.path.expanduser(fileName)
-        if self.text:
+        if isinstance(it, str): it = [it]; text = True
+        elif isinstance(it, bytes): text = False
+        else: text = True
+        if text:
             with open(fileName, "a" if self.append else "w") as f:
                 for line in it: f.write(f"{line}\n")
         else:
@@ -129,6 +152,7 @@ Example::
     [range(10), range(10)] | head(5) | pretty() > stdout()
     [range(10), range(10)] | display()"""
         self.delim = delim
+    def _typehint(self, inp): return tIter(str)
     def __ror__(self, it:Table[Any]) -> Iterator[str]:
         table = []; widths = defaultdict(lambda: 0)
         for row in it:

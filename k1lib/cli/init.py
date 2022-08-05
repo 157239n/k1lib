@@ -4,17 +4,17 @@ import k1lib.cli as cli; from numbers import Number
 import k1lib, itertools, copy, torch, xml; import numpy as np
 import xml.etree.ElementTree
 
-__all__ = ["BaseCli", "Table", "T", "fastF",
-           "serial", "oneToMany", "manyToMany", "mtmS"]
+__all__ = ["BaseCli", "Table", "T", "fastF", "yieldT",
+           "serial", "oneToMany", "mtmS"]
 settings = k1lib.Settings()
 atomic = k1lib.Settings()
-settings.add("jit", True, "whether to enable automatic JIT compilation of cli tools. See `fastF` for more details")
 settings.add("atomic", atomic, "classes/types that are considered atomic and specified cli tools should never try to iterate over them")
 settings.add("defaultDelim", "\t", "default delimiter used in-between columns when creating tables. Defaulted to tab character.")
 settings.add("defaultIndent", "  ", "default indent used for displaying nested structures")
 settings.add("strict", False, "turning it on can help you debug stuff, but could also be a pain to work with")
 settings.add("inf", float("inf"), "infinity definition for many clis. Here because you might want to temporarily not loop things infinitely")
 k1lib.settings.add("cli", settings, "from k1lib.cli module")
+yieldT = object()
 def patchDefaultDelim(st:str):
     """
 :param s:
@@ -95,12 +95,14 @@ example of why this is useful. Currently, it will:
 - Solidifies every :class:`~k1lib.cli.modifier.op`."""
         if isinstance(fs, tuple): raise AttributeError("`fs` should not be a tuple. Use a list instead, so that new functions can be returned")
         l = []
-        for f in fs:
-            if f is True: f = cli.op._op_pop_contains()
-            if f is False: f = cli.op._op_pop_contains_inv()
-            cli.op.solidify(f)
-            l.append(f)
-        fs.clear(); fs.extend(l)
+        for f in fs: cli.op.solidify(f); l.append(f)
+        fs.clear(); fs.extend(l);
+    def hint(self, _hint:"cli.typehint.tBase"):
+        """Specifies output type hint."""
+        self._hint = _hint; return self
+    @property
+    def hasHint(self): return "_hint" in self.__dict__ and self._hint is not None
+    def _typehint(self, inp:"cli.typehint.tBase"=None) -> "cli.typehint.tBase": return cli.typehint.tAny() if "_hint" not in self.__dict__ else self._hint
     def __and__(self, cli:"BaseCli") -> "oneToMany":
         """Duplicates input stream to multiple joined clis.
 Example::
@@ -135,7 +137,7 @@ Example::
 :param n: how many times should I chain ``.all()``?"""
         if n < 0: raise AttributeError(f"Does not make sense for `n` to be \"{n}\"")
         s = self
-        for i in range(n): s = manyToMany(s)
+        for i in range(n): s = cli.apply(s)
         return s
     def __or__(self, cli) -> "serial":
         """Joins clis end-to-end.
@@ -186,7 +188,10 @@ version.
 
 :param x: sample data for the cli"""
     if isinstance(c, cli.op): return c.ab_fastF()
-    if isinstance(c, cli.applyS): return fastF(c.f)
+    if isinstance(c, cli.applyS):
+        f = fastF(c.f)
+        if len(c.args) == 0 and len(c.kwargs) == 0: return f
+        else: return lambda x, *args, **kwargs: f(x, *c.args, **c.kwargs)
     if isinstance(c, BaseCli): return c.__ror__
     return c
 class serial(BaseCli):
@@ -201,6 +206,9 @@ fails to run::
     def _cache(self):
         self._hasTrace = any(isinstance(c, cli.trace) for c in self.clis)
         self._cliCs = [fastF(c) for c in self.clis]; return self
+    def _typehint(self, inp=None):
+        for c in self.clis: inp = c._typehint(inp) or cli.typehint.tAny()
+        return inp
     def __ror__(self, it:Iterator[Any]) -> Iterator[Any]:
         if self._hasTrace: # slower, but tracable
             for cli in self.clis: it = it | cli
@@ -219,6 +227,12 @@ class oneToMany(BaseCli):
         """Duplicates 1 stream into multiple streams, each for a cli in the
 list. Used in the "a & b" joining operator. See also: :meth:`BaseCli.__and__`"""
         fs = list(clis); super().__init__(fs); self.clis = fs; self._cache()
+    def _typehint(self, inp):
+        ts = []
+        for f in self.clis:
+            try: ts.append(f._typehint(inp))
+            except: ts.append(cli.typehint.tAny())
+        return cli.typehint.tCollection(*ts).reduce()
     def __ror__(self, it:Iterator[Any]) -> Iterator[Iterator[Any]]:
         if isinstance(it, atomic.baseAnd) or not _iterable(it):
             for cli in self._cliCs: yield cli(it)
@@ -229,13 +243,6 @@ list. Used in the "a & b" joining operator. See also: :meth:`BaseCli.__and__`"""
     def _before(self, c): self.clis = [c] + self.clis; return self._cache()
     def _after(self, c): self.clis = self.clis + [c]; return self._cache()
     def _copy(self): return oneToMany(*self.clis)
-class manyToMany(BaseCli):
-    def __init__(self, cli:BaseCli):
-        """Applies multiple streams to a single cli. Used in the :meth:`BaseCli.all`
-operator."""
-        fs = [cli]; super().__init__(fs); self.cli = fs[0]; self._cliC = fastF(self.cli)
-    def __ror__(self, it:Iterator[Iterator[Any]]) -> Iterator[Iterator[Any]]:
-        f = self._cliC; return (f(s) for s in it)
 class mtmS(BaseCli):
     def __init__(self, *clis:List[BaseCli]):
         """Applies multiple streams to multiple clis independently. Used in
@@ -243,6 +250,16 @@ the "a + b" joining operator. See also: :meth:`BaseCli.__add__`.
 
 Weird name is actually a shorthand for "many to many specific"."""
         fs = list(clis); super().__init__(fs=fs); self.clis = fs; self._cache()
+    def _inpTypeHintExpand(self, t):
+        n = len(self.clis);
+        if isinstance(t, (cli.typehint.tCollection, *cli.typehint.tListIterSet, cli.typehint.tArrayTypes)): return t.expand(n)
+        else: return [cli.typehint.tAny()]*n
+    def _typehint(self, t):
+        n = len(self.clis); outTs = []
+        for c, t in zip(self.clis, self._inpTypeHintExpand(t)):
+            try: outTs.append(c._typehint(t))
+            except: outTs.append(cli.typehint.tAny())
+        return cli.typehint.tCollection(*outTs).reduce()
     def _cache(self): self._cliCs = [fastF(c) for c in self.clis]; return self
     def _before(self, c): self.clis = [c] + self.clis; return self._cache()
     def _after(self, c): self.clis = self.clis + [c]; return self._cache()

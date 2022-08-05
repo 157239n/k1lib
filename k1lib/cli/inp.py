@@ -3,6 +3,7 @@
 from typing import Iterator, Union, Any
 import urllib, subprocess, warnings, os, k1lib, threading
 from k1lib.cli import BaseCli; import k1lib.cli as cli
+from k1lib.cli.typehint import *
 __all__ = ["cat", "curl", "wget", "ls", "cmd", "requireCli"]
 def _catSimple(fileName:str=None, text:bool=True, _all:bool=False) -> Iterator[Union[str, bytes]]:
     fileName = os.path.expanduser(fileName)
@@ -25,6 +26,7 @@ def _catWrapper(fileName:str, text:bool, _all:bool):
     return res if text and (not _all) else next(res)
 class _cat(BaseCli):
     def __init__(self, text, _all:bool): self.text = text; self._all = _all
+    def _typehint(self, ignored=None): return tIter(str)
     def __ror__(self, fileName:str) -> Union[Iterator[str], bytes]:
         return _catWrapper(fileName, self.text, self._all)
 def cat(fileName:str=None, text:bool=True, _all=False):
@@ -35,9 +37,11 @@ Example::
     cat("file.txt") | headOut()
     # piping in also works
     "file.txt" | cat() | headOut()
+    # recommended to insert a `tOpt()` in the middle and `yieldT` in the end, to do lots of optimizations
+    "file.txt" | tOpt() | cat() | headOut() | yieldT
     
     # rename file
-    cat("img.png", False) | file("img2.png", False)
+    cat("img.png", False) | file("img2.png")
 
 :param fileName: if None, then return a :class:`~k1lib.cli.init.BaseCli`
     that accepts a file name and outputs Iterator[str]
@@ -79,6 +83,7 @@ Example::
     if folder is None: return _ls()
     else: return folder | _ls()
 class _ls(BaseCli):
+    def _typehint(self, ignored=None): return tList(str)
     def __ror__(self, folder:str):
         folder = os.path.expanduser(folder.rstrip(os.sep))
         return [f"{folder}{os.sep}{e}" for e in os.listdir(folder)]
@@ -189,6 +194,10 @@ Settings:
 :param block: whether to wait for the task to finish before returning to Python or not"""
         super().__init__(); self.cmd = cmd; self.mode = mode
         self.text = text; self.block = block; self.ro = k1lib.RunOnce()
+    def _typehint(self, ignored=None):
+        t = tIter(str) if self.text else tIter(bytes)
+        if self.mode == 0: return tCollection(t, t)
+        return t
     def __ror__(self, it:Union[None, str, bytes, Iterator[Any]]) -> Iterator[Union[str, bytes]]:
         """Pipes in lines of input, or if there's nothing to
 pass, then pass None"""

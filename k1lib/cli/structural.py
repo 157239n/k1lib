@@ -5,16 +5,16 @@ structure in a dramatic way. They're the core transformations
 """
 from typing import List, Union, Iterator, Callable, Any, Tuple, Dict
 from collections import defaultdict, Counter, deque
-from k1lib.cli.init import patchDefaultDelim, BaseCli, oneToMany, T, Table, fastF
-import k1lib.cli as cli
+from k1lib.cli.init import patchDefaultDelim, BaseCli, oneToMany, T, Table, fastF, yieldT
+import k1lib.cli as cli; from k1lib.cli.typehint import *
 import itertools, numpy as np, torch, k1lib
 __all__ = ["transpose", "reshape", "insert", "splitW",
-           "joinStreams", "yieldSentinel", "joinStreamsRandom", "activeSamples",
+           "joinStreams", "joinStreamsRandom", "activeSamples",
            "table", "batched", "window", "groupBy",
            "insertColumn", "insertIdColumn",
            "expandE", "unsqueeze",
            "count", "permute", "accumulate", "AA_", "peek", "peekF",
-           "repeat", "repeatF", "repeatFrom"]
+           "repeat", "repeatF", "repeatFrom", "oneHot"]
 class transpose(BaseCli):
     def __init__(self, dim1:int=0, dim2:int=1, fill=None):
         """Join multiple columns and loop through all rows. Aka transpose.
@@ -32,10 +32,10 @@ Multidimensional transpose works just like :meth:`torch.transpose` too::
     # also returns (2, 7, 5, 3), but actually does every required computation. Can be slow if shape is huge
     torch.randn(2, 3, 5, 7) | deref(igT=False) | transpose(3, 1) | shape()
 
-Can also work with numpy arrays (although has to be passed in like a function and can't be piped in)::
+Can also work with numpy arrays::
 
     # returns (5, 3, 2)
-    transpose(0, 2)(np.random.randn(2, 3, 5)).shape
+    np.random.randn(2, 3, 5) | transpose(0, 2) | op().shape
 
 Be careful with infinite streams, as transposing stream of shape (inf, 5) will
 hang this operation! Either don't do it, or temporarily limit all infinite streams like
@@ -55,6 +55,17 @@ Also be careful with empty streams, as you might not get any results at all::
 :param fill: if not None, then will try to zip longest with this fill value"""
         super().__init__(); self.fill = fill
         self.d1 = min(dim1, dim2); self.d2 = max(dim1, dim2)
+        self.normal = self.d1 == 0 and self.d2 == 1
+    def _typehint(self, inp):
+        if isinstance(inp, tArrayTypes):
+            if inp.rank is None: return inp
+            if inp.rank > max(self.d1, self.d2): return inp
+            else: return tAny() # this case doesn't quite exist
+        if self.d1 == 0 and self.d2 == 1:
+            if isinstance(inp, tListIterSet):
+                if isinstance(inp.child, tListIterSet):
+                    return tIter(tList(inp.child.child))
+        return tAny()
     def __ror__(self, it:Iterator[Iterator[T]]) -> Table[T]:
         d1 = self.d1; d2 = self.d2; fill = self.fill
         if isinstance(it, torch.Tensor): return it.transpose(d1, d2)
@@ -90,6 +101,14 @@ The example given is sort of to demonstrate this only. Most of the time, just us
 access to a column, so this is how you can do it."""
         if not isinstance(f, BaseCli): f = cli.applyS(f)
         return transpose(dim1, dim2, fill) | f | transpose(dim1, dim2, fill)
+#tOpt.clearPasses()
+def oTranspose1(cs, ts, metadata): # `transpose() | transpose().all()` to `transpose() | apply(aS(torch.stack) | transpose())`
+    tr, ap = cs; t = ts[0]
+    if (not ap.normal) or (not tr.normal): return None
+    if (not isinstance(ap.f, transpose)) or (not ap.f.normal): return None
+    if isinstance(t, tListIterSet) and (isinstance(t.child, tTensor) or isinstance(t.child, tCollection) and isinstance(tLowest(*t.child.children), tTensor)):
+        return [transpose(), cli.apply(cli.aS(torch.stack) | transpose())]
+tOpt.addPass(oTranspose1, [transpose, cli.apply])
 def _formStructure(it, dims, dimI):
     if dimI >= len(dims): return next(it)
     return [_formStructure(it, dims, dimI+1) for i in range(dims[dimI])]
@@ -200,18 +219,17 @@ together, which :class:`reshape` does."""
 import random
 def rand(n):
     while True: yield random.randrange(n)
-yieldSentinel = object()
 class joinStreamsRandom(BaseCli):
     def __init__(self):
         """Join multiple streams randomly. If any streams runs out, then quits. If
-any stream yields :data:`yieldSentinel`, then just ignores that result and
+any stream yields :data:`~k1lib.cli.init.yieldT`, then just ignores that result and
 continue. Could be useful in active learning. Example::
 
     # could return [0, 1, 10, 2, 11, 12, 13, ...], with max length 20, typical length 18
     [range(0, 10), range(10, 20)] | joinStreamsRandom() | deref()
     
-    stream2 = [[-5, yieldSentinel, -4, -3], yieldSentinel | repeat()] | joinStreams()
-    # could return [-5, -4, 0, -3, 1, 2, 3, 4, 5, 6], demonstrating yieldSentinel
+    stream2 = [[-5, yieldT, -4, -3], yieldT | repeat()] | joinStreams()
+    # could return [-5, -4, 0, -3, 1, 2, 3, 4, 5, 6], demonstrating yieldT
     [range(7), stream2] | joinStreamsRandom() | deref()"""
         super().__init__()
     def __ror__(self, streams:Iterator[Iterator[T]]) -> Iterator[T]:
@@ -219,7 +237,7 @@ continue. Could be useful in active learning. Example::
         try:
             for streamIdx in rand(len(streams)):
                 o = next(streams[streamIdx])
-                if not o is yieldSentinel: yield o # "not is" to fix numpy `==`
+                if not o is yieldT: yield o # "not is" to fix numpy `==`
         except StopIteration: pass
 class activeSamples(BaseCli):
     def __init__(self, limit:int=100, p:float=0.95):
@@ -269,7 +287,7 @@ it.
     def __iter__(self):
         samples = self.samples
         while True:
-            if len(samples) == 0: yield yieldSentinel
+            if len(samples) == 0: yield yieldT
             else: yield samples.popleft()
 def table(delim:str=None):
     """Basically ``op().split(delim).all()``. This exists because this is used
@@ -400,24 +418,17 @@ See also: :class:`~k1lib.cli.grep.grep`
         except StopIteration:
             if len(a) > 0: yield a
 class insertColumn(BaseCli):
-    def __init__(self, *columns, begin=True, fill=""):
+    def __init__(self, column:List[T], begin=True, fill=""):
         """Inserts a column at beginning or end.
 Example::
 
     # returns [['a', 1, 2], ['b', 3, 4]]
-    [[1, 2], [3, 4]] | ~insertColumn("a", "b") | deref()
-    # returns [['a', 1, 2], ['b', 3, 4]]
     [[1, 2], [3, 4]] | insertColumn(["a", "b"]) | deref()
     # returns [[1, 2, 'a'], [3, 4, 'b']]
-    [[1, 2], [3, 4]] | ~insertColumn("a", "b", begin=False) | deref()"""
-        self.columns = columns; self.begin = begin; self.fill = fill; self.expand = False
+    [[1, 2], [3, 4]] | insertColumn(["a", "b"], begin=False) | deref()"""
+        self.column = column; self.begin = begin; self.fill = fill
     def __ror__(self, it):
-        f = insert(*self.columns, begin=self.begin);
-        if self.expand: f = ~f
-        return it | transpose(fill=self.fill) | f | transpose(fill=self.fill)
-    def __invert__(self):
-        ans = insertColumn(*self.columns, begin=self.begin, fill=self.fill)
-        ans.expand = True; return ans
+        return it | transpose(fill=self.fill) | insert(self.column, begin=self.begin) | transpose(fill=self.fill)
 def insertIdColumn(table=False, begin=True, fill=""):
     """Inserts an id column at the beginning (or end).
 Example::
@@ -471,6 +482,15 @@ is a lot more familiar. Also note that the inverse operation "squeeze" is sort o
     # returns (3, 2)
     t | unsqueeze(1) | item().all(1) | shape()"""
     return cli.wrapList().all(dim)
+def oUnsqueeze(cs, ts, metadata): # reminder: if change this then also change the example in llvm.rst
+    a = cs[0]; t = ts[0]; i = 0;
+    if not isinstance(t, tArrayTypes): return None
+    while isinstance(a, cli.apply) and a.normal: i += 1; a = a.f
+    if not isinstance(a, cli.wrapList): return None
+    t = t.__class__(t.child, t.rank+1 if t.rank is not None else None)
+    if isinstance(t, tNpArray): return [cli.aS(lambda x: np.expand_dims(x, i)).hint(t)]
+    else: return [cli.aS(lambda x: x.unsqueeze(i)).hint(t)]
+tOpt.addPass(oUnsqueeze, [cli.apply], 4)
 class count(BaseCli):
     def __init__(self):
         """Finds unique elements and returns a table with [frequency, value, percent]
@@ -479,6 +499,10 @@ columns. Example::
     # returns [[1, 'a', '33%'], [2, 'b', '67%']]
     ['a', 'b', 'b'] | count() | deref()"""
         super().__init__()
+    def _typehint(self, inp):
+        i = tAny()
+        if isinstance(inp, tListIterSet): i = inp.child
+        return tIter(tCollection(int, i, str))
     def __ror__(self, it:Iterator[str]):
         it = it | cli.apply(lambda row: (tuple(row) if isinstance(row, list) else row))
         c = Counter(it); s = sum(c.values())
@@ -630,6 +654,7 @@ iterator probably won't work as you will have used it the first time. Example::
 
 :param repeat: if None, then repeats indefinitely"""
         super().__init__(); self.limit = limit
+    def _typehint(self, inp): return tIter(inp)
     def __ror__(self, o:T) -> Iterator[T]:
         limit = self.limit if self.limit != None else k1lib.settings.cli.inf
         for i in itertools.count():
@@ -673,8 +698,85 @@ class repeatFrom(BaseCli):
 
 :param limit: if None, then repeats indefinitely"""
         super().__init__(); self.limit = limit
+    def _typehint(self, inp):
+        i = tAny()
+        if isinstance(inp, tListIterSet): i = inp.child
+        if isinstance(inp, tArrayTypes): i = inp
+        return tIter(i)
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
         it = list(it); limit = self.limit or k1lib.settings.cli.inf
         for i in itertools.count():
             if i >= limit: break
             yield from it
+def oneHotRow(i, n): ans = [0]*n; ans[i] = 1; return ans
+class oneHot(BaseCli):
+    _groups = {}
+    def __init__(self, col, n:int=0, group:str=None):
+        """One-hot encode some column in a table.
+Example::
+
+    a = [
+     [1, 2, "A"],
+     [3, 4, "B"],
+     [5, 6, "C"]]
+    b = [
+     [7, 8, "A"],
+     [9, 10, "B"],
+     [11, 12, "B"]]
+    [*a, *b] | oneHot(2) | deref()
+    [*a, *b] | oneHot(2, 3, "abcd") | deref()
+
+Last 2 statements both return this::
+
+    [[1, 2, 1, 0, 0],
+     [3, 4, 0, 1, 0],
+     [5, 6, 0, 0, 1],
+     [7, 8, 1, 0, 0],
+     [9, 10, 0, 1, 0],
+     [11, 12, 0, 1, 0]]
+
+The natural way to do this is to use with without ``n`` and ``group`` parameters.
+But sometimes, your one hot encoding is spreaded across multiple datasets in
+multiple dataloaders, and so the order and length of the encoding might not be
+the same, which will mess up your training process.
+
+That's why, you can specify ``group``, which will share encoding information
+across all :class:`oneHot` clis that have the same group name. If you choose to
+do this then you have to also specify what's the size of the encoding, because
+the cli can't really infer the size when it potentially has not seen all the data
+right?
+
+:param col: which column one hot encode and expand into
+:param n: (optional) total number of different elements
+:param group: (optional) group name"""
+        self.col = col; self.n = n; self.group = group
+        if (n != 0 and group is not None) and (n == 0 or group is None):
+            raise Exception("You have to specify both `n` and `group` at the same time if you want to use them")
+        if group is not None:
+            if group not in oneHot._groups:
+                oneHot._groups[group] = dict()
+            self.d = oneHot._groups[group]
+        else: self.d = dict()
+    def _typehint(self, inp):
+         # TODO
+        if isinstance(inp, tListIterSet):
+            if isinstance(inp.child, tListIterSet):
+                pass
+            elif isinstance(inp.child, tListIterSet):
+                pass
+            pass
+        return tIter(tAny())
+    def __ror__(self, it):
+        c = self.col; d = self.d; n = self.n
+        if n == 0:
+            it = it | cli.deref(2); n = it | cli.cut(c) | cli.toSet() | cli.shape(0)
+        for row in it:
+            e = row[c]
+            try: e[0]; len(e)
+            except: e = list(e)
+            if e not in d: d[e] = oneHotRow(len(d), n)
+            yield [*row[:c], *d[e], *row[c+1:]]
+        return
+        _d = it | cli.cut(c) | cli.toSet() | cli.sort(None, False) | cli.deref(); n = len(_d)
+        _d = _d | insertIdColumn(begin=False) | cli.apply(cli.aS(oneHotRow, n), 1) | transpose() | cli.toDict()
+        for row in it: yield [*row[:c], *_d[row[c]], *row[c+1:]]

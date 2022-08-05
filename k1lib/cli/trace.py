@@ -9,12 +9,18 @@ class TraceData:
 :param inS: in and out strings to be displayed in the edges"""
         self.idx = traceIdxAuto()
         self.inS = inS; self.outS = outS; self.cli = _cli
-        self.name = name or _cli.__class__.__name__
+        self._name = name or _cli.__class__.__name__
+    @property
+    def name(self):
+        hint = ""
+        try: hint = f" {self.cli._outHint}"
+        except: pass
+        return self._name + hint
     def __str__(self):
         return f"<TraceData idx='{self.idx}' inS='{self.inS}' outS='{self.outS}' name='{self.name}' cli='{self.cli}'>"
 def isMTM(c):
     if not isinstance(c, BaseCli): return False
-    if isinstance(c, (manyToMany, applyMp, applyTh)): return True
+    if isinstance(c, (applyMp, applyTh)): return True
     if isinstance(c, apply) and isinstance(c.f, BaseCli) and c.column is None: return True
     return False
 class TraceException(Exception): pass
@@ -37,13 +43,14 @@ grab the last thing at the end of __ror__, hence "last" and not "end".
             self.g = k1lib.digraph(); self._formNode(self.lastTd)
         else: self.g = g; self.lastTd = None
         self.firstTime = True # every other time other than the first should not record any data. It should just pass data through
+    def _typehint(self, inp): return inp
     def _formNode(self, td:TraceData, g=None): (g or self.g).node(td.idx, td.name)
     def _formEdge(self, td1:TraceData, td2:TraceData, g=None, label:str=None):
         if td1 is None or td2 is None: return
         (g or self.g).edge(td1.idx, td2.idx, label=f" {label or td2.inS or td1.outS}")
     def _run(self, c, inp, cliName=None):
         """Takes in cli tool and input, runs it, and get trace data and output"""
-        if isinstance(c, op): c.op_solidify()
+        if isinstance(c, op): c.ab_solidify()
         out = c(inp) | deref() # why not "inp | c"? Cause we want to serve plain old functions inside apply too
         return TraceData(c, f"{self.f(inp)}", f"{self.f(out)}", cliName), out
     def __repr__(self):
@@ -63,6 +70,9 @@ grab the last thing at the end of __ror__, hence "last" and not "end".
         if self.inp != emptyInputSentinel: self.firstTime = False
         self.inp = it | deref(); return self
     def __iter__(self): return iter(self.inp)
+def starStr(c):
+    try: return f"* {c._outHint}"
+    except: return "*"
 @k1lib.patch(_trace)
 def __or__(self, c):
     if self.inp is emptyInputSentinel:
@@ -86,15 +96,14 @@ def __or__(self, c):
         if startTdSet: self.startTd = t.startTd
     elif self.depth and isMTM(c):
         if isinstance(c, (apply, applyMp)): _c = c.f
-        elif isinstance(c, manyToMany): _c = c.cli
         try: singleInp = self.inp | item()
         except StopIteration: bypass() # no items at all, can't trace!
         else:
             with self.g.subgraph(name=f"cluster_{clusterAuto()}") as subG:
-                subG.attr(label=".all(), manyToMany, apply")
+                subG.attr(label=".all(), apply")
                 t = _trace(self.inp | item(), self.f, subG, self.depth.enter())
-                o1Td = TraceData(None, self.f(self.inp), None, "*"); self._formNode(o1Td, g=subG); t = t | _c
-                o2Td = TraceData(None, self.f(t.inp),    None, "*"); self._formNode(o2Td, g=subG)
+                o1Td = TraceData(None, self.f(self.inp), None, "*");        self._formNode(o1Td, g=subG); t = t | _c
+                o2Td = TraceData(None, self.f(t.inp),    None, starStr(c)); self._formNode(o2Td, g=subG)
                 t._formEdge(o1Td, t.startTd); t._formEdge(t.lastTd, o2Td); o2Td.outS = self.f(out)
             self._formEdge(self.lastTd, o1Td); self.lastTd = o2Td
             if startTdSet: self.startTd = o1Td
@@ -102,7 +111,7 @@ def __or__(self, c):
         with self.g.subgraph(name=f"cluster_{clusterAuto()}") as subG:
             subG.attr(label="&, oneToMany")
             o1Td = TraceData(None, self.f(self.inp), None, "*"); self._formNode(o1Td, g=subG)
-            o2Td = TraceData(None, None,             None, "*"); self._formNode(o2Td, g=subG)
+            o2Td = TraceData(None, None, None,      starStr(c)); self._formNode(o2Td, g=subG)
             for _c in c.clis:
                 t = _trace(self.inp, self.f, subG, self.depth.enter()) | _c
                 self._formEdge(o1Td, t.startTd); self._formEdge(t.lastTd, o2Td)
@@ -111,8 +120,8 @@ def __or__(self, c):
     elif self.depth and isinstance(c, mtmS):
         with self.g.subgraph(name=f"cluster_{clusterAuto()}") as subG:
             subG.attr(label="+, mtmS")
-            o1Td = TraceData(None, self.f(self.inp), None, "*"); self._formNode(o1Td, g=subG)
-            o2Td = TraceData(None, None, self.f(out),      "*"); self._formNode(o2Td, g=subG)
+            o1Td = TraceData(None, self.f(self.inp), None, "*");   self._formNode(o1Td, g=subG)
+            o2Td = TraceData(None, None, self.f(out), starStr(c)); self._formNode(o2Td, g=subG)
             for _c, _it in zip(c.clis, self.inp):
                 t = _trace(_it, self.f, subG, self.depth.enter()) | _c
                 self._formEdge(o1Td, t.startTd); self._formEdge(t.lastTd, o2Td)
@@ -159,6 +168,11 @@ Example::
     range(1, 5) | trace() | apply(lambda x: x**2) | deref()
 
 There're a lot more instructions and code examples over the tutorial section. Go check it out!
+
+This also works well with :class:`~k1lib.cli.typehint.tOpt`, and will actually display
+inferred type data in the graph::
+
+    range(5) | tOpt() | trace() | apply(op()**2)
 
 :param f: function to display the data stream. Defaulted to :class:`~k1lib.cli.utils.shape`,
     and to :class:`~k1lib.cli.utils.iden` if is None."""

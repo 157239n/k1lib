@@ -5,4 +5,5 @@ services:
         restart: always
         volumes:
             - ../..:/k1lib
+            - ../../../k1a:/k1a
 

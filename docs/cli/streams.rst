@@ -57,13 +57,13 @@ The streams need not be symmetrical (derived from :meth:`~init.BaseCli.all` oper
 like the examples above::
 
     # returns [0, 1, 2, 'a', 'b', 'c']
-    ["a", "b", "c"] | (toRange() & identity()) | joinStreams() | toList()
+    ["a", "b", "c"] | (toRange() & iden()) | joinStreams() | toList()
     # displays a table with first column [0, 1, 2] and second column ['a', 'b', 'c']
-    ["a", "b", "c"] | (toRange() & identity()) | joinColumns() | display()
+    ["a", "b", "c"] | (toRange() & iden()) | joinColumns() | display()
 
-Here, a list of strings is piped into ``(toRange() & identity())`` operator. This will
+Here, a list of strings is piped into ``(toRange() & iden())`` operator. This will
 effectively split the input into 2 streams. 1 gets passed through :class:`~conv.toRange`,
-and 1 through :class:`~utils.identity`. So, the output is effectively
+and 1 through :class:`~utils.iden`. So, the output is effectively
 ``[Iterator[int], Iterator[str]]``, which we can join together just like before.
 
 When combining streams asymmetrically (using the ``&`` operator, and all cli
@@ -106,6 +106,6 @@ More procedural?
 ----------------
 
 Underlying operations :class:`~init.serial`, :class:`~init.oneToMany`,
-:class:`~init.manyToMany`, :class:`~init.mtmS` that stands for operations
+:class:`~modifier.apply`, :class:`~init.mtmS` that stands for operations
 (``|``, ``&``, ``.all()``, ``+``) are exposed, in case your streams have varying
 lengths.

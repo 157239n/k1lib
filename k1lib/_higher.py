@@ -4,15 +4,30 @@ __all__ = ["Func", "polyfit", "derivative", "optimize", "inverse", "integral"]
 from typing import Callable, List
 import k1lib, numpy as np, warnings
 from functools import partial
+import matplotlib.pyplot as plt
 Func = Callable[[float], float]
 def polyfit(x:List[float], y:List[float], deg:int=6) -> Func:
     """Returns a function that approximate :math:`f(x) = y`.
+Example::
 
-:param deg: degree of the polynomial of the returned function
-"""
+    xs = [1, 2, 3]
+    ys = [2, 3, 5]
+    f = k1.polyfit(xs, ys, 1)
+
+This will create a best-fit function. You can just use it as a regular,
+normal function. You can even pass in :class:`numpy.ndarray`::
+
+    # returns some float
+    f(2)
+
+    # plots fit function from 0 to 5
+    xs = np.linspace(0, 5)
+    plt.plot(xs, f(xs))
+
+:param deg: degree of the polynomial of the returned function"""
     params = np.polyfit(x, y, deg)
     def _inner(_x):
-        answer = np.zeros_like(_x, dtype=np.float)
+        answer = np.zeros_like(_x, dtype=float)
         for expo, param in enumerate(params):
             answer += param * _x**(len(params)-expo-1)
         return answer

@@ -559,6 +559,7 @@ jitOpcodes = {"__len__": lambda x: f"len({x})",
               "__invert__": lambda x: f"(~{x})",
               "__getattr__": lambda x, idx: f"getattr({x},{idx})",
               "__getitem__": lambda x, idx: f"({x}[{idx}])",
+              "__round__": lambda x, o: f"round({x}, {o})",
               "__add__": lambda x, o: f"({x}+{o})",
               "__radd__": lambda x, o: f"({o}+{x})",
               "__sub__": lambda x, o: f"({x}-{o})",
@@ -592,6 +593,7 @@ jitOpcodes = {"__len__": lambda x: f"len({x})",
               "__gt__": lambda x, o: f"({x}>{o})",
               "__ge__": lambda x, o: f"({x}>={o})",}
 opcodeAuto = AutoIncrement(prefix="_op_var_")
+compareOps = {"__lt__", "__le__", "__eq__", "__ne__", "__gt__", "__ge__"}
 class Absorber:
     """Creates an object that absorbes every operation done on it. Could be
 useful in some scenarios::
@@ -624,8 +626,21 @@ source code."""
 :param initDict: initial variables to set, as setattr operation is normally absorbed"""
         self._ab_sentinel = True
         self._ab_steps = []
+        self._ab_solidified = False
         for k, v in initDict.items(): setattr(self, k, v)
         self._ab_sentinel = False
+    def ab_solidify(self):
+        """Use this to not absorb ``__call__`` operations anymore and makes it
+feel like a regular function (still absorbs other operations though)::
+
+    f = op()**2
+    3 | f # returns 9, but may be you don't want to pipe it in
+    f.op_solidify()
+    f(3)  # returns 9"""
+        self._ab_sentinel = True
+        self._ab_solidified = True
+        self._ab_sentinel = False
+        return self
     def ab_operate(self, x):
         """Special method to actually operate on an object and get the result. Not
 absorbed. Example::
@@ -674,9 +689,17 @@ but much faster, suitable for high performance tasks. Example::
             a, b, c, d, e = s[0][1], s[1][1], s[2][1], s[3][1], s[4][1]
             return lambda x: e(d(c(b(a(x)))))
         return self.ab_operate
+    def _ab_steps_append(self, o):
+        if not self._ab_solidified:
+            s = self._ab_steps
+            if len(s) > 0 and s[-1][0][0] in compareOps and o[0][0] in compareOps:
+                p = s.pop(); a = p[1]; b = o[1] # for 2 consecutive compare operations
+                s.append([["compareOps"], lambda x: a(x) and b(x)])
+            else: s.append(o)
+        return self
     def __getattr__(self, idx):
         if isinstance(idx, str) and idx.startswith("_"): raise AttributeError("Getting attributes starting with underscore is prohibited. If you're using `op`, consider using `aS(lambda x: x._field)` instead.")
-        self._ab_steps.append([["__getattr__", idx], lambda x: getattr(x, idx)]); return self
+        return self._ab_steps_append([["__getattr__", idx], lambda x: getattr(x, idx)]);
     def __setattr__(self, k, v):
         """Only allows legit variable setting when '_ab_sentinel' is True. Absorbs
 operations if it's False."""
@@ -685,69 +708,68 @@ operations if it's False."""
             if self.__dict__[sen]: self.__dict__[k] = v
             else:
                 def f(x): setattr(x, k, v); return x
-                self._ab_steps.append([["__setattr__", [k, v]], f])
+                self._ab_steps_append([["__setattr__", [k, v]], f])
+                if self._ab_solidified: self.__dict__[k] = v
                 return self
-    def __getitem__(self, idx):
-        self._ab_steps.append([["__getitem__", idx], lambda x: x[idx]]); return self
+    def __getitem__(self, idx): return self._ab_steps_append([["__getitem__", idx], lambda x: x[idx]]);
     def __setitem__(self, k, v):
         def f(x): x[k] = v; return x
-        self._ab_steps.append([["__setitem__", [k, v]], f]); return self
-    def __call__(self, *args, **kwargs):
-        self._ab_steps.append([["__call__", [args, kwargs]], lambda x: x(*args, **kwargs)]); return self
-    def __len__(self):          self._ab_steps.append([["__len__"         ], lambda x: len(x)]); return self
-    def __add__(self, o):       self._ab_steps.append([["__add__",       o], lambda x: x+o ]); return self
-    def __radd__(self, o):      self._ab_steps.append([["__radd__",      o], lambda x: o+x ]); return self
-    def __sub__(self, o):       self._ab_steps.append([["__sub__",       o], lambda x: x-o ]); return self
-    def __rsub__(self, o):      self._ab_steps.append([["__rsub__",      o], lambda x: o-x ]); return self
-    def __mul__(self, o):       self._ab_steps.append([["__mul__",       o], lambda x: x*o ]); return self
-    def __rmul__(self, o):      self._ab_steps.append([["__rmul__",      o], lambda x: o*x ]); return self
-    def __matmul__(self, o):    self._ab_steps.append([["__matmul__",    o], lambda x: x@o ]); return self
-    def __rmatmul__(self, o):   self._ab_steps.append([["__rmatmul__",   o], lambda x: o@x ]); return self
-    def __truediv__(self, o):   self._ab_steps.append([["__truediv__",   o], lambda x: x/o ]); return self
-    def __rtruediv__(self, o):  self._ab_steps.append([["__rtruediv__",  o], lambda x: o/x ]); return self
-    def __floordiv__(self, o):  self._ab_steps.append([["__floordiv__",  o], lambda x: x//o]); return self
-    def __rfloordiv__(self, o): self._ab_steps.append([["__rfloordiv__", o], lambda x: o//x]); return self
-    def __mod__(self, o):       self._ab_steps.append([["__mod__",       o], lambda x: x%o ]); return self
-    def __rmod__(self, o):      self._ab_steps.append([["__rmod__",      o], lambda x: o%x ]); return self
-    def __pow__(self, o):       self._ab_steps.append([["__pow__",       o], lambda x: x**o]); return self
-    def __rpow__(self, o):      self._ab_steps.append([["__rpow__",      o], lambda x: o**x]); return self
-    def __lshift__(self, o):    self._ab_steps.append([["__lshift__",    o], lambda x: x<<o]); return self
-    def __rlshift__(self, o):   self._ab_steps.append([["__rlshift__",   o], lambda x: o<<x]); return self
-    def __rshift__(self, o):    self._ab_steps.append([["__rshift__",    o], lambda x: x>>o]); return self
-    def __rrshift__(self, o):   self._ab_steps.append([["__rrshift__",   o], lambda x: o>>x]); return self
-    def __and__(self, o):       self._ab_steps.append([["__and__",       o], lambda x: x&o ]); return self
-    def __rand__(self, o):      self._ab_steps.append([["__rand__",      o], lambda x: o&x ]); return self
-    def __xor__(self, o):       self._ab_steps.append([["__xor__",       o], lambda x: x^o ]); return self
-    def __rxor__(self, o):      self._ab_steps.append([["__rxor__",      o], lambda x: o^x ]); return self
-    def __or__(self, o):        self._ab_steps.append([["__or__",        o], lambda x: x|o ]); return self
-    def __ror__(self, o):       self._ab_steps.append([["__ror__",       o], lambda x: o|x ]); return self
-    def __lt__(self, o):        self._ab_steps.append([["__lt__",        o], lambda x: x<o ]); return self
-    def __le__(self, o):        self._ab_steps.append([["__le__",        o], lambda x: x<=o]); return self
-    def __eq__(self, o):        self._ab_steps.append([["__eq__",        o], lambda x: x==o]); return self
-    def __ne__(self, o):        self._ab_steps.append([["__ne__",        o], lambda x: x!=o]); return self
-    def __gt__(self, o):        self._ab_steps.append([["__gt__",        o], lambda x: x>o ]); return self
-    def __ge__(self, o):        self._ab_steps.append([["__ge__",        o], lambda x: x>=o]); return self
-    def __neg__(self):    self._ab_steps.append([["__neg__"],    lambda x: -x      ]); return self
-    def __pos__(self):    self._ab_steps.append([["__pos__"],    lambda x: +x      ]); return self
-    def __abs__(self):    self._ab_steps.append([["__abs__"],    lambda x: abs(x)  ]); return self
-    def __invert__(self): self._ab_steps.append([["__invert__"], lambda x: ~x      ]); return self
+        return self._ab_steps_append([["__setitem__", [k, v]], f]);
+    def __call__(self, *args, **kwargs): return self._ab_steps_append([["__call__", [args, kwargs]], lambda x: x(*args, **kwargs)]);
+    def __round__(self, ndigits=0):   return self._ab_steps_append([["__round__",       ndigits], lambda x: round(x, ndigits)]);
+    def __add__(self, o):       return self._ab_steps_append([["__add__",       o], lambda x: x+o ]);
+    def __radd__(self, o):      return self._ab_steps_append([["__radd__",      o], lambda x: o+x ]);
+    def __sub__(self, o):       return self._ab_steps_append([["__sub__",       o], lambda x: x-o ]);
+    def __rsub__(self, o):      return self._ab_steps_append([["__rsub__",      o], lambda x: o-x ]);
+    def __mul__(self, o):       return self._ab_steps_append([["__mul__",       o], lambda x: x*o ]);
+    def __rmul__(self, o):      return self._ab_steps_append([["__rmul__",      o], lambda x: o*x ]);
+    def __matmul__(self, o):    return self._ab_steps_append([["__matmul__",    o], lambda x: x@o ]);
+    def __rmatmul__(self, o):   return self._ab_steps_append([["__rmatmul__",   o], lambda x: o@x ]);
+    def __truediv__(self, o):   return self._ab_steps_append([["__truediv__",   o], lambda x: x/o ]);
+    def __rtruediv__(self, o):  return self._ab_steps_append([["__rtruediv__",  o], lambda x: o/x ]);
+    def __floordiv__(self, o):  return self._ab_steps_append([["__floordiv__",  o], lambda x: x//o]);
+    def __rfloordiv__(self, o): return self._ab_steps_append([["__rfloordiv__", o], lambda x: o//x]);
+    def __mod__(self, o):       return self._ab_steps_append([["__mod__",       o], lambda x: x%o ]);
+    def __rmod__(self, o):      return self._ab_steps_append([["__rmod__",      o], lambda x: o%x ]);
+    def __pow__(self, o):       return self._ab_steps_append([["__pow__",       o], lambda x: x**o]);
+    def __rpow__(self, o):      return self._ab_steps_append([["__rpow__",      o], lambda x: o**x]);
+    def __lshift__(self, o):    return self._ab_steps_append([["__lshift__",    o], lambda x: x<<o]);
+    def __rlshift__(self, o):   return self._ab_steps_append([["__rlshift__",   o], lambda x: o<<x]);
+    def __rshift__(self, o):    return self._ab_steps_append([["__rshift__",    o], lambda x: x>>o]);
+    def __rrshift__(self, o):   return self._ab_steps_append([["__rrshift__",   o], lambda x: o>>x]);
+    def __and__(self, o):       return self._ab_steps_append([["__and__",       o], lambda x: x&o ]);
+    def __rand__(self, o):      return self._ab_steps_append([["__rand__",      o], lambda x: o&x ]);
+    def __xor__(self, o):       return self._ab_steps_append([["__xor__",       o], lambda x: x^o ]);
+    def __rxor__(self, o):      return self._ab_steps_append([["__rxor__",      o], lambda x: o^x ]);
+    def __or__(self, o):        return self._ab_steps_append([["__or__",        o], lambda x: x|o ]);
+    def __ror__(self, o):       return self._ab_steps_append([["__ror__",       o], lambda x: o|x ]);
+    def __lt__(self, o):        return self._ab_steps_append([["__lt__",        o], lambda x: x<o ]);
+    def __le__(self, o):        return self._ab_steps_append([["__le__",        o], lambda x: x<=o]);
+    def __eq__(self, o):        return self._ab_steps_append([["__eq__",        o], lambda x: x==o]);
+    def __ne__(self, o):        return self._ab_steps_append([["__ne__",        o], lambda x: x!=o]);
+    def __gt__(self, o):        return self._ab_steps_append([["__gt__",        o], lambda x: x>o ]);
+    def __ge__(self, o):        return self._ab_steps_append([["__ge__",        o], lambda x: x>=o]);
+    def __neg__(self):    return self._ab_steps_append([["__neg__"],    lambda x: -x      ]);
+    def __pos__(self):    return self._ab_steps_append([["__pos__"],    lambda x: +x      ]);
+    def __abs__(self):    return self._ab_steps_append([["__abs__"],    lambda x: abs(x)  ]);
+    def __invert__(self): return self._ab_steps_append([["__invert__"], lambda x: ~x      ]);
     def ab_int(self):
         """Replacement for ``int(ab)``, as that requires returning an actual :class:`int`."""
-        self._ab_steps.append([["__int__"],    lambda x: int(x)  ]); return self
+        return self._ab_steps_append([["__int__"],    lambda x: int(x)  ]);
     def __int__(self):    return self.int()
     def ab_float(self):
         """Replacement for ``float(ab)``, as that requires returning an actual :class:`float`."""
-        self._ab_steps.append([["__float__"],  lambda x: float(x)]); return self
+        return self._ab_steps_append([["__float__"],  lambda x: float(x)]);
     def __float__(self):  return self.float()
     def ab_str(self):
         """Replacement for ``str(ab)``, as that requires returning an actual :class:`str`."""
-        self._ab_steps.append([["__str__"],    lambda x: str(x)  ]); return self
+        return self._ab_steps_append([["__str__"],    lambda x: str(x)  ]);
     def ab_len(self):
         """Replacement for ``len(ab)``, as that requires returning an actual :class:`int`."""
-        self._ab_steps.append([["__len__"],    lambda x: len(x)  ]); return self
+        return self._ab_steps_append([["__len__"],    lambda x: len(x)  ]);
     def ab_contains(self, key):
         """Replacement for ``key in ab``, as that requires returning an actual :class:`int`."""
-        self._ab_steps.append([["__contains__", key], lambda x: key in x]); return self
+        return self._ab_steps_append([["__contains__", key], lambda x: key in x]);
 sep = "\u200b" # weird separator, guaranteed (mostly) to not appear anywhere in the
 # settings, so that I can pretty print it
 class Settings:

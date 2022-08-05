@@ -12,12 +12,13 @@ can always use the function directly if you only want to apply it on 1 object.
 If it sounds complicated (convert to PIL image, tensor, ...) then most likely it will
 convert object to object. Lastly, there are some that just feels right to input
 an iterator and output a single object (like getting max, min, std, mean values)."""
-__all__ = ["toStr", "toNumpy", "toTensor", "toList", "toSet", "toIter", "toRange",
+__all__ = ["toStr", "toTensor", "toList", "toSet", "toIter", "toRange",
            "toSum", "toProd", "toAvg", "toMean", "toMax", "toMin", "toPIL", "toImg",
            "toRgb", "toRgba", "toBin", "toIdx", "toDict", "toDictF",
            "toFloat", "toInt"]
-import re, k1lib, torch, math, numpy as np
-from k1lib.cli.init import BaseCli, Table, Row, T; import k1lib.cli as cli
+import re, k1lib, torch, math, os, numpy as np
+from k1lib.cli.init import BaseCli, Table, Row, T, yieldT; import k1lib.cli as cli
+from k1lib.cli.typehint import *
 from collections import deque; from typing import Iterator, Any, List, Set, Tuple, Dict, Callable, Union
 settings = k1lib.settings.cli
 class toStr(BaseCli):
@@ -30,6 +31,9 @@ Example::
     # returns [[2, 'a'], [3, '5']]
     assert [[2, "a"], [3, 5]] | toStr(1) | deref()"""
         super().__init__(); self.column = column
+    def _typehint(self, inp):
+        if self.column is None: return tIter(str)
+        return tAny()
     def __ror__(self, it:Iterator[str]):
         c = self.column
         if c is None:
@@ -37,12 +41,6 @@ Example::
         else:
             for row in it:
                 yield [e if i != c else str(e) for i, e in enumerate(row)]
-class toNumpy(BaseCli):
-    def __init__(self):
-        """Converts generator to numpy array. Essentially ``np.array(list(it))``"""
-        super().__init__()
-    def __ror__(self, it:Iterator[float]) -> np.array:
-        return np.array(list(it))
 class toTensor(BaseCli):
     def __init__(self, dtype=torch.float32):
         """Converts generator to :class:`torch.Tensor`. Essentially
@@ -67,6 +65,10 @@ class toList(BaseCli):
         """Converts generator to list. :class:`list` would do the
 same, but this is just to maintain the style"""
         super().__init__()
+    def _typehint(self, inp):
+        if isinstance(inp, tListIterSet): return tList(inp.child)
+        if isinstance(inp, tCollection): return inp
+        return tList(tAny())
     def __ror__(self, it:Iterator[Any]) -> List[Any]: return list(it)
 class toSet(BaseCli):
     def __init__(self):
@@ -89,7 +91,16 @@ class toRange(BaseCli):
     def __ror__(self, it:Iterator[Any]) -> Iterator[int]:
         try: return range(len(it))
         except: return _toRange(it)
+tOpt.addPass(lambda cs, ts, _: [cs[0]], [toList, toList])
+tOpt.addPass(lambda cs, ts, _: [cs[0]], [toIter, toIter])
+tOpt.addPass(lambda cs, ts, _: [cs[0]], [toSet, toSet])
+tOpt.addPass(lambda cs, ts, _: [cs[0]], [toRange, toRange])
 settings.add("arrayTypes", (torch.Tensor, np.ndarray), "default array types used to accelerate clis")
+def genericTypeHint(inp):
+    if isinstance(inp, tListIterSet): return inp.child
+    if isinstance(inp, tCollection): return inp.children[0]
+    if isinstance(inp, tArrayTypes): return inp.child
+    return tAny()
 class toSum(BaseCli):
     def __init__(self):
         """Calculates the sum of list of numbers. Can pipe in :class:`torch.Tensor` or :class:`numpy.ndarray`.
@@ -98,6 +109,7 @@ Example::
     # returns 45
     range(10) | toSum()"""
         super().__init__()
+    def _typehint(self, inp): return genericTypeHint(inp)
     def __ror__(self, it:Iterator[float]):
         if isinstance(it, settings.arrayTypes): return it.sum()
         return sum(it)
@@ -109,6 +121,7 @@ Example::
     # returns 362880
     range(1,10) | toProd()"""
         super().__init__()
+    def _typehint(self, inp): return genericTypeHint(inp)
     def __ror__(self, it):
         if isinstance(it, settings.arrayTypes): return it.prod()
         else: return math.prod(it)
@@ -122,6 +135,13 @@ Example::
     # returns nan
     [] | toAvg()"""
         super().__init__()
+    def _typehint(self, inp):
+        i = None
+        if isinstance(inp, tListIterSet): i = inp.child
+        if isinstance(inp, tCollection): i = inp.children[0]
+        if isinstance(inp, tArrayTypes): i = inp.child
+        if i is not None: return float if i == int else i
+        return tAny()
     def __ror__(self, it:Iterator[float]):
         if isinstance(it, settings.arrayTypes): return it.mean()
         s = 0; i = -1
@@ -159,8 +179,10 @@ Example::
 
     ls(".") | toPIL().all() | item() # get first image"""
         import PIL; self.PIL = PIL
+    def _typehint(self, inp):
+        return PIL.Image.Image
     def __ror__(self, path) -> "PIL.Image.Image":
-        return self.PIL.Image.open(path)
+        return self.PIL.Image.open(os.path.expanduser(path))
 toImg = toPIL
 class toRgb(BaseCli):
     def __init__(self):
@@ -170,6 +192,7 @@ Example::
     # reads image file and converts it to rgb
     "a.png" | toPIL() | toRgb()"""
         import PIL; self.PIL = PIL
+    def _typehint(self, inp): return inp
     def __ror__(self, i):
         rgbI = self.PIL.Image.new("RGB", i.size)
         rgbI.paste(i); return rgbI
@@ -181,6 +204,7 @@ Example::
     # reads image file and converts it to rgba
     "a.png" | toPIL() | toRgba()"""
         import PIL; self.PIL = PIL
+    def _typehint(self, inp): return inp
     def __ror__(self, i):
         rgbI = self.PIL.Image.new("RGBA", i.size)
         rgbI.paste(i); return rgbI

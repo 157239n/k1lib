@@ -4,6 +4,7 @@ _scatteredClis = [] # everywhere else in the system can add objects here, and k1
 def scatteredClis(): return [c.__name__ for c in _scatteredClis]
 
 from .init import *
+from .typehint import *
 
 # common utils
 from .filt import *
@@ -17,9 +18,9 @@ from .utils import *
 from .others import *
 
 # bio specific
-from .entrez import *
 from .bio import *
 from . import mgi;  mgi  = _wrapMod(mgi)
+from . import cif;  cif  = _wrapMod(cif)
 
 # file formats
 from . import kxml; kxml = _wrapMod(kxml)
@@ -28,4 +29,6 @@ from . import sam;  sam  = _wrapMod(sam)
 from . import gb;   gb   = _wrapMod(gb)
 from . import nb;   nb   = _wrapMod(nb)
 
+from .optimizations import *
 from .trace import * # has to be last, to wait for others to load up
+

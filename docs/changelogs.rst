@@ -2,6 +2,48 @@
 Changelogs
 ==========
 
+`1.0 </1.0>`_
+---------------
+
+.. currentmodule:: k1lib.cli
+
+Cli:
+
+- Removed :class:`conv.toNumpy`, as ``toList() | aS(np.array)`` does the same thing
+- Added fill mode to :class:`~utils.lookup`
+- Changed :class:`~output.tee` style to be more natural
+- Removed :class:`utils.headerIdx`, as :meth:`~structural.insertIdColumn` roughly does the same thing
+- Removed :class:`init.manyToMany`, replaced with :class:`~modifier.apply` to simplify things
+- Removed unstable :class:`~modifier.op` ``in`` feature and added combined compare ops to it
+- Added bounds comparison to :class:`~modifier.op`, thus removed :class:`filt.inRange`
+- Added ``every`` mode to :class:`~output.tee`.
+- Simplified :class:`~structural.insertColumn`
+- Added :class:`~structural.oneHot`.
+- Restructured expand argument feature in :class:`~modifier.applySerial`
+- Added :mod:`~k1lib.cli.cif` module
+- Removed :mod:`~k1lib.cli.entrez` module, as it doesn't add much value
+- Simplified :class:`~output.file` by removing explicit text/byte mode param
+
+LLVM:
+
+- Added LLVM compiler/optimizer system to cli.
+- Added :mod:`~k1lib.cli.typehint` and :mod:`~k1lib.cli.optimizations` modules
+- Optimizations: :class:`~structural.unsqueeze`, :class:`~kxml.node`, :meth:`~inp.cat`, :class:`~filt.head`
+
+Generic:
+
+- Added library `k1a <https://github.com/157239n/k1a>`_ to speed up certain
+  parts of the main library by compiling things down to C.
+- Added `k1ui <https://github.com/157239n/k1ui>`_ support within k1lib. It's
+  a Java program that can communicate over the network and provides apis to
+  manipulate mouse/keyboard and screens.
+
+.. currentmodule:: k1lib.callbacks
+
+DL:
+
+- Added callback :class:`limits.CancelOnOverfit`
+
 `0.17 </0.17>`_
 ---------------
 

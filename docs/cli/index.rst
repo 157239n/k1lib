@@ -56,6 +56,10 @@ current environment, like this::
 
    from k1lib.imports import *
 
+If you just want clis without other baggage, you can do this::
+
+   from k1lib.cli import *
+
 Because there are a lot of clis, you may sometimes unintentionally overwrite an
 exposed cli tool. No worries, every tool is also under the ``cli`` object, meaning
 you can use ``deref()`` or ``cli.deref()``.
@@ -69,13 +73,14 @@ check over this:
    :maxdepth: 1
 
    streams
+   llvm
 
 All cli tools should work fine with :class:`torch.Tensor`, :class:`numpy.ndarray` and :class:`pandas.core.series.Series`,
 but k1lib actually modifies Numpy arrays and Pandas series deep down for it to work.
-This means that although you can still do normal bitwise or with a numpy float value, and
+This means that you can still do normal bitwise or with a numpy float value, and
 they work fine in all regression tests that I have, but you might encounter strange bugs.
 You can disable it manually by changing :attr:`~k1lib.settings`.startup.or_patch. If you
-chooses to do this, you have to becareful and use these workarounds::
+chooses to do this, you have to be careful and use these workarounds::
 
    # returns (2, 3, 5), works fine
    torch.randn(2, 3, 5) | shape()
@@ -91,18 +96,62 @@ All cli-related settings are at :attr:`~k1lib.settings`.cli.
 Where to start?
 -------------------------
 
-Core clis include :class:`~modifier.apply`, :class:`~modifier.applyS` (its
-multiprocessing cousin :class:`~modifier.applyMp` is great too), :class:`~modifier.op`,
-:class:`~filt.filt`, :class:`~utils.deref`, :class:`~utils.item`, :class:`~utils.shape`,
-:class:`~utils.iden`, :class:`~inp.cmd`, so start reading there first. Then, skim over
-everything to know what you can do with these collection of tools. While you're doing
-that, checkout :meth:`~trace.trace`, for a quite powerful debugging tool.
+Core clis include:
+
+- :class:`~modifier.apply`, :class:`~modifier.aS`, :class:`~modifier.op`, :class:`~grep.grep`
+- :class:`~filt.filt`, :class:`~filt.head`, :class:`~filt.rows`, :class:`~filt.cut`
+- :class:`~utils.deref`, :class:`~utils.item`, :class:`~utils.shape`
+- :class:`~structural.transpose`, :class:`~structural.joinStreams`, :class:`~structural.batched`, :class:`~structural.count`
+- :meth:`~inp.cat`, :meth:`~inp.ls`, :class:`~output.file`, :class:`~output.stdout`
+
+Then other important, not necessarily core clis include:
+
+- :class:`~modifier.applyMp`, :class:`~modifier.sort`, :class:`~modifier.randomize`
+- :class:`~utils.wrapList`, :class:`~utils.ignore`, :class:`~inp.cmd`
+- :class:`~structural.repeat` and friends, :class:`~structural.groupBy`
+
+So, start reading over what these do first, as you can pretty much 95% utilize everything
+the cli workflow has to offer with those alone. Then skim over basic conversions in
+module :mod:`~k1lib.cli.conv`. While you're doing that, checkout :meth:`~trace.trace`,
+for a quite powerful debugging tool.
 
 There are several `written tutorials <../tutorials.html>`_ about cli here, and I
 also made some `video tutorials <https://www.youtube.com/playlist?list=PLP1sw-g877osNI_dMXwR72kVDREeHsYnt>`_
 as well, so go check those out.
 
-You can also just read over the summary below, see what catches your eye and check that cli out.
+For every example in the tutorials that you found, you might find it useful to follow
+the following debugging steps, to see how everything works::
+
+   # assume there's this piece of code:
+   A | B | C | D
+   # do this instead:
+   A | deref()
+   # once you understand it, do this:
+   A | B | deref()
+
+   # assume there's this piece of code:
+   A | B.all() | C
+   # do this instead:
+   A | item() | B | deref()
+   # once you understand it, you can move on:
+   A | B.all() | deref()
+
+   # assume there's this piece of code:
+   A | (B & C)
+   # do this instead:
+   A | B | deref()
+
+   # assume there's this piece of code:
+   A | (B + C)
+   # do these instead:
+   A | deref() | op()[0] | B | deref()
+   A | deref() | op()[1] | C | dereF()
+   # there are alternatives to that:
+   A | item() | B | deref()
+   A | rows(1) | item() | C | deref()
+
+Finally, you can read over the summary below, see what catches your eye and
+check that cli out.
 
 Summary
 -------------------------
@@ -124,18 +173,18 @@ bio module
    :undoc-members:
    :show-inheritance:
 
-conv module
+cif module
 -------------------------
 
-.. automodule:: k1lib.cli.conv
+.. automodule:: k1lib.cli.cif
    :members:
    :undoc-members:
    :show-inheritance:
 
-entrez module
+conv module
 -------------------------
 
-.. automodule:: k1lib.cli.entrez
+.. automodule:: k1lib.cli.conv
    :members:
    :undoc-members:
    :show-inheritance:
@@ -182,9 +231,17 @@ init module
    :show-inheritance:
 
 .. automodule:: k1lib.cli.init
-   :members: serial, oneToMany, manyToMany, mtmS, fastF
+   :members: serial, oneToMany, mtmS, fastF
    :undoc-members:
    :show-inheritance:
+
+   .. attribute:: yieldT
+
+      Object often used as a sentinel, or an identifying token in lots of clis,
+      including
+      that can be yielded in a stream to ignore this stream for the moment in
+      :class:`~k1lib.cli.structural.joinStreamsRandom`, :class:`~k1lib.cli.utils.deref`,
+      :class:`~k1lib.cli.typehint.tCheck` and :class:`~k1lib.cli.typehint.tOpt`
 
 inp module
 -------------------------
@@ -253,12 +310,6 @@ structural module
    :undoc-members:
    :show-inheritance:
 
-   .. attribute:: yieldSentinel
-
-      Object that can be yielded in a stream to ignore this stream for the moment in
-      :class:`joinStreamsRandom`. It will also stops :class:`~k1lib.cli.utils.deref`
-      early.
-
    .. autoclass:: joinStreamsRandom
       :members:
 
@@ -274,6 +325,22 @@ utils module
 -------------------------
 
 .. automodule:: k1lib.cli.utils
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+typehint module
+-------------------------
+
+.. automodule:: k1lib.cli.typehint
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+optimizations module
+-------------------------
+
+.. automodule:: k1lib.cli.optimizations
    :members:
    :undoc-members:
    :show-inheritance:

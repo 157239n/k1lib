@@ -93,12 +93,12 @@ Expected variables in :class:`~k1lib.Learner`:
     def endLoss(self):
         if not self.paused:
             (self.train if self.l.model.training else self.valid).append(self.l.accuracy)
-    def plot(self, f=cli.iden()):
+    def plot(self, _f=cli.iden()):
         """Optional post-processing cli"""
         if not self.hasAccF: raise RuntimeError(accFMsg)
         def plotF(_slice):
             plt.figure(figsize=(10, 3), dpi=100); step = _slice.step or 1
-            f = f | cli.deref()
+            f = _f | cli.deref()
             tR, vR = k1lib.Range.proportionalSlice(len(self.train), len(self.valid), _slice)
             try:
                 plt.subplot(1, 2, 1); plt.plot(tR.range_[::step] | f, 100*self.train[tR.slice_][::step] | f); plt.title(f"Train accuracy")

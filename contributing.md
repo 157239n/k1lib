@@ -12,6 +12,8 @@ upload.sh - script to upload to PyPI
 
 ## Development path
 
+For k1lib:
+
 - Open notebook files and change as necessary
 - Run preconfigured `./export.py` cell at the end of each notebook to extract to `.py` files
 - Run unit/integration/regression tests at `k1lib/tests.ipynb`
@@ -20,9 +22,18 @@ upload.sh - script to upload to PyPI
 - Commit everything to github
 - Commit docs to github (at `~/repos/labs/k1lib.github.io`)
 - Push new release to PyPI using `./upload.sh`
+- Bump version number
+
+For k1a:
+
+- Open c++ files and change as necessary
+- Commit everything to github
+- Push new release to PyPI using `./upload.sh`
+- Bump version number
 
 ## Random notes
 
 So here're some tips so that you can easily develop this further. Not much at the moment, but I just want to note down all of my throughts right away:
 
 - There is an internal settings object at `k1lib._settings`. You can disable bioinformatic tests using it, so that you don't have to install a bunch of dependencies.
+- Remember to sync-edit readme.md and docs/index.rst
