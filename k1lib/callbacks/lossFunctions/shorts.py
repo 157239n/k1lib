@@ -2,7 +2,9 @@
 """For not very complicated loss functions"""
 from ..callbacks import Callback, Callbacks, Cbs
 from typing import Callable, Tuple
-import torch, k1lib, math, torch.nn.functional as F
+import k1lib, math
+try: import torch; import torch.nn.functional as F; hasTorch = True
+except: torch = k1lib.Object().withAutoDeclare(lambda: type("RandomClass", (object, ), {})); hasTorch = False
 __all__ = ["LossF", "LossNLLCross"]
 LossFSig = Callable[[Tuple[torch.Tensor, torch.Tensor]], float]
 @k1lib.patch(Cbs)

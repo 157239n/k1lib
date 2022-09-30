@@ -2,7 +2,9 @@
 """For not very complicated accuracies functions"""
 from ..callbacks import Callback, Callbacks, Cbs
 from typing import Callable, Tuple
-import torch, k1lib
+import k1lib
+try: import torch; hasTorch = True
+except: torch = k1lib.Object().withAutoDeclare(lambda: type("RandomClass", (object, ), {})); hasTorch = False
 __all__ = ["AccF"]
 AccFSig = Callable[[Tuple[torch.Tensor, torch.Tensor]], float]
 PredFSig = Callable[[torch.Tensor], torch.Tensor]

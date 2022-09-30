@@ -3,6 +3,7 @@
 from k1lib.imports import *
 import os
 import sys
+import datetime
 
 """
 To build everything: `./compile.py`
@@ -11,6 +12,12 @@ To build only the docs, skipping the tutorials: `./compile.py 0`
 """
 
 os.system(f"./_compile.sh {k1lib.__version__} {' '.join(sys.argv[1:])}")
+
+# updating LICENSE year
+
+year = datetime.datetime.now().year
+cat("../LICENSE") | deref() | op().replace(
+    f"{year-1}", f"{year}").all() | file("../LICENSE")
 
 links = [
     "https://k1lib.com/latest/index.html",

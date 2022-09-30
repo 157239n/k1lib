@@ -45,7 +45,6 @@ Submodules
 
    k1a
    k1ui
-   kdata
    eqn
    fmt
    graphEqn
@@ -54,6 +53,7 @@ Submodules
    knn
    schedule
    selector
+   serve
    viz
 
 Installation

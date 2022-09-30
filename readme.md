@@ -11,13 +11,7 @@ This cli stuff is quite insane man. You can literally perform extremely complex 
 Just do this:
 
 ```bash
-pip install k1lib[extras]
-```
-
-If you're on Windows, do this:
-
-```bash
-pip install k1lib[extras_windows]
+pip install k1lib[all]
 ```
 
 This will install all extra dependencies, except for `k1a`, which is a supplementary library to accelerate functionalities within this library. If you can't install the optional extra dependencies for some reason then do this:

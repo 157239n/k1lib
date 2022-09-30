@@ -15,6 +15,8 @@ def str_split(s, delim):
             inBlock = False
     answer.append(s[beginI:])
     return answer
+def str_has_number(s):
+    return any([c.isdigit() for c in s])
 _g = globals();
 """py stuff"""
 py = k1lib.Object()
@@ -24,4 +26,9 @@ __all__.append("py")
 try:
     import k1a
     str_split = k1a.str_split
-except: pass
+    str_alpha_numeric = k1a.str_alpha_numeric
+    str_kmers = k1a.str_kmers
+    str_has_number = k1a.str_has_number
+    k1lib._settings.packages.k1a = True
+except:
+    k1lib._settings.packages.k1a = False

@@ -5,31 +5,34 @@ import urllib, subprocess, warnings, os, k1lib, threading
 from k1lib.cli import BaseCli; import k1lib.cli as cli
 from k1lib.cli.typehint import *
 __all__ = ["cat", "curl", "wget", "ls", "cmd", "requireCli"]
-def _catSimple(fileName:str=None, text:bool=True, _all:bool=False) -> Iterator[Union[str, bytes]]:
-    fileName = os.path.expanduser(fileName)
-    if text:
-        if _all:
-            with open(fileName) as f:
-                lines = f.read().splitlines()
-                yield lines
-        else:
-            with open(fileName) as f:
-                while True:
-                    line = f.readline()
-                    if line == "": return
-                    if line[-1] == "\n": yield line[:-1]
-                    else: yield line
-    else:
-        with open(fileName, "rb") as f: yield f.read()
-def _catWrapper(fileName:str, text:bool, _all:bool):
-    res = _catSimple(fileName, text, _all)
-    return res if text and (not _all) else next(res)
+def _catGenText(fileName):
+    with open(fileName) as f:
+        while True:
+            line = f.readline()
+            if line == "": return
+            if line[-1] == "\n": yield line[:-1]
+            else: yield line
+def _catGenBin(fileName):
+    with open(fileName, "rb") as f:
+        yield from 0 | cli.repeat() | cli.applyTh(lambda _: f.read(100000), prefetch=10) | cli.breakIf(lambda x: len(x) == 0)
 class _cat(BaseCli):
-    def __init__(self, text, _all:bool): self.text = text; self._all = _all
-    def _typehint(self, ignored=None): return tIter(str)
+    def __init__(self, text, chunks): self.text = text; self.chunks = chunks
+    def _typehint(self, ignored=None):
+        if self.text: return tIter(str) if self.chunks else tList(str)
+        else: return tIter(bytes) if self.chunks else bytes
     def __ror__(self, fileName:str) -> Union[Iterator[str], bytes]:
-        return _catWrapper(fileName, self.text, self._all)
-def cat(fileName:str=None, text:bool=True, _all=False):
+        text = self.text; chunks = self.chunks; fileName = os.path.expanduser(fileName)
+        if text and chunks and k1lib._settings.packages.k1a:
+            return k1lib._k1a.k1a.StrIterCat(fileName)
+        if text:
+            if chunks: return _catGenText(fileName)
+            else:
+                with open(fileName) as f: return f.read().splitlines()
+        else:
+            if chunks: return _catGenBin(fileName)
+            else:
+                with open(fileName, "rb") as f: return f.read() 
+def cat(fileName:str=None, text:bool=True, chunks:bool=None):
     """Reads a file line by line.
 Example::
 
@@ -40,17 +43,17 @@ Example::
     # recommended to insert a `tOpt()` in the middle and `yieldT` in the end, to do lots of optimizations
     "file.txt" | tOpt() | cat() | headOut() | yieldT
     
-    # rename file
+    # read bytes from an image file and dumps it to another file
     cat("img.png", False) | file("img2.png")
 
 :param fileName: if None, then return a :class:`~k1lib.cli.init.BaseCli`
     that accepts a file name and outputs Iterator[str]
 :param text: if True, read text file, else read binary file
-:param _all: if True, read entire file at once, instead of reading
-    line-by-line. Faster, but uses more memory. Only works with text
-    mode, binary mode always read the entire file"""
-    if fileName is None: return _cat(text, _all)
-    else: return _catWrapper(fileName, text, _all)
+:param chunks: if True then reads the file chunk by chunk, else reads the
+    entire file. Defaults to True in text mode and False in binary mode"""
+    if chunks is None: chunks = True if text else False
+    if fileName is None: return _cat(text, chunks)
+    else: return fileName | _cat(text, chunks)
 def curl(url:str) -> Iterator[str]:
     """Gets file from url. File can't be a binary blob.
 Example::
@@ -203,7 +206,7 @@ Settings:
 pass, then pass None"""
         if not self.ro.done():
             if it != None:
-                if not isinstance(it, (str, bytes)): it = it | cli.toStr() | cli.join("\n")
+                if not isinstance(it, (str, bytes)): it = it | cli.apply(str) | cli.join("\n")
                 if not isinstance(it, bytes): it = it.encode("utf-8")
             self.out, self.err = executeCmd(self.cmd, it, self.text); mode = self.mode
         if self.block:

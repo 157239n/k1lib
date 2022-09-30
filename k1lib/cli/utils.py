@@ -2,11 +2,13 @@
 """
 This is for all short and random quality-of-life utilities."""
 from k1lib.cli.init import patchDefaultDelim, BaseCli, Table, T, yieldT
-import k1lib.cli as cli, numbers, torch, numpy as np, dis
+import k1lib.cli as cli, numbers, numpy as np, dis
 from k1lib.cli.typehint import *
 from typing import overload, Iterator, Any, List, Set, Union, Callable
 import k1lib, time, math, os
 from collections import defaultdict
+try: import torch; hasTorch = True
+except: torch = k1lib.Object().withAutoDeclare(lambda: type("RandomClass", (object, ), {})); hasTorch = False
 __all__ = ["size", "shape", "item", "iden", "join", "wrapList",
            "equals", "reverse", "ignore", "rateLimit", "timeLimit", "tab", "indent",
            "clipboard", "deref", "bindec", "smooth", "disassemble",
@@ -127,7 +129,7 @@ class join(BaseCli):
         super().__init__(); self.delim = patchDefaultDelim(delim)
     def _typehint(self, inp): return str
     def __ror__(self, it:Iterator[str]):
-        return self.delim.join(it | cli.toStr())
+        return self.delim.join(it | cli.apply(str))
 class wrapList(BaseCli):
     def __init__(self):
         """Wraps inputs inside a list. There's a more advanced cli tool
@@ -264,7 +266,9 @@ Example::
         import pyperclip; self.pyperclip = pyperclip
     def _typehint(self, inp): return type(None)
     def __ror__(self, s): self.pyperclip.copy(s)
-settings.atomic.add("deref", (numbers.Number, np.number, str, bool, bytes, torch.nn.Module, k1lib.UValue), "used by deref")
+a = [numbers.Number, np.number, str, bool, bytes, k1lib.UValue]
+if hasTorch: a.append(torch.nn.Module)
+settings.atomic.add("deref", tuple(a), "used by deref")
 Tensor = torch.Tensor; atomic = settings.atomic
 class inv_dereference(BaseCli):
     def __init__(self, igT=False):
@@ -311,7 +315,9 @@ will never try to iterate over it. If you wish to change it, do something like::
     and :class:`numpy.ndarray` internals"""
         super().__init__(); self.igT = igT
         self.maxDepth = maxDepth; self.depth = 0
-        self.arrayType = (torch.Tensor, np.ndarray) if k1lib.settings.startup.or_patch else torch.Tensor
+        if hasTorch:
+            self.arrayType = (torch.Tensor, np.ndarray) if k1lib.settings.startup.or_patch.numpy else torch.Tensor
+        else: self.arrayType = (np.ndarray,) if k1lib.settings.startup.or_patch.numpy else ()
     def _typehint(self, inp, depth=float("inf")):
         if depth == 0: return inp
         if depth == float("inf"): depth = self.maxDepth
@@ -433,7 +439,7 @@ Normal usage::
     print(f"co_flags: {c.co_flags}")
     print(f"co_freevars: {c.co_freevars}")
     print(f"co_kwonlyargcount: {c.co_kwonlyargcount}")
-    print(f"co_lnotab: {c.co_lnotab | cli.toStr() | join(' ')}")
+    print(f"co_lnotab: {c.co_lnotab | cli.apply(str) | join(' ')}")
     print(f"co_name: {c.co_name}")
     print(f"co_names: {c.co_names}")
     print(f"co_nlocals: {c.co_nlocals}")
@@ -457,7 +463,7 @@ strange, so this is mainly for visualization. Example::
 :param ff: optional file filter function
 :param df: optional directory filter function"""
     processFolders = cli.apply(lambda x: [shortName(x), x]) | cli.apply(lambda x: x | tree(fL, dL, depth-1, ff, df) if depth > 0 else [], 1) | cli.transpose() | cli.toDict()
-    a = cli.filt(os.path.isfile) | cli.filt(ff) | cli.head(fL) | cli.apply(shortName) | cli.toSet()
+    a = cli.filt(os.path.isfile) | cli.filt(ff) | cli.head(fL) | cli.apply(shortName) | cli.aS(set)
     b = ~cli.filt(os.path.isfile) | cli.filt(df) | cli.head(dL) | processFolders
     return cli.ls() | ~cli.sortF(os.path.isfile) | (a & b)
 class lookup(BaseCli):

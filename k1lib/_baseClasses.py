@@ -4,8 +4,10 @@
 """
 from typing import Callable, Iterator, Tuple, Union, Dict, Any, List
 from k1lib import isNumeric; import k1lib, contextlib, warnings
-import random, torch, math, sys, io, os, numpy as np
+import random, math, sys, io, os, numpy as np
 import matplotlib.pyplot as plt
+try: import torch; hasTorch = True
+except: hasTorch = False
 __all__ = ["Object", "Range", "Domain", "AutoIncrement", "Wrapper", "Every",
            "RunOnce", "MaxDepth", "MovingAvg", "Absorber",
            "Settings", "settings", "_settings", "UValue"]
@@ -302,6 +304,25 @@ together.
         if r.stop >= nr.start:
             r = r.copy(); r.stop = max(r.stop, nr.stop)
         else: yield r; r = nr
+def intersect(r1s:Iterator[Range], r2s:Iterator[Range]):
+    """Intersects 2 :class:`Range` generators, so that it only
+returns overlaping regions"""
+    r1s = iter(r1s); r2s = iter(r2s)
+    r1 = next(r1s, None)
+    if r1 is None: return
+    r2 = next(r2s, None)
+    if r2 is None: return
+    while True:
+        if True: # doesn't intersect at all
+            a = max(r1.start, r2.start)
+            b = min(r1.stop, r2.stop)
+            if a < b: yield Range(a, b)
+            if r1.stop > r2.stop: # loads next r2
+                r2 = next(r2s, None)
+                if r2 is None: return
+            else: # loads next r1
+                r1 = next(r1s, None)
+                if r1 is None: return
 def neg(rs:List[Range]):
     """Returns R - rs, where R is the set of real numbers."""
     rs = iter(rs); r = next(rs, None)
@@ -335,6 +356,7 @@ You can also do arithmetic on them, and check "in" oeprator::
 
     Domain([2, 3]) + Domain([4, 5]) # represents "[2, 3) U [4, 5)"
     Domain([2, 3]) + Domain([2.9, 5]) # represents "[2, 5)", also merges overlaps
+    Domain([2, 3]) & Domain([2.5, 5]) # represents "[2, 3) A [2.5, 5)", or "[2.5, 3)"
     3 in Domain([2, 3]) # returns False
     2 in Domain([2, 3]) # returns True"""
         if dontCheck: self.ranges = list(ranges); return
@@ -359,6 +381,7 @@ is :math:`(-\inf, a)`, then starts at the specified integer"""
     def __neg__(self): return Domain(*neg(self.ranges), dontCheck=True)
     def __add__(self, domain): return Domain(*(r.copy() for r in join(self.ranges, domain.ranges)), dontCheck=True)
     def __sub__(self, domain): return self + (-domain)
+    def __and__(self, domain): return Domain(*intersect(self.ranges, domain.ranges), dontCheck=True)
     def __eq__(self, domain): return self.ranges == domain.ranges
     def __str__(self): return f"Domain: {', '.join(r for r in self.ranges)}"
     def __contains__(self, x): return any(x in r for r in self.ranges)
@@ -366,9 +389,10 @@ is :math:`(-\inf, a)`, then starts at the specified integer"""
         rs = '\n'.join(f"- {r}" for r in self.ranges)
         return f"""Domain:\n{rs}\n\nCan:
 - 3 in d: check whether a number is in this domain or not
-- d1 + d2: joins 2 domain
+- d1 + d2: joins 2 domains
 - -d: excludes the domain from R
-- d1 - d2: same as d1 + (-d2)"""
+- d1 - d2: same as d1 + (-d2)
+- d1 & d2: intersects 2 domains"""
 class AutoIncrement:
     def __init__(self, initialValue:int=-1, n:int=float("inf"), prefix:str=None):
         """Creates a new AutoIncrement object. Every time the object is called
@@ -844,6 +868,7 @@ documentation for the variable. Example::
             s += f"- {k.ljust(kSpace)} = <Settings>{sep}{self._docsOf(k)}\n" + sub + "\n"
         return s.split("\n") | k1lib.cli.op().split(sep).all() | k1lib.cli.pretty(sep) | k1lib.cli.join("\n")
 _settings = Settings().add("test", Settings().add("bio", True, "whether to test bioinformatics clis that involve strange command line tools like samtools and bwa"))
+_settings.add("packages", Settings(), "which package is available to use?")
 settings = Settings().add("displayCutoff", 50, "cutoff length when displaying a Settings object")
 settings.add("svgScale", 0.7, "default svg scales for clis that displays graphviz graphs")
 def _cb_wd(s, p):
@@ -853,8 +878,13 @@ def oschdir(path): settings.wd = path
 _oschdir = os.chdir; os.chdir = oschdir; os.chdir.__doc__ = _oschdir.__doc__
 settings.add("wd", os.getcwd(), "default working directory, will get from `os.getcwd()`. Will update using `os.chdir()` automatically when changed", _cb_wd)
 settings.add("cancelRun_newLine", True, "whether to add a new line character at the end of the cancel run/epoch/batch message")
-startup = Settings().add("or_patch", True, "whether to patch __or__() method from numpy array and pandas data frame and series. This would make cli operations with them a lot more pleasant, but might cause strange bugs. Haven't met them myself though")
+or_patch = Settings()\
+    .add("numpy", True, "whether to patch numpy arrays")\
+    .add("dict", True, "whether to patch Python dict keys and items")\
+    .add("pandas", True, "whether to patch pandas series")
+startup = Settings().add("or_patch", or_patch, "whether to patch __or__() method for several C-extension datatypes (numpy array, pandas data frame/series, etc). This would make cli operations with them a lot more pleasant, but might cause strange bugs. Haven't met them myself though")
 settings.add("startup", startup, "these settings have to be applied like this: `import k1lib; k1lib.settings.startup.or_patch = False; from k1lib.imports import *` to ensure that the values are set")
+settings.add("pushNotificationKey", os.getenv("k1lib_pushNotificationKey", None), "API key for `k1lib.pushNotification()`. See docs of that for more info")
 def sign(v): return 1 if v > 0 else -1
 def roundOff(a, b):
     m = (a + b) / 2
@@ -877,10 +907,11 @@ def removeOutliers(t, fraction=0.01):
     b = int(len(t)*fraction/2)
     return t.sort().values[b:-b]
 def _US(v): return [*v] if isinstance(v, UValue) else [v, 0]
-class UValue:
-    _unit = torch.randn(2, 5, 100000)
-    def __init__(self, mean=0, std=1):
-        """Creates a new "uncertain value", which has a mean and a standard
+if hasTorch:
+    class UValue:
+        _unit = torch.randn(2, 5, 100000)
+        def __init__(self, mean=0, std=1):
+            """Creates a new "uncertain value", which has a mean and a standard
 deviation. You can then do math operations on them as normal, and the
 propagation errors will be automatically calculated for you. Make sure to
 run the calculation multiple times as the mean and std values fluctuates by
@@ -917,15 +948,15 @@ There are several caveats however:
 
     First is the problem of theoretically vs actually sample a
     distribution. Let's see an example::
-    
+
         # returns theoretical value UValue(mean=8000.0, std=1200.0) -> 8000.0 ± 1200.0
         k1lib.UValue(20) ** 3
         # prints out actual mean and std value of (8064.1030, 1204.3529)
         a = k1lib.UValue(20).sample() ** 3
         print(a.mean(), a.std())
-    
+
     So far so good. However, let's create some uncertainty in "3"::
-    
+
         # returns theoretical value UValue(mean=8000.0, std=23996.0) -> 10000.0 ± 20000.0
         k1lib.UValue(20) ** k1lib.UValue(3)
         # prints out actual mean and std value of (815302.8750, 27068828.), but is very unstable and changes a lot
@@ -949,14 +980,14 @@ There are several caveats however:
     go with the mean and std, sample a bunch of values from there and calculate
     ``a+3`` mean and std. Rinse and repeat. This means that these 2 statements
     may differ by a lot::
-    
+
         # prints out (0.15867302766786406, 0.12413313456900205)
         x = np.linspace(-3, 3, 1000); sq = (abs(x)-0.5)**2; y = sq*np.exp(-sq)
         print(y.mean(), y.std())
 
         # returns UValue(mean=0.081577, std=0.32757) -> 0.1 ± 0.3
         x = k1lib.UValue(0, 1); sq = (abs(x)-0.5)**2; y = sq*(-sq).f(np.exp)
-    
+
     Why this weird function? It converts from a single nice hump into multiple
     complex humps. Anyway, this serves to demonstrate that the result from the
     ``calculate -> get mean, std -> sample from new distribution -> calculate``
@@ -967,95 +998,95 @@ There are several caveats however:
 
     Lastly, you might have problems when using the same UValue multiple times in
     an expression::
-    
+
         a = UValue(10, 1)
         a * 2 # has mean 20, std 2
         a + a # has mean 20, std 1.4"""
-        if isinstance(mean, torch.Tensor): mean = mean.item()
-        if isinstance(std, torch.Tensor): std = std.item()
-        self.mean = mean; self.std = std
-    @staticmethod
-    def _sample(mean, std, n=None, _class=0):
-        t = UValue._unit[_class, random.randint(0, 4)]
-        if n is not None: t = t[:n]
-        return t * std + mean
-    def sample(self, n=100, _class=0):
-        """Gets a sample :class:`torch.Tensor` representative of this
-uncertain value. Example::
+            if isinstance(mean, torch.Tensor): mean = mean.item()
+            if isinstance(std, torch.Tensor): std = std.item()
+            self.mean = mean; self.std = std
+        @staticmethod
+        def _sample(mean, std, n=None, _class=0):
+            t = UValue._unit[_class, random.randint(0, 4)]
+            if n is not None: t = t[:n]
+            return t * std + mean
+        def sample(self, n=100, _class=0):
+            """Gets a sample :class:`np.ndarray` representative of this
+    uncertain value. Example::
 
-    # returns tensor([-5.1095,  3.3117, -2.5759,  ..., -2.5810, -1.8131,  1.8339])
-    (k1lib.UValue() * 5).sample()"""
-        return UValue._sample(*self, n, _class)
-    @staticmethod
-    def fromSeries(series, unbiased=True):
-        """Creates a :class:`UValue` from a bunch of numbers
+        # returns tensor([-5.1095,  3.3117, -2.5759,  ..., -2.5810, -1.8131,  1.8339])
+        (k1lib.UValue() * 5).sample()"""
+            return UValue._sample(*self, n, _class)
+        @staticmethod
+        def fromSeries(series, unbiased=True):
+            """Creates a :class:`UValue` from a bunch of numbers
 
 :param series: can be a list of numbers, numpy array or PyTorch tensor
 :param unbiased: if True, Bessel’s correction will be used"""
-        if isinstance(series, np.ndarray):
-            series = torch.tensor(series)
-        elif not isinstance(series, torch.Tensor):
-            series = torch.tensor(list(series))
-        series = series * 1.0
-        return UValue(series.mean(), series.std(unbiased=unbiased))
-    @staticmethod
-    def fromBounds(min_, max_):
-        """Creates a :class:`UValue` from min and max values.
+            if isinstance(series, np.ndarray):
+                series = torch.tensor(series)
+            elif not isinstance(series, torch.Tensor):
+                series = torch.tensor(list(series))
+            series = series * 1.0
+            return UValue(series.mean(), series.std(unbiased=unbiased))
+        @staticmethod
+        def fromBounds(min_, max_):
+            """Creates a :class:`UValue` from min and max values.
 Example::
 
     # returns UValue(mean=2.5, std=0.5)
     k1lib.UValue.fromBounds(2, 3)"""
-        mid = (min_ + max_)/2
-        return k1lib.UValue(mid, abs(max_-mid))
-    def __iter__(self): yield self.mean; yield self.std
-    def _niceValue(self, v, _class=0):
-        if isinstance(v, UValue): return [UValue._sample(*v, None, _class), UValue._sample(*v, None, _class)]
-        return [UValue._sample(v, 0, None, _class), UValue._sample(v, 0, None, _class)]
-    def _postProcess(self, c1, c2):
-        if c1.hasNan() or c2.hasNan():
-            warnings.warn("Calculations has NaN values. They will be replaced with 0, which can affect accuracy of mean and std calculations")
-            c1.clearNan(); c2.clearNan()
-        c1 = removeOutliers(c1); c2 = removeOutliers(c2);
-        return UValue(roundOff(c1.mean().item(), c2.mean().item()), roundOff(c1.std().item(), c2.std().item()))
-    @property
-    def exact(self):
-        """Whether this UValue is exact or not"""
-        return self.std == 0
-    @staticmethod
-    def _isValueExact(v):
-        if isinstance(v, UValue): return v.exact
-        try: len(v); return False
-        except: return True
-    @staticmethod
-    def _value(v): # gets mean value
-        if isinstance(v, UValue): return v.mean
-        try: len(v); raise RuntimeError("Can't convert a series into an exact value")
-        except: return v
-    def test(self, v):
-        """Returns how many sigma a particular value is."""
-        return (v-self.mean)/self.std
-    def f(self, func):
-        """Covered in :meth:`__init__` docs"""
-        if self.exact: return UValue(func(self.mean), 0)
-        f = func; a1, a2 = self._niceValue(self)
-        try: return self._postProcess(f(a1), f(a2))
-        except:
-            f = lambda xs: torch.tensor([func(x) for x in xs[:10000]])
-            return self._postProcess(f(a1), f(a2))
-    def bounds(self):
-        """Returns (mean-std, mean+std)"""
-        return self.mean - self.std, self.mean + self.std
-    def _op2(self, func, a, b):
-        if UValue._isValueExact(a) and UValue._isValueExact(b):
-            return UValue(func(UValue._value(a), UValue._value(b)), 0)
-        f = func; a1, a2 = self._niceValue(a, 0); b1, b2 = self._niceValue(b, 1)
-        try: return self._postProcess(f(a1, b1), f(a2, b2))
-        except:
-            f = lambda xs, ys: torch.tensor([func(x, y).item() for x, y in zip(xs[:10000], ys[:10000])])
-            return self._postProcess(f(a1, b1), f(a2, b2))
-    @staticmethod
-    def combine(*values, samples=1000):
-        """Combines multiple UValues into 1.
+            mid = (min_ + max_)/2
+            return k1lib.UValue(mid, abs(max_-mid))
+        def __iter__(self): yield self.mean; yield self.std
+        def _niceValue(self, v, _class=0):
+            if isinstance(v, UValue): return [UValue._sample(*v, None, _class), UValue._sample(*v, None, _class)]
+            return [UValue._sample(v, 0, None, _class), UValue._sample(v, 0, None, _class)]
+        def _postProcess(self, c1, c2):
+            if c1.hasNan() or c2.hasNan():
+                warnings.warn("Calculations has NaN values. They will be replaced with 0, which can affect accuracy of mean and std calculations")
+                c1.clearNan(); c2.clearNan()
+            c1 = removeOutliers(c1); c2 = removeOutliers(c2);
+            return UValue(roundOff(c1.mean().item(), c2.mean().item()), roundOff(c1.std().item(), c2.std().item()))
+        @property
+        def exact(self):
+            """Whether this UValue is exact or not"""
+            return self.std == 0
+        @staticmethod
+        def _isValueExact(v):
+            if isinstance(v, UValue): return v.exact
+            try: len(v); return False
+            except: return True
+        @staticmethod
+        def _value(v): # gets mean value
+            if isinstance(v, UValue): return v.mean
+            try: len(v); raise RuntimeError("Can't convert a series into an exact value")
+            except: return v
+        def test(self, v):
+            """Returns how many sigma a particular value is."""
+            return (v-self.mean)/self.std
+        def f(self, func):
+            """Covered in :meth:`__init__` docs"""
+            if self.exact: return UValue(func(self.mean), 0)
+            f = func; a1, a2 = self._niceValue(self)
+            try: return self._postProcess(f(a1), f(a2))
+            except:
+                f = lambda xs: torch.tensor([func(x) for x in xs[:10000]])
+                return self._postProcess(f(a1), f(a2))
+        def bounds(self):
+            """Returns (mean-std, mean+std)"""
+            return self.mean - self.std, self.mean + self.std
+        def _op2(self, func, a, b):
+            if UValue._isValueExact(a) and UValue._isValueExact(b):
+                return UValue(func(UValue._value(a), UValue._value(b)), 0)
+            f = func; a1, a2 = self._niceValue(a, 0); b1, b2 = self._niceValue(b, 1)
+            try: return self._postProcess(f(a1, b1), f(a2, b2))
+            except:
+                f = lambda xs, ys: torch.tensor([func(x, y).item() for x, y in zip(xs[:10000], ys[:10000])])
+                return self._postProcess(f(a1, b1), f(a2, b2))
+        @staticmethod
+        def combine(*values, samples=1000):
+            """Combines multiple UValues into 1.
 Example::
 
     a = k1lib.UValue(5, 1)
@@ -1071,46 +1102,50 @@ will not actually reflect the action of combining UValues together::
 
     # returns 6.0 ± 0.7, which is narrower than expected
     (a + b) / 2"""
-        if len(values) == 0: return ~k1lib.cli.aS(UValue.combine)
-        return UValue.fromSeries(torch.cat([v.sample(1000) for v in values]))
-    def __add__(self, v):
-        m1, s1 = _US(self); m2, s2 = _US(v)
-        return UValue(m1+m2, math.sqrt(s1**2 + s2**2))
-        return self._op2(lambda a, b: a+b, v, self) # representative of how this would work stochastically
-    def __radd__(self, v):
-        m1, s1 = _US(self); m2, s2 = _US(v)
-        return UValue(m1+m2, math.sqrt(s1**2 + s2**2))
-    def __sub__(self, v):
-        m1, s1 = _US(self); m2, s2 = _US(v)
-        return UValue(m1-m2, math.sqrt(s1**2 + s2**2))
-    def __rsub__(self, v):
-        m1, s1 = _US(self); m2, s2 = _US(v)
-        return UValue(m2-m1, math.sqrt(s1**2 + s2**2))
-    def __mul__(self, v):
-        m1, s1 = _US(self); m2, s2 = _US(v)
-        return UValue(m1*m2, math.sqrt(m2**2*s1**2 + m1**2*s2**2))
-    def __rmul__(self, v):
-        m1, s1 = _US(self); m2, s2 = _US(v)
-        return UValue(m1*m2, math.sqrt(m2**2*s1**2 + m1**2*s2**2))
-    def __truediv__(self, v):
-        m1, s1 = _US(self); m2, s2 = _US(v)
-        return UValue(m1/m2, math.sqrt(1/m2**2*s1**2 + m1**2/m2**4*s2**2))
-    def __rtruediv__(self, v):
-        m1, s1 = _US(v); m2, s2 = _US(self)
-        return UValue(m1/m2, math.sqrt(1/m2**2*s1**2 + m1**2/m2**4*s2**2))
-    def __pow__(self, v):
-        m1, s1 = _US(self); m2, s2 = _US(v); m = m1**m2
-        return UValue(m, math.sqrt((m2*m/m1)**2*s1**2 + (math.log(m1)*m)**2*s2**2))
-    def __rpow__(self, v):
-        m1, s1 = _US(v); m2, s2 = _US(self); m = m1**m2
-        return UValue(m, math.sqrt((m2*m/m1)**2*s1**2 + (math.log(m1)*m)**2*s2**2))
-    def __abs__(self): return self.f(lambda a: abs(a)) # can't convert to pure math that makes sense
-    def __neg__(self): return 0 - self
-    def __repr__(self):
-        mean, std = niceUS(self.mean, self.std)
-        return f"UValue(mean={toPrecision(self.mean, 5)}, std={toPrecision(self.std, 5)}) -> {mean} ± {std}"
-    def plot(self, name=None):
-        """Quickly plots a histogram of the distribution.
+            if len(values) == 0: return ~k1lib.cli.aS(UValue.combine)
+            return UValue.fromSeries(torch.cat([v.sample(1000) for v in values]))
+        def __add__(self, v):
+            m1, s1 = _US(self); m2, s2 = _US(v)
+            return UValue(m1+m2, math.sqrt(s1**2 + s2**2))
+            return self._op2(lambda a, b: a+b, v, self) # representative of how this would work stochastically
+        def __radd__(self, v):
+            m1, s1 = _US(self); m2, s2 = _US(v)
+            return UValue(m1+m2, math.sqrt(s1**2 + s2**2))
+        def __sub__(self, v):
+            m1, s1 = _US(self); m2, s2 = _US(v)
+            return UValue(m1-m2, math.sqrt(s1**2 + s2**2))
+        def __rsub__(self, v):
+            m1, s1 = _US(self); m2, s2 = _US(v)
+            return UValue(m2-m1, math.sqrt(s1**2 + s2**2))
+        def __mul__(self, v):
+            m1, s1 = _US(self); m2, s2 = _US(v)
+            return UValue(m1*m2, math.sqrt(m2**2*s1**2 + m1**2*s2**2))
+        def __rmul__(self, v):
+            m1, s1 = _US(self); m2, s2 = _US(v)
+            return UValue(m1*m2, math.sqrt(m2**2*s1**2 + m1**2*s2**2))
+        def __truediv__(self, v):
+            m1, s1 = _US(self); m2, s2 = _US(v)
+            return UValue(m1/m2, math.sqrt(1/m2**2*s1**2 + m1**2/m2**4*s2**2))
+        def __rtruediv__(self, v):
+            m1, s1 = _US(v); m2, s2 = _US(self)
+            return UValue(m1/m2, math.sqrt(1/m2**2*s1**2 + m1**2/m2**4*s2**2))
+        def __pow__(self, v):
+            m1, s1 = _US(self); m2, s2 = _US(v); m = m1**m2
+            return UValue(m, math.sqrt((m2*m/m1)**2*s1**2 + (math.log(m1)*m)**2*s2**2))
+        def __rpow__(self, v):
+            m1, s1 = _US(v); m2, s2 = _US(self); m = m1**m2
+            return UValue(m, math.sqrt((m2*m/m1)**2*s1**2 + (math.log(m1)*m)**2*s2**2))
+        def __abs__(self): return self.f(lambda a: abs(a)) # can't convert to pure math that makes sense
+        def __neg__(self): return 0 - self
+        def __repr__(self):
+            mean, std = niceUS(self.mean, self.std)
+            return f"UValue(mean={toPrecision(self.mean, 5)}, std={toPrecision(self.std, 5)}) -> {mean} ± {std}"
+        def plot(self, name=None):
+            """Quickly plots a histogram of the distribution.
 Possible to plot multiple histograms in 1 plot."""
-        plt.hist(self.sample(None).numpy(), bins=100, alpha=0.7, label=name)
-        if name != None: plt.legend()
+            plt.hist(self.sample(None).numpy(), bins=100, alpha=0.7, label=name)
+            if name != None: plt.legend()
+else:
+    class UValue:
+        def __init__(self):
+            return NotImplemented

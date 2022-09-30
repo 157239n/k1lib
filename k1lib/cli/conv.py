@@ -12,35 +12,19 @@ can always use the function directly if you only want to apply it on 1 object.
 If it sounds complicated (convert to PIL image, tensor, ...) then most likely it will
 convert object to object. Lastly, there are some that just feels right to input
 an iterator and output a single object (like getting max, min, std, mean values)."""
-__all__ = ["toStr", "toTensor", "toList", "toSet", "toIter", "toRange",
+__all__ = ["toTensor", "toRange", "toList",
            "toSum", "toProd", "toAvg", "toMean", "toMax", "toMin", "toPIL", "toImg",
-           "toRgb", "toRgba", "toBin", "toIdx", "toDict", "toDictF",
-           "toFloat", "toInt"]
-import re, k1lib, torch, math, os, numpy as np
+           "toRgb", "toRgba", "toGray", "toDict",
+           "toFloat", "toInt", "toBytes"]
+import re, k1lib, math, os, numpy as np, io, base64
 from k1lib.cli.init import BaseCli, Table, Row, T, yieldT; import k1lib.cli as cli
-from k1lib.cli.typehint import *
+from k1lib.cli.typehint import *; import matplotlib as mpl; import matplotlib.pyplot as plt
 from collections import deque; from typing import Iterator, Any, List, Set, Tuple, Dict, Callable, Union
 settings = k1lib.settings.cli
-class toStr(BaseCli):
-    def __init__(self, column:int=None):
-        """Converts every line to a string.
-Example::
-
-    # returns ['2', 'a']
-    [2, "a"] | toStr() | deref()
-    # returns [[2, 'a'], [3, '5']]
-    assert [[2, "a"], [3, 5]] | toStr(1) | deref()"""
-        super().__init__(); self.column = column
-    def _typehint(self, inp):
-        if self.column is None: return tIter(str)
-        return tAny()
-    def __ror__(self, it:Iterator[str]):
-        c = self.column
-        if c is None:
-            for line in it: yield str(line)
-        else:
-            for row in it:
-                yield [e if i != c else str(e) for i, e in enumerate(row)]
+try: import PIL; hasPIL = True
+except: hasPIL = False
+try: import torch; hasTorch = True
+except: torch = k1lib.Object().withAutoDeclare(lambda: type("RandomClass", (object, ), {})); hasTorch = False
 class toTensor(BaseCli):
     def __init__(self, dtype=torch.float32):
         """Converts generator to :class:`torch.Tensor`. Essentially
@@ -59,29 +43,19 @@ and return."""
                 img = img.view(pic.size[1], pic.size[0], len(pic.getbands()))
                 return img.permute((2, 0, 1)).contiguous().to(self.dtype) # put it from HWC to CHW format
         except: pass
+        if isinstance(it, np.ndarray): return torch.tensor(it).to(self.dtype)
         return torch.tensor(list(it)).to(self.dtype)
-class toList(BaseCli):
+class toList(BaseCli): # this still exists cause some LLVM optimizations are done on this, and too tired to change that at the moment
     def __init__(self):
         """Converts generator to list. :class:`list` would do the
 same, but this is just to maintain the style"""
         super().__init__()
+
     def _typehint(self, inp):
         if isinstance(inp, tListIterSet): return tList(inp.child)
         if isinstance(inp, tCollection): return inp
         return tList(tAny())
     def __ror__(self, it:Iterator[Any]) -> List[Any]: return list(it)
-class toSet(BaseCli):
-    def __init__(self):
-        """Converts generator to set. :class:`set` would do the
-same, but this is just to maintain the style"""
-        super().__init__()
-    def __ror__(self, it:Iterator[T]) -> Set[T]: return set(it)
-class toIter(BaseCli):
-    def __init__(self):
-        """Converts object to iterator. `iter()` would do the
-same, but this is just to maintain the style"""
-        super().__init__()
-    def __ror__(self, it:List[T]) -> Iterator[T]: return iter(it)
 def _toRange(it):
     for i, _ in enumerate(it): yield i
 class toRange(BaseCli):
@@ -91,9 +65,6 @@ class toRange(BaseCli):
     def __ror__(self, it:Iterator[Any]) -> Iterator[int]:
         try: return range(len(it))
         except: return _toRange(it)
-tOpt.addPass(lambda cs, ts, _: [cs[0]], [toList, toList])
-tOpt.addPass(lambda cs, ts, _: [cs[0]], [toIter, toIter])
-tOpt.addPass(lambda cs, ts, _: [cs[0]], [toSet, toSet])
 tOpt.addPass(lambda cs, ts, _: [cs[0]], [toRange, toRange])
 settings.add("arrayTypes", (torch.Tensor, np.ndarray), "default array types used to accelerate clis")
 def genericTypeHint(inp):
@@ -172,17 +143,62 @@ Example::
     def __ror__(self, it:Iterator[float]) -> float:
         if isinstance(it, settings.arrayTypes): return it.min()
         return min(it)
+settings.add("font", None, "default font file. Best to use .ttf files")
+def cropToContent(im, pad=10):
+    coords = np.argwhere(im.max()-im); x_min, y_min = coords.min(axis=0)
+    x_max, y_max = coords.max(axis=0); return im[x_min-pad:x_max+1+pad, y_min-pad:y_max+1+pad]
 class toPIL(BaseCli):
     def __init__(self):
-        """Converts a path to a PIL image.
+        """Converts multiple data types into a PIL image.
 Example::
 
-    ls(".") | toPIL().all() | item() # get first image"""
+    # grabs first image in the current folder
+    ls(".") | toPIL().all() | item()
+    # converts from tensor/array to image
+    torch.randn(100, 200) | toPIL()
+    # grabs image, converts to byte stream, and converts back to image
+    "abc.jpg" | toPIL() | toBytes() | toPIL()
+    # converts paragraphs to image
+    ["abc", "def"] | toPIL()
+
+You can also save a matplotlib figure by piping in a :class:`matplotlib.figure.Figure` object::
+
+    x = np.linspace(0, 4)
+    plt.plot(x, x**2)
+    plt.gcf() | toPIL()
+
+.. note::
+    
+    If you are working with image tensors, which is typically have
+    dimensions of (C, H, W), you have to permute it to PIL's (H, W, C)
+    first before passing it into this cli.
+    
+    Also it's expected that
+    your tensor image ranges from 0-255, and not 0-1. Make sure you
+    renormalize it"""
         import PIL; self.PIL = PIL
     def _typehint(self, inp):
         return PIL.Image.Image
     def __ror__(self, path) -> "PIL.Image.Image":
-        return self.PIL.Image.open(os.path.expanduser(path))
+        if isinstance(path, str):
+            return self.PIL.Image.open(os.path.expanduser(path))
+        if isinstance(path, bytes):
+            return self.PIL.Image.open(io.BytesIO(path))
+        if isinstance(path, torch.Tensor): path = path.numpy()
+        if isinstance(path, np.ndarray):
+            return self.PIL.Image.fromarray(path.astype("uint8"))
+        if isinstance(path, mpl.figure.Figure):
+            canvas = path.canvas; canvas.draw()
+            return self.PIL.Image.frombytes('RGB', canvas.get_width_height(), canvas.tostring_rgb())
+        path = path | cli.deref()
+        if len(path) > 0 and isinstance(path[0], str):
+            from PIL import ImageDraw
+            h = path | cli.shape(0); w = path | cli.shape(0).all() | cli.aS(max)
+            image = self.PIL.Image.new("L", (w*20, h*40), 255)
+            font = PIL.ImageFont.truetype(settings.font, 18) if settings.font else None
+            ImageDraw.Draw(image).text((20, 20), path | cli.join("\n"), 0, font=font)
+            return image | cli.toTensor() | cli.op().numpy()[0]/255 | cli.aS(cropToContent) | cli.op()*255 | toImg()
+        return NotImplemented
 toImg = toPIL
 class toRgb(BaseCli):
     def __init__(self):
@@ -208,26 +224,17 @@ Example::
     def __ror__(self, i):
         rgbI = self.PIL.Image.new("RGBA", i.size)
         rgbI.paste(i); return rgbI
-class toBin(BaseCli):
+class toGray(BaseCli):
     def __init__(self):
-        """Converts integer to binary string.
+        """Converts random PIL image to a grayscale image.
 Example::
 
-    # returns "101"
-    5 | toBin()"""
-        super().__init__()
-    def __ror__(self, it): return bin(int(it))[2:]
-class toIdx(BaseCli):
-    def __init__(self, chars:str):
-        """Get index of characters according to a reference.
-Example::
-
-    # returns [1, 4, 4, 8]
-    "#&&*" | toIdx("!#$%&'()*+") | deref()"""
-        self.chars = {v:k for k, v in enumerate(chars)}
-    def __ror__(self, it):
-        chars = self.chars
-        for e in it: yield chars[e]
+    # reads image file and converts it to rgba
+    "a.png" | toPIL() | toGray()"""
+        import PIL; self.PIL = PIL
+    def _typehint(self, inp): return inp
+    def __ror__(self, i):
+        return self.PIL.ImageOps.grayscale(i)
 class toDict(BaseCli):
     def __init__(self):
         """Converts 2 Iterators, 1 key, 1 value into a dictionary.
@@ -238,20 +245,6 @@ Example::
         pass
     def __ror__(self, it:Tuple[Iterator[T], Iterator[T]]) -> dict:
         return {_k:_v for _k, _v in zip(*it)}
-class toDictF(BaseCli):
-    def __init__(self, keyF:Callable[[Any], str]=None, valueF:Callable[[Any], Any]=None):
-        """Transform an incoming stream into a dict using a function for
-values. Example::
-
-    names = ["wanda", "vision", "loki", "mobius"]
-    names | toDictF(valueF=lambda s: len(s)) # will return {"wanda": 5, "vision": 6, ...}
-    names | toDictF(lambda s: s.title(), lambda s: len(s)) # will return {"Wanda": 5, "Vision": 6, ...}
-"""
-        super().__init__(fs=[keyF, valueF]); self.keyF = keyF or (lambda s: s)
-        self.valueF = valueF or (lambda s: s)
-    def __ror__(self, keys:Iterator[Any]) -> Dict[Any, Any]:
-        keyF = self.keyF; valueF = self.valueF
-        return {keyF(key):valueF(key) for key in keys}
 def _toop(toOp, c, force, defaultValue):
     return cli.apply(toOp, c) | (cli.apply(lambda x: x or defaultValue, c) if force else cli.filt(cli.op() != None, c))
 def _toFloat(e) -> Union[float, None]:
@@ -321,3 +314,22 @@ See also: :meth:`toFloat`"""
             if mode == 0: return it | cli.apply(int)
             return it | _toop(_toInt, None, mode == 1, 0.0)
         else: return it | cli.init.serial(*(_toop(_toInt, c, mode == 1, 0.0) for c in columns))
+class toBytes(BaseCli):
+    def __init__(self):
+        """Converts several object types to bytes.
+Example::
+
+    # converts string to bytes
+    "abc" | toBytes()
+    # converts image to base64 bytes
+    torch.randn(200, 100) | toImg() | toBytes()"""
+        pass
+    def __ror__(self, it):
+        if isinstance(it, str): return it.encode()
+        if hasPIL:
+            if isinstance(it, PIL.Image.Image):
+                it = it | toRgb()
+                buffered = io.BytesIO()
+                it.save(buffered, format="JPEG")
+                return buffered.getvalue()
+        return NotImplemented

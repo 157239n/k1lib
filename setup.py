@@ -11,7 +11,7 @@ except:
     md = ""
 
 deps = ["graphviz", "torchvision", "pillow",
-        "scikit-image", "pyperclip", "forbiddenfruit"]
+        "scikit-image", "pyperclip", "k1a>=1.1,<2", "torch"]
 
 setup(
     name="k1lib",
@@ -19,14 +19,14 @@ setup(
               "k1lib.cli",
               "k1lib.callbacks", "k1lib.callbacks.profilers",
               "k1lib.callbacks.lossFunctions",
-              "k1lib._mo"],
-    version="1.0",
+              "k1lib._mo", "k1lib.serve"],
+    data_files=[('k1lib/serve', ['k1lib/serve/main.html'])],
+    version="1.1",
     python_requires='>=3.7',
-    install_requires=["torch", "numpy>=1.14", "matplotlib>=2.0", "dill"],
-    extras_require={"extras": [
-        *deps, "k1a>=1.0.1,<2"], "extras_windows": deps},
+    install_requires=["numpy>=1.14", "matplotlib>=2.0", "dill", "forbiddenfruit"],
+    extras_require={"all": deps},
     description="Some nice ML overhaul",
-    url="https://github.com/157239n/k1lib",
+    url="https://k1lib.com",
     author="Quang Ho",
     author_email="157239q@gmail.com",
     long_description=md,

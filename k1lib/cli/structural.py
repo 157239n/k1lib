@@ -7,14 +7,16 @@ from typing import List, Union, Iterator, Callable, Any, Tuple, Dict
 from collections import defaultdict, Counter, deque
 from k1lib.cli.init import patchDefaultDelim, BaseCli, oneToMany, T, Table, fastF, yieldT
 import k1lib.cli as cli; from k1lib.cli.typehint import *
-import itertools, numpy as np, torch, k1lib
-__all__ = ["transpose", "reshape", "insert", "splitW",
+import itertools, numpy as np, k1lib
+try: import torch; hasTorch = True
+except: torch = k1lib.Object().withAutoDeclare(lambda: type("RandomClass", (object, ), {})); hasTorch = True
+__all__ = ["transpose", "reshape", "insert", "splitW", "splitC",
            "joinStreams", "joinStreamsRandom", "activeSamples",
            "table", "batched", "window", "groupBy",
            "insertColumn", "insertIdColumn",
            "expandE", "unsqueeze",
            "count", "permute", "accumulate", "AA_", "peek", "peekF",
-           "repeat", "repeatF", "repeatFrom", "oneHot"]
+           "repeat", "repeatF", "repeatFrom", "oneHot", "indexTable"]
 class transpose(BaseCli):
     def __init__(self, dim1:int=0, dim2:int=1, fill=None):
         """Join multiple columns and loop through all rows. Aka transpose.
@@ -73,7 +75,7 @@ Also be careful with empty streams, as you might not get any results at all::
             dims = list(range(len(it.shape)))
             temp = dims[d1]; dims[d1] = dims[d2]; dims[d2] = temp
             return it.transpose(dims)
-        if d1 != 0: return it | cli.serial(*([transpose(fill=fill).all(i) for i in range(d1, d2)] + [transpose(fill=fill).all(i-1) for i in range(d2-1, d1, -1)]))
+        if d1 != 0 or d2 != 1: return it | cli.serial(*([transpose(fill=fill).all(i) for i in range(d1, d2)] + [transpose(fill=fill).all(i-1) for i in range(d2-1, d1, -1)]))
         if self.fill is None: return zip(*it)
         else: return itertools.zip_longest(*it, fillvalue=fill)
     @staticmethod
@@ -158,7 +160,7 @@ Example::
     [2, 6, 8] | insert(5, begin=False) | deref()
     
     # returns [[3, 1], 2, 6, 8]
-    [2, 6, 8] | insert([3, 1]) | deref()
+    [2, 6, 8] | insert([3lo, 1]) | deref()
     # returns [[3, 1], 2, 6, 8]
     [2, 6, 8] | ~insert(3, 1) | deref()
     # returns [[3, 1], 2, 6, 8]
@@ -187,7 +189,9 @@ then automatically defaults to [0.8, 0.2]. Example::
     # returns [[0, 1, 2, 3, 4, 5, 6, 7], [8, 9]]
     range(10) | splitW(0.8, 0.2) | deref()
     # same as the above
-    range(10) | splitW() | deref()"""
+    range(10) | splitW() | deref()
+
+See also: :class:`splitC`"""
         super().__init__();
         if len(weights) == 0: weights = [0.8, 0.2]
         self.weights = np.array(weights)
@@ -196,6 +200,29 @@ then automatically defaults to [0.8, 0.2]. Example::
         ws = (ws * len(it) / ws.sum()).astype(int)
         for w in ws[:-1]: yield it[c:c+w]; c += w
         yield it[c:]
+class splitC(BaseCli):
+    def __init__(self, *checkpoints:List[float]):
+        """Splits elements into multiple checkpoint-delimited lists.
+Example::
+
+    # returns [[0, 1], [2, 3, 4], [5, 6, 7, 8, 9]]
+    range(10) | splitC(2, 5) | deref()
+    # returns [[0, 1], [2, 3, 4, 5], [6, 7, 8, 9]]
+    range(10) | splitC(0.2, 0.6) | deref()
+    # returns ['01', '234', '56789']
+    "0123456789" | splitC(2, 5) | deref()
+
+See also: :class:`splitC`"""
+        self.checkpoints = checkpoints | cli.aS(np.array)
+        self.intMode = checkpoints | cli.apply(lambda x: int(x) == x) | cli.aS(all)
+    def __ror__(self, it):
+        try: it[0]; len(it)
+        except: it = list(it)
+        cs = self.checkpoints
+        if not self.intMode: cs = (cs * len(it)).astype(int)
+        cs = sorted(cs); yield it[:cs[0]]
+        for i in range(len(cs)-1): yield it[cs[i]:cs[i+1]]
+        yield it[cs[-1]:]
 class joinStreams(BaseCli):
     def __init__(self, dims=1):
         """Joins multiple streams.
@@ -429,7 +456,7 @@ Example::
         self.column = column; self.begin = begin; self.fill = fill
     def __ror__(self, it):
         return it | transpose(fill=self.fill) | insert(self.column, begin=self.begin) | transpose(fill=self.fill)
-def insertIdColumn(table=False, begin=True, fill=""):
+def insertIdColumn(table=False, begin=True):
     """Inserts an id column at the beginning (or end).
 Example::
 
@@ -440,9 +467,14 @@ Example::
 
 :param table: if False, then insert column to an Iterator[str], else treat
     input as a full fledged table"""
-    f = (cli.toRange() & transpose(fill=fill)) | insert(begin=begin) | transpose(fill=fill)
-    if table: return f
-    else: return cli.wrapList() | transpose() | f
+    def a(it):
+        if table:
+            if begin: return ([i, *e] for i, e in enumerate(it))
+            else: return ([*e, i] for i, e in enumerate(it))
+        else:
+            if begin: return ([i, e] for i, e in enumerate(it))
+            else: return ([e, i] for i, e in enumerate(it))
+    return cli.aS(a)
 class expandE(BaseCli):
     def __init__(self, f:Callable[[T], List[T]], column:int):
         """Expands table element to multiple columns.
@@ -519,6 +551,7 @@ This is useful when you want to get the count of a really long list/iterator usi
         def inner(counts):
             values = defaultdict(lambda: 0)
             for _count in counts:
+                if _count is None: continue
                 for v, k, *_ in _count:
                     values[k] += v
             s = values.values() | cli.toSum()
@@ -711,7 +744,7 @@ class repeatFrom(BaseCli):
 def oneHotRow(i, n): ans = [0]*n; ans[i] = 1; return ans
 class oneHot(BaseCli):
     _groups = {}
-    def __init__(self, col, n:int=0, group:str=None):
+    def __init__(self, col, n:int=0, group:str=None, sep:bool=False):
         """One-hot encode some column in a table.
 Example::
 
@@ -735,6 +768,19 @@ Last 2 statements both return this::
      [9, 10, 0, 1, 0],
      [11, 12, 0, 1, 0]]
 
+You can also separate the encoded column out like this::
+
+    [*a, *b] | oneHot(2, sep=True) | deref()
+
+Which returns this::
+
+    [[1, 2, [1, 0, 0]],
+     [3, 4, [0, 1, 0]],
+     [5, 6, [0, 0, 1]],
+     [7, 8, [1, 0, 0]],
+     [9, 10, [0, 1, 0]],
+     [11, 12, [0, 1, 0]]]
+
 The natural way to do this is to use with without ``n`` and ``group`` parameters.
 But sometimes, your one hot encoding is spreaded across multiple datasets in
 multiple dataloaders, and so the order and length of the encoding might not be
@@ -748,8 +794,9 @@ right?
 
 :param col: which column one hot encode and expand into
 :param n: (optional) total number of different elements
-:param group: (optional) group name"""
-        self.col = col; self.n = n; self.group = group
+:param group: (optional) group name
+:param sep: (optional) whether to separate the variable out into its own list"""
+        self.col = col; self.n = n; self.group = group; self.sep = sep
         if (n != 0 and group is not None) and (n == 0 or group is None):
             raise Exception("You have to specify both `n` and `group` at the same time if you want to use them")
         if group is not None:
@@ -767,16 +814,39 @@ right?
             pass
         return tIter(tAny())
     def __ror__(self, it):
-        c = self.col; d = self.d; n = self.n
+        c = self.col; d = self.d; n = self.n; sep = self.sep
         if n == 0:
-            it = it | cli.deref(2); n = it | cli.cut(c) | cli.toSet() | cli.shape(0)
+            it = it | cli.deref(2); n = it | cli.cut(c) | cli.aS(set) | cli.shape(0)
         for row in it:
             e = row[c]
             try: e[0]; len(e)
             except: e = list(e)
             if e not in d: d[e] = oneHotRow(len(d), n)
-            yield [*row[:c], *d[e], *row[c+1:]]
+            if sep: yield [*row[:c], d[e], *row[c+1:]]
+            else:   yield [*row[:c], *d[e], *row[c+1:]]
         return
-        _d = it | cli.cut(c) | cli.toSet() | cli.sort(None, False) | cli.deref(); n = len(_d)
+        _d = it | cli.cut(c) | cli.aS(set) | cli.sort(None, False) | cli.deref(); n = len(_d)
         _d = _d | insertIdColumn(begin=False) | cli.apply(cli.aS(oneHotRow, n), 1) | transpose() | cli.toDict()
         for row in it: yield [*row[:c], *_d[row[c]], *row[c+1:]]
+class indexTable(BaseCli):
+    def __init__(self, *cols):
+        """Indexes a table by some columns.
+Example::
+
+    a = [
+        [0, 3, 0.1],
+        [0, 4, 0.2],
+        [1, 3, 0.3],
+        [1, 4, 0.4],
+    ]
+    # returns {3: [[0, 3, 0.1], [1, 3, 0.3]], 4: [[0, 4, 0.2], [1, 4, 0.4]]}
+    a | indexTable(1)
+    # returns {0: [[0, 3, 0.1], [0, 4, 0.2]], 1: [[1, 3, 0.3], [1, 4, 0.4]]}
+    a | indexTable(0)
+    # returns {3: {0: [[0, 3, 0.1]], 1: [[1, 3, 0.3]]},    4: {0: [[0, 4, 0.2]], 1: [[1, 4, 0.4]]}}
+    a | indexTable(1, 0)"""
+        self.cols = cols
+    def __ror__(self, it):
+        if len(self.cols) == 0: return it
+        col = self.cols[0]
+        return it | groupBy(col) | cli.apply(lambda group: [group[0][col], group | indexTable(*self.cols[1:])]) | transpose() | cli.toDict()

@@ -3,10 +3,12 @@
 Lots of type hint mechanisms to be used by the `LLVM optimizer <llvm.html>`_
 """
 import k1lib.cli as cli
-import k1lib, itertools, copy, torch, numbers; import numpy as np
+import k1lib, itertools, copy, numbers; import numpy as np
 from k1lib.cli.init import yieldT
 from typing import List
 from collections import defaultdict, deque
+try: import torch; hasTorch = True
+except: hasTorch = False; torch = k1lib.Object().withAutoDeclare(lambda: type("RandomClass", (object, ), {}))
 
 __all__ = ["tBase", "tAny", "tList", "tIter", "tSet", "tCollection", "tExpand",
            "tNpArray", "tTensor",
@@ -64,7 +66,7 @@ def checkF(t):
         def inner(x):
             try: return x if isinstance(x, t) else yieldT
             except TypeError:
-                if isinstance(x, torch.Tensor):
+                if hasTorch and isinstance(x, torch.Tensor):
                     return x if x.dtype == t else yieldT
                 return yieldT
             except Exception as e:
@@ -143,31 +145,35 @@ Example::
         return self.rank == v.rank
     def __hash__(self): return hash(f"{self.child} - {self.rank}")
     def expand(self, n): return [self.item()]*n
-class tTensor(tBase):
-    def __init__(self, child=None, rank=None):
-        """PyTorch tensor type.
-Example::
-    
-    # returns torch.tensor([2.0, 3.0])
-    tTensor(torch.float32, 1).check(torch.tensor([2.0, 3.0]))
+if hasTorch:
+    class tTensor(tBase):
+        def __init__(self, child=None, rank=None):
+            """PyTorch tensor type.
+    Example::
 
-:param child: the dtype of the array
-:param rank: the rank/dimension of the tensor"""
-        super().__init__(child); self.rank = rank
-    def check(self, v):
-        if not isinstance(v, torch.Tensor): return yieldT
-        if self.rank is not None and self.rank != len(v.shape): return yieldT
-        return v
-    def __repr__(self): return f"<tTensor {klassName(self.child)} rank={self.rank}>"
-    def item(self): return (tTensor(self.child, self.rank - 1) if self.rank > 1 else self.child) if self.rank is not None else tTensor(self.child, None)
-    def __eq__(self, v):
-        if not isinstance(v, tTensor): return False
-        if self.child is not None and v.child is not None and self.child != v.child: return False
-        if self.rank is None or v.rank is None: return True
-        return self.rank == v.rank
-    def __hash__(self): return hash(f"{self.child} - {self.rank}")
-    def expand(self, n): return [self.item()]*n
-tArrayTypes = (tNpArray, tTensor)
+        # returns torch.tensor([2.0, 3.0])
+        tTensor(torch.float32, 1).check(torch.tensor([2.0, 3.0]))
+
+    :param child: the dtype of the array
+    :param rank: the rank/dimension of the tensor"""
+            super().__init__(child); self.rank = rank
+        def check(self, v):
+            if not isinstance(v, torch.Tensor): return yieldT
+            if self.rank is not None and self.rank != len(v.shape): return yieldT
+            return v
+        def __repr__(self): return f"<tTensor {klassName(self.child)} rank={self.rank}>"
+        def item(self): return (tTensor(self.child, self.rank - 1) if self.rank > 1 else self.child) if self.rank is not None else tTensor(self.child, None)
+        def __eq__(self, v):
+            if not isinstance(v, tTensor): return False
+            if self.child is not None and v.child is not None and self.child != v.child: return False
+            if self.rank is None or v.rank is None: return True
+            return self.rank == v.rank
+        def __hash__(self): return hash(f"{self.child} - {self.rank}")
+        def expand(self, n): return [self.item()]*n
+    tArrayTypes = (tNpArray, tTensor)
+else:
+    class tTensor(tBase): pass
+    tArrayTypes = (tNpArray,)
 class tCollection(tBase):
     def __init__(self, *children):
         """Fixed-length collection of things. Let's say you want a tuple with
@@ -259,7 +265,7 @@ Example::
     if isinstance(o, range): return tList(int)
     if isinstance(o, settings.atomic.typeHint): return type(o)
     if isinstance(o, np.ndarray): return tNpArray(o.dtype, len(o.shape))
-    if isinstance(o, torch.Tensor): return tTensor(o.dtype, len(o.shape))
+    if hasTorch and isinstance(o, torch.Tensor): return tTensor(o.dtype, len(o.shape))
     if isinstance(o, (list, tuple)):
         arr = []; diff = False; a = None
         for e in o:
@@ -281,7 +287,9 @@ def lowestChild(t):
         else: return t.__class__(t.child, t.rank - 1)
     raise TypeHintException(f"Type {t} does not have a lowest child")
 intTypes = {int, np.int8, np.int16, np.int32, np.int64, torch.int8, torch.int16, torch.int32, torch.int64}
-floatTypes = {float, np.float16, np.float32, np.float64, np.float128, torch.float16, torch.float32, torch.float64, torch.bfloat16}
+floatTypes = {float, np.float16, np.float32, np.float64, torch.float16, torch.float32, torch.float64, torch.bfloat16}
+try: floatTypes.add(np.float128) # some systems don't have float128
+except: pass
 intFloatTypes = {*intTypes, *floatTypes}
 numericTypes = {*intTypes, *floatTypes, complex, numbers.Number}
 def allSame(l): return all(t == l[0] for t in l)
@@ -359,7 +367,14 @@ This will effectively turn it into this::
 
     range(1000) | tOpt() | head() | deref()
 
-Checkout the `llvm optimizer tutorial <llvm.html>` for a more in-depth explanation of  this
+Normally, you'd use it in this form instead::
+
+    # returns the optimized cli
+    f = "file.txt" | tOpt() | cat() | shape(0) | tOpt
+    # then you can do this to pass it through as usual
+    "other file.txt" | f
+
+Checkout the `llvm optimizer tutorial <llvm.html>` for a more in-depth explanation of this
 
 More over, this combines nicely with :class:`~k1lib.cli.trace.trace` like this::
 
@@ -455,13 +470,15 @@ Example::
     (range(5) | tOpt() | apply(op()**2) | deref()).optCli
     # you can also do it like this:
     range(5) | tOpt() | apply(op()**2) | deref() | tOpt.optCli
+    # or even shorter like this:
+    range(5) | tOpt() | apply(op()**2) | deref() | tOpt
 """
         self.out; return self._optCli
     def __ror__(self, it): self.inp = it; return self
     def __iter__(self): return iter(self.out)
     def __or__(self, o):
         if o is yieldT: return self.out
-        if o is tOpt.optCli:
+        if o is tOpt.optCli or o is tOpt:
             return self.optCli
         self.clis.append(o); return self
     def __repr__(self): return f"{self.out}"

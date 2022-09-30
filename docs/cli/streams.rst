@@ -109,3 +109,29 @@ Underlying operations :class:`~init.serial`, :class:`~init.oneToMany`,
 :class:`~modifier.apply`, :class:`~init.mtmS` that stands for operations
 (``|``, ``&``, ``.all()``, ``+``) are exposed, in case your streams have varying
 lengths.
+
+Vanilla alternatives
+--------------------
+
+These operations are not actually strictly necessary, they're just convenience functions
+so that writing code is simpler and more straightforward. They can be implemented using
+normal clis like so::
+
+    a = iden()
+    b = apply(lambda x: x**2)
+    c = shape()
+
+    x = [[1, 2], [3, 4], [5, 6]]
+    # returns [[1, 2], [9, 16], [2]]
+    x | a + b + c | deref()
+    # returns [[1, 2], [9, 16], [2]]
+    x | ~aS(lambda x, y, z: [x | a, y | b, z | c]) | deref()
+
+    x = range(5)
+    # returns [[0, 1, 2, 3, 4], [0, 1, 4, 9, 16], [5]]
+    x | a & b & c | deref()
+    # returns [[0, 1, 2, 3, 4], [0, 1, 4, 9, 16], [5]]
+    x | aS(lambda x: [x | a, x | b, x | c]) | deref()
+
+So you might want to use these vanilla versions initially if you are unsure what exactly
+these higher operations mean.

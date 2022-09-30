@@ -59,7 +59,7 @@ class Variable:
     def __init__(self):
         self.__class__._idx += 1; self.variableName = f"V{self.__class__._idx}"
         self.expr:Expression = None
-        self._value:float = None # not None, then already resolved
+        self._value:float = None # if not None, then already resolved
         self.isConstant = False # to know if the value above is resolved, or is truely a literal number
         self.trial:int = 0 # current resolve trial number
     @property

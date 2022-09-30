@@ -15,12 +15,11 @@ from .output import *
 from .structural import *
 from .conv import *
 from .utils import *
-from .others import *
 
 # bio specific
 from .bio import *
 from . import mgi;  mgi  = _wrapMod(mgi)
-from . import cif;  cif  = _wrapMod(cif)
+from . import cif;  #cif  = _wrapMod(cif)
 
 # file formats
 from . import kxml; kxml = _wrapMod(kxml)

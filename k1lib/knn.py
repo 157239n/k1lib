@@ -6,8 +6,9 @@ with::
    from k1lib.imports import *
    knn.Lambda # exposed
 """
-from torch import nn
-from typing import Callable, Any
+from typing import Callable, Any; import k1lib
+try: import torch; from torch import nn; hasTorch = True
+except: nn = k1lib.Object().withAutoDeclare(lambda: type("RandomClass", (object, ), {})); hasTorch = False
 __all__ = ["Lambda", "Identity", "LinBlock", "MultiheadAttention"]
 class Lambda(nn.Module):
     def __init__(self, f:Callable[[Any], Any]):

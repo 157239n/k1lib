@@ -1,0 +1,594 @@
+<html lang="en">
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="TITLE" />
+    <meta charset="UTF-8" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,100;0,300;0,400;0,700;1,100;1,300;1,400;1,700&display=swap" rel="stylesheet" />
+    <script type="text/javascript" async src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.2/MathJax.js?config=TeX-AMS_CHTML"></script>
+    <script type="text/x-mathjax-config">MathJax.Hub.Config({tex2jax: {inlineMath: [['$$$','$$$'], ['\\(','\\)']]}});</script>
+    <title>TITLE</title>
+    <style>
+      /* -------------------------- checkbox -------------------------- */
+
+      .grid-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, 300px);
+        /* minmax(300px, 1fr)*/
+        grid-gap: 30px;
+        padding: 20px;
+        justify-items: center;
+        justify-content: center;
+        align-items: start;
+      }
+      .box {
+        padding: 2em;
+      }
+      .item {
+        margin-bottom: 2em;
+      }
+
+      /* checkbox-rect2 */
+      input[type="checkbox"] {
+        display: none;
+      }
+      input[type="checkbox"] + label {
+        display: block;
+        position: relative;
+        padding-left: 35px;
+        margin-bottom: 20px;
+        font: 14px/20px "Open Sans", Arial, sans-serif;
+        cursor: pointer;
+      }
+      input[type="checkbox"]:hover + label:hover {
+        color: rgb(23, 86, 228);
+      }
+      input[type="checkbox"]:hover + label:before {
+        border: 1px solid #343a3f;
+        box-shadow: 2px 1px 0 #343a3f;
+      }
+      input[type="checkbox"] + label:last-child {
+        margin-bottom: 0;
+      }
+      input[type="checkbox"] + label:before {
+        content: "";
+        display: block;
+        width: 1em;
+        height: 1em;
+        border: 1px solid #343a3f;
+        border-radius: 0.2em;
+        position: absolute;
+        left: 0;
+        top: 0;
+        -webkit-transition: all 0.2s, background 0.2s ease-in-out;
+        transition: all 0.2s, background 0.2s ease-in-out;
+        background: rgba(255, 255, 255, 0.03);
+        box-shadow: -2px -1px 0 #343a3f;
+        background: #f3f3f3;
+      }
+      input[type="checkbox"]:checked + label:before {
+        border: 2px solid #fff;
+        border-radius: 0.3em;
+        background: #50565a;
+        box-shadow: 2px 1px 0 #50565a;
+      }
+      /* checkbox-rect2 end */
+
+      /* -------------------------- range -------------------------- */
+
+      input[type="range"] {
+        height: 32px;
+        -webkit-appearance: none;
+        margin: 10px 0;
+        width: 100%;
+      }
+      input[type="range"]:focus {
+        outline: none;
+      }
+      input[type="range"]::-webkit-slider-runnable-track {
+        width: 100%;
+        height: 16px;
+        cursor: pointer;
+        box-shadow: 0px 0px 0px #000000;
+        background: #b6b6b6;
+        border-radius: 25px;
+        border: 1px solid #8a8a8a;
+      }
+      input[type="range"]::-webkit-slider-thumb {
+        box-shadow: 1px 1px 1px #828282;
+        border: 1px solid #8a8a8a;
+        height: 24px;
+        width: 35px;
+        border-radius: 6px;
+        background: #dadada;
+        cursor: pointer;
+        -webkit-appearance: none;
+        margin-top: -5px;
+      }
+      input[type="range"]:focus::-webkit-slider-runnable-track {
+        background: #b6b6b6;
+      }
+      input[type="range"]::-moz-range-track {
+        width: 100%;
+        height: 16px;
+        cursor: pointer;
+        box-shadow: 0px 0px 0px #000000;
+        background: #b6b6b6;
+        border-radius: 25px;
+        border: 1px solid #8a8a8a;
+      }
+      input[type="range"]::-moz-range-thumb {
+        box-shadow: 1px 1px 1px #828282;
+        border: 1px solid #8a8a8a;
+        height: 24px;
+        width: 35px;
+        border-radius: 6px;
+        background: #dadada;
+        cursor: pointer;
+      }
+      input[type="range"]::-ms-track {
+        width: 100%;
+        height: 16px;
+        cursor: pointer;
+        background: transparent;
+        border-color: transparent;
+        color: transparent;
+      }
+      input[type="range"]::-ms-fill-lower {
+        background: #b6b6b6;
+        border: 1px solid #8a8a8a;
+        border-radius: 50px;
+        box-shadow: 0px 0px 0px #000000;
+      }
+      input[type="range"]::-ms-fill-upper {
+        background: #b6b6b6;
+        border: 1px solid #8a8a8a;
+        border-radius: 50px;
+        box-shadow: 0px 0px 0px #000000;
+      }
+      input[type="range"]::-ms-thumb {
+        margin-top: 1px;
+        box-shadow: 1px 1px 1px #828282;
+        border: 1px solid #8a8a8a;
+        height: 24px;
+        width: 35px;
+        border-radius: 6px;
+        background: #dadada;
+        cursor: pointer;
+      }
+      input[type="range"]:focus::-ms-fill-lower {
+        background: #b6b6b6;
+      }
+      input[type="range"]:focus::-ms-fill-upper {
+        background: #b6b6b6;
+      }
+
+      /* -------------------------- toast -------------------------- */
+      
+      #toast {
+        position: fixed;
+        max-width: 40vw;
+        top: 70vh;
+        left: 50vw;
+        transform: translateX(-50%);
+        background-color: #f0e68cff;
+        opacity: 0;
+        color: #111111ff;
+        transition: opacity 0.3s;
+        text-align: center;
+        padding: 8px 30px;
+        font-size: 1.5em;
+        z-index: 50000;
+        border-radius: 32px;
+        color: #111111 !important;
+      }
+
+      @media only screen and (max-width: 600px) {
+        #toast {
+          top: unset;
+          max-width: unset;
+          transform: unset;
+          border-radius: unset;
+          font-size: 1em;
+          width: 100vw;
+          bottom: 0;
+          left: 0;
+        }
+      }
+
+      #toast.activated {
+        opacity: 1;
+      }
+      
+      /* -------------------------- custom -------------------------- */
+
+      #wrapper {
+        max-width: 1300px;
+        padding: 20px 30px;
+        margin: 0 auto;
+        font-size: 1.3em;
+      }
+
+      a {
+        text-decoration: none;
+        color: blue;
+      }
+
+      body {
+        font-family: Lato;
+      }
+
+      h1 {
+        font-size: 2.2em;
+        color: #ED225D;
+        font-weight: 300;
+        margin-top: 20px;
+      }
+      
+      h2 {
+        font-size: 1.7em;
+        font-weight: 300;
+        margin: 20px 0px;
+      }
+      
+      h3 {
+        font-weight: 400;
+      }
+
+      @media (max-width: 600px) {
+        #wrapper {
+          padding: 0px;
+        }
+        h1 {
+          font-size: 1.8em;
+          margin-top: 0px;
+        }
+      }
+
+      @media (max-width: 1100px) {
+        #wrapper {
+          max-width: 1000px;
+        }
+      }
+
+      .block {
+        flex: 1;
+        margin: 10px;
+        box-shadow: 0 3px 5px rgb(0 0 0 / 30%);
+        border-radius: 15px;
+        padding: 16px;
+      }
+
+      .block:hover {
+        box-shadow: 0 3px 10px rgb(0 0 0 / 60%);
+      }
+
+      input[type="text"] {
+        padding: 5px 10px;
+        font-size: 1em;
+        border-radius: 10px;
+      }
+
+      input[type="range"] {
+        width: 200px;
+      }
+
+      input[type="file"] {
+        font-size: 1em;
+      }
+
+      .block {
+        flex: 1;
+      }
+      
+      .block > div:first-child {
+        margin-bottom: 10px;
+        font-size: 1.2em;
+      }
+
+      .scan {
+        box-shadow: 0px 3px 8px rgba(0, 0, 0, 0.2);
+        width: fit-content;
+        margin: 10px;
+        padding: 10px 15px;
+        display: flex;
+        align-items: center;
+        border-radius: 8px;
+      }
+
+      .scan > .marker {
+        width: 16px;
+        height: 16px;
+        border-radius: 8px;
+        background-color: red;
+        margin: 0px 15px 0px 5px;
+      }
+
+      .btn {
+        margin: 10px;
+        box-shadow: 0 3px 5px rgb(0 0 0 / 30%);
+        border-radius: 8px;
+        padding: 8px 12px;
+        font-size: 1em;
+        cursor: pointer;
+        user-select: none;
+      }
+
+      .btn:hover {
+        box-shadow: 0 3px 10px rgb(0 0 0 / 60%);
+      }
+      
+      #result h1 {
+        font-size: 1em;
+      }
+      
+      select {
+        font-size: 1em;
+        padding: 5px;
+      }
+      
+      pre {
+        border: 1px solid black;
+        padding: 10px;
+        overflow-x: auto
+      }
+    </style>
+  </head>
+  <body>
+    <div id="wrapper">
+      <h1>TITLE</h1>
+      <h2>Intro</h2>
+      <div id="intro"></div>
+      <div style="display: flex; flex-direction: row; align-items: center; margin-left: 10px; overflow-x: auto">
+        <div style="margin-right: 10px">
+          <input id="autoUpdateInp" type="checkbox" name="check" oninput="autoRunToggle()" />
+          <label for="autoUpdateInp" style="font-size: 1em">Auto run</label>
+        </div>
+        <div class="btn" onclick="run()">Run</div>
+        <div class="scan" id="scan">
+          <div class="marker"></div>
+          <div class="label">Server offline</div>
+        </div>
+      </div>
+      <h2>Parameters</h2>
+      <div
+        id="blocks"
+        style="
+          display: flex;
+          flex-direction: row;
+          justify-content: space-between;
+          flex-wrap: wrap;
+        "
+      ></div>
+      <h2>Result</h2>
+      <div id="result">(none yet)</div>
+      <h2>Sample api request</h2>
+      <div id="apiRequest"></div>
+      <h2>Source code</h2>
+      <div id="sourceCode"></div>
+    </div>
+    <div id="toast"></div>
+  </body>
+  <script src="https://cdn.jsdelivr.net/npm/js-base64@3.7.2/base64.min.js"></script>
+  <script>
+    class Toast {
+      constructor() {
+        /** @type {number} this.instances */ this.instances = 0; // this is so that only the latest call's turnOff() will actually turn it off
+        /** @type {jQuery} this.objectReference */ this.objectReference = document.querySelector("#toast");
+      }
+      display(content, timeout = 1000) {
+        this.instances++;
+        this.objectReference.innerHTML = content;
+        this.objectReference.classList.add("activated");
+        setTimeout(this.turnOff, timeout);
+      }
+
+      noInternet = (retrying) => (retrying ? this.display("No internet, retrying...") : this.display("No internet!"));
+      /** Displays a message, and keeps it online until another display() is called. */
+      persistTillNextDisplay = (content) => (this.objectReference.innerHTML = content, this.objectReference.classList.remove("activated"));
+      /** Fades out the toast. Expected to be called by a timeout only. */
+      turnOff = () => (((toast.instances === 1) ? toast.objectReference.classList.remove("activated") : ""), toast.instances--);
+    }
+
+    /** @type {Toast} toast */ const toast = new Toast();
+    
+    let meta = META_JSON;
+    let prefix = "SERVER_PREFIX";
+    let [values, idxToArg] = [{}, {}]; // Dict[arg, value], Dict[idx, arg]
+    for (let arg of meta.args) values[arg] = null;
+    let [autoInc, autoRun] = [1, false];
+    let [requests, newRequest, pendingRequest, requestLastSent] = [[], false, false, 0];
+    setInterval(() => { // to rate limit the requests
+      if (!pendingRequest && newRequest && Date.now() / 1000 - requestLastSent > 0.2) {
+        run(); newRequest = false;
+        requestLastSent = Date.now() / 1000;
+      }
+    }, 100);
+    const updated = () => (autoRun ? (newRequest = true) : 0);
+    const autoRunToggle = () => {autoRun = !autoRun; updated();};
+    async function run() {
+      console.log("Sent request");
+      pendingRequest = true;
+      const res = await fetch(prefix, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(values),
+      });
+      pendingRequest = false;
+      const text = await res.text();
+      const anno = meta.annoStrs.return;
+      if (["int", "float", "str", "bool"].includes(anno)) result.innerHTML = `<pre>${text}</pre>`;
+      else if (anno === "ndarray") {
+        // TODO: download button
+      } else if (anno === "Image") result.innerHTML = `<div style="overflow: auto;"><img style="width: 100%; object-fit: cover;" src="data:image/jpg;base64, ${text}" alt="Result image" /></div>`
+      else throw new Exception("Return value not recognized");
+    }
+
+    function textBox(arg, doc, anno, def) {
+      const i = ++autoInc; setTimeout(() => cb_textBox(i), 0); idxToArg[i] = arg;
+      return `
+        <div class="block">
+          <div>${arg} (${anno}): ${doc || "(no docs)"}</div>
+          <input id="textBox_${i}" type="text" value="${def}" oninput="cb_textBox(${i})" />
+        </div>`;
+    }
+
+    function cb_textBox(i) {
+      values[idxToArg[i]] = document.querySelector(`#textBox_${i}`).value;
+      updated();
+    }
+
+    function slider(arg, doc, anno, def) {
+      const i = ++autoInc; idxToArg[i] = arg; let start, stop, step;
+      if (anno === "Range") {
+        [start, stop] = def; step = (stop - start) / 100;
+      } else [start, stop, step] = def;
+      setTimeout(() => cb_slider(i), 0);
+      return `
+        <div class="block">
+          <div>${arg} (${anno}): ${doc || "(no docs)"}</div>
+            <div style="display: flex; flex-direction: row; align-items: center">
+              <input id="slider_${i}" type="range" min="${start}" max="${stop}" step="${step}" oninput="cb_slider(${i})"/>
+              <div id="slider_${i}_value" style="margin-left: 10px; min-width: 50px"></div>
+            </div>
+        </div>`;
+    }
+
+    function cb_slider(i) {
+      values[idxToArg[i]] = document.querySelector(`#slider_${i}`).value;
+      document.querySelector(`#slider_${i}_value`).innerHTML = values[idxToArg[i]];
+      updated();
+    }
+
+    function checkBox(arg, doc, anno, def) {
+      const i = ++autoInc; idxToArg[autoInc] = arg; values[idxToArg[i]] = false;
+      setTimeout(() => document.querySelector(`#checkBox_${i}`).click(), 0);
+      if (!def) setTimeout(() => document.querySelector(`#checkBox_${i}`).click(), 0);
+      return `
+        <div class="block">
+          <div>${arg} (${anno}): ${doc || "(no docs)"}</div>
+          <div>
+            <input id="checkBox_${i}" type="checkbox" name="check" oninput="cb_checkBox(${i})" />
+            <label id="checkBox_${i}_value" for="checkBox_${i}" style="font-size: 1em"></label>
+          </div>
+        </div>`;
+    }
+
+    function cb_checkBox(i) {
+      values[idxToArg[i]] = !values[idxToArg[i]];
+      document.querySelector(`#checkBox_${i}_value`).innerHTML = values[idxToArg[i]];
+      updated();
+    }
+
+    function fileUpload(arg, doc, anno, def) {
+      const i = ++autoInc; idxToArg[autoInc] = arg; values[arg] = def;
+      return `
+        <div class="block" style="overflow-x: auto; min-width: 300px">
+          <div>${arg} (${anno}): ${doc || "(no docs)"}</div>
+          <input id="fileUpload_${i}" type="file" onchange="cb_fileUpload(${i})" />
+        </div>`;
+    }
+
+    function cb_fileUpload(i) {
+      const elem = document.querySelector(`#fileUpload_${i}`);
+      if (elem.files.length == 0) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          window.im = e.target.result; l = e.target.result.split(",")
+          values[idxToArg[i]] = l[l.length - 1];
+        } catch (e) {
+          toast.display("Can't upload file");
+          console.log("Can't upload file: ", e);
+          elem.value = null;
+        }
+      };
+      reader.readAsDataURL(elem.files[0]);
+      updated();
+    }
+
+    function dropdown(arg, doc, anno, def) {
+      const i = ++autoInc; idxToArg[autoInc] = arg; values[arg] = def;
+      const selects = def.map(e => `<option value="${e}">${e}</option>`).join("");
+      setTimeout(() => cb_dropdown(i), 0);
+      return `
+        <div class="block" style="overflow-x: auto; min-width: 300px">
+          <div>${arg} (${anno}): ${doc || "(no docs)"}</div>
+          <select id="dropdown_${i}" onchange="cb_dropdown(${i})">${selects}</select>
+        </div>`;
+    }
+
+    function cb_dropdown(i) {
+      values[idxToArg[i]] = document.querySelector(`#dropdown_${i}`).value;
+      updated();
+    }
+
+    let lastOnline = 0;
+    async function healthCheck() {
+      try {
+        let res = await fetch(`${prefix}/healthCheck`);
+        if ((await res.text()) == "ok") lastOnline = Date.now() / 1000;
+      } catch {}
+      await new Promise((r) => setTimeout(r, 1000));
+      healthCheck();
+    }
+    healthCheck();
+    const scanLabel = document.querySelector(".scan .label");
+    const marker = document.querySelector(".scan .marker");
+    setInterval(() => {
+      if (Date.now() / 1000 - lastOnline < 2) {
+        marker.style.backgroundColor = "green";
+        scanLabel.innerHTML = "Server online";
+      } else {
+        marker.style.backgroundColor = "red";
+        scanLabel.innerHTML = "Server offline";
+      }
+    }, 1000);
+
+    let n = meta.args.length;
+    const intro = document.querySelector("#intro");
+    const blocks = document.querySelector("#blocks");
+    const result = document.querySelector("#result");
+    let blocksHtml = "";
+    for (let arg of meta.args) {
+      let anno = meta.annoStrs[arg]; let def = meta.defaults[arg]; let doc = meta.docs[arg];
+      if (anno === "int" || anno === "float" || anno === "str") blocksHtml += textBox(arg, doc, anno, def);
+      if (anno === "bool") blocksHtml += checkBox(arg, doc, anno, def);
+      if (anno === "Range" || anno === "range") blocksHtml += slider(arg, doc, anno, def);
+      if (anno === "bytes" || anno === "Image") blocksHtml += fileUpload(arg, doc, anno, def);
+      if (anno === "list") blocksHtml += dropdown(arg, doc, anno, def);
+    }
+    blocks.innerHTML = blocksHtml;
+    intro.innerHTML = `${meta.mainDoc}`;
+    document.querySelector("#sourceCode").innerHTML = `<pre>${meta.source}</pre>`;
+
+    setTimeout(() => {
+      let reqBody = "";
+      for (let arg of meta.args) {
+        const anno = meta.annoStrs[arg]; let s = `${values[arg]}`;
+        s = (s.length > 23) ? s.slice(0, 20) + "..." : s; reqBody += `    "${arg}": "${s}",\n`;
+      }
+      document.querySelector("#apiRequest").innerHTML = `
+<h3>Javascript</h3>
+<pre>
+let result = await (await fetch("${prefix}", {
+  method: "POST",
+  body: JSON.stringify({
+${reqBody}
+  }),
+  headers: {
+    "Content-Type": "application/json",
+  }
+})).text()
+</pre>
+<h3>Python</h3>
+<pre>
+import requests
+result = requests.post("${prefix}", json={
+${reqBody}
+}).text
+</pre>`;
+    }, 0);
+  </script>
+</html>

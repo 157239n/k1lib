@@ -33,8 +33,26 @@ __ror__. So essentially, these 2 statements are equivalent::
    3 | obj
    obj.__ror__(3)
 
-Also, a lot of these tools (like :class:`~modifier.apply` and :class:`~modifier.filt`)
-assume that we are operating on a table. So this table:
+You can think of the flow of these clis in terms of 2 phases. 1 is configuring what you
+want the cli to do, and 2 is actually executing it. Let's say you want to take a list
+of numbers and take the square of them::
+
+   # configuration stage. You provide a function to `apply` to tell it what to apply to each element in the list
+   f = apply(lambda x: x**2)
+   # initialize the input
+   x = range(5)
+   # execution stage, normal style, returns [0, 1, 4, 9, 16]
+   list(f(x))
+   # execution stage, pipe style, returns [0, 1, 4, 9, 16]
+   list(x | f)
+   
+   # typical usage: combining configuration stage and execution stage, returns [0, 1, 4, 9, 16]
+   list(range(5) | apply(lambda x: x**2))
+   # refactor converting to list so that it uses pipes, returns [0, 1, 4, 9, 16]
+   range(5) | apply(lambda x: x**2) | aS(list)
+
+Also, a lot of these tools (like :class:`~modifier.apply` and :class:`~filt.filt`)
+sometimes assume that we are operating on a table. So this table:
 
 +------+------+------+
 | col1 | col2 | col3 |
@@ -66,8 +84,7 @@ you can use ``deref()`` or ``cli.deref()``.
 
 Besides operating on string iterators alone, this package can also be extra meta,
 and operate on streams of strings, or streams of streams of anything. I think this
-is one of the most powerful concept of the cli workflow. If this interests you,
-check over this:
+is one of the most powerful concept of the cli workflow. Check over this here:
 
 .. toctree::
    :maxdepth: 1
@@ -344,19 +361,6 @@ optimizations module
    :members:
    :undoc-members:
    :show-inheritance:
-
-others module
--------------------------
-
-.. automodule:: k1lib.cli.others
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-..
-   There are a couple monkey-patched clis:
-
-   .. automethod:: torch.stack
 
 Elsewhere in the library
 -------------------------

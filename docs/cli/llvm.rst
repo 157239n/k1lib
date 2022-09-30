@@ -66,7 +66,7 @@ is coded in C, it's super fast, around 6x faster than ``cat() | shape(0)``.
 Normally, you'd use it in this form instead::
 
   # returns the optimized cli
-  f = "file.txt" | tOpt() | cat() | shape(0) | tOpt.optCli
+  f = "file.txt" | tOpt() | cat() | shape(0) | tOpt
   # then you can do this to pass it through as usual
   "other file.txt" | f
 

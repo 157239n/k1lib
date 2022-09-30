@@ -151,10 +151,7 @@ clean up code, then rethrow again. Same deal at the run level.
 Functions
 -----------
 
-.. autofunction:: k1lib.textToHtml
-.. autofunction:: k1lib.clearLine
 .. autofunction:: k1lib.isNumeric
-.. autofunction:: k1lib.close
 .. autofunction:: k1lib.patch
 .. autofunction:: k1lib.wraps
 .. autofunction:: k1lib.squeeze
@@ -169,7 +166,7 @@ Functions
 .. autofunction:: k1lib.scaleSvg
 .. autofunction:: k1lib.pValue
 .. autofunction:: k1lib.now
-.. autofunction:: k1lib.sameStorage
+.. autofunction:: k1lib.pushNotification
 .. autofunction:: k1lib.perlin3d
 .. autofunction:: k1lib.graph
 .. autofunction:: k1lib.digraph

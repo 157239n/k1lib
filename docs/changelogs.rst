@@ -2,6 +2,46 @@
 Changelogs
 ==========
 
+`1.1 </1.1>`_
+---------------
+
+.. currentmodule:: k1lib.cli
+
+Cli:
+
+- Added dictionary mode, with table name to :meth:`~cif.tables`
+- Added :meth:`~cif.records`, :class:`~conv.toGray`, :class:`~output.plotImgs`,
+  :class:`~conv.toBytes`, :class:`~structural.indexTable`, :class:`~structural.splitC`
+- k1a speedups: :class:`~inp.cat`
+- Fixed strange bug in :class:`~modifier.applyMp` that happens between PyTorch and multiprocessing
+- Added tensor/bytes/figure to image feature to :meth:`~conv.toPIL`
+- Added image saving mode to :meth:`~output.file`
+- Added separator mode to :class:`~structural.oneHot`
+- Removed :class:`conv.toStr`, :class:`conv.toSet`, :class:`conv.toIter`,
+  :class:`conv.toBin`, :class:`conv.toIdx`, :class:`conv.toDictF`, :class:`modifier.applySerial`
+  because they're kinda meaningless and redundant.
+- Added bytes mode chunking to :class:`~inp.cat`
+- Removed module :mod:`k1lib.cli.others` as it's pretty useless
+
+Generic:
+
+- Added :meth:`~k1lib.pushNotification`, :meth:`fmt.throughput`
+- Removed :meth:`~k1lib.clearLine`, :meth:`~k1lib.close`, :meth:`~k1lib.textToHtml`
+  as they are quite niche
+- Moved :meth:`k1lib.sameStorage` to :meth:`torch.sameStorage`
+- Monkey patched :meth:`pandas.core.frame.DataFrame.table`, :class:`builtins.str.splitCamel`
+- Added intersection operation to :class:`~k1lib.Domain`
+- Removed library's PyTorch dependency, so that it can be lightweight enough to be used
+  inside containers
+
+.. currentmodule:: k1lib.selector
+
+Deep learning:
+
+- Added :meth:`ModuleSelector.intercept`
+- Added estimated time remaining and throughput estimations to :class:`~k1lib.callbacks.progress.ProgressBar`
+- Removed module :mod:`k1lib.kdata`, as that provides no value
+
 `1.0 </1.0>`_
 ---------------
 

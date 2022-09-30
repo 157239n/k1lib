@@ -12,6 +12,7 @@
 #
 import os
 import sys
+import datetime
 from k1lib.imports import *
 sys.path.insert(0, os.path.abspath('../k1lib'))
 
@@ -19,7 +20,7 @@ sys.path.insert(0, os.path.abspath('../k1lib'))
 # -- Project information -----------------------------------------------------
 
 project = 'k1lib'
-copyright = '2021, Quang Ho'
+copyright = f'{datetime.datetime.now().year}, Quang Ho'
 author = 'Quang Ho'
 
 # -- General configuration ---------------------------------------------------

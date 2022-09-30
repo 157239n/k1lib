@@ -7,10 +7,14 @@ automatically with::
    from k1lib.imports import *
    selector.select # exposed
 """
-from torch import nn; import k1lib, re, torch
+import k1lib, re
 from k1lib import cli
 from typing import List, Tuple, Dict, Union, Any, Iterator, Callable
 from contextlib import contextmanager; from functools import partial
+try: import torch; from torch import nn; hasTorch = True
+except:
+    torch = k1lib.Object().withAutoDeclare(lambda: type("RandomClass", (object, ), {}))
+    nn = k1lib.Object().withAutoDeclare(lambda: type("RandomClass", (object, ), {})); hasTorch = False
 __all__ = ["ModuleSelector", "preprocess", "select"]
 def preprocess(selectors:str, defaultProp="*") -> List[str]:
     r"""Removes all quirkly features allowed by the css
@@ -320,8 +324,34 @@ Example::
         for h in handles: h.remove()
 from contextlib import ExitStack
 @contextmanager
+def _intercept(self, value:bool):
+    handles = []
+    try:
+        data = []
+        f = lambda x: x.detach() if x is not None else None
+        for m in self.modules("*"):
+            subData1 = []; subData2 = []; data.append([subData1, subData2])
+            handles.append(m.nn.register_forward_hook(lambda _m, i, o: subData1.append([[f(e) for e in i], f(o)])))
+            handles.append(m.nn.register_full_backward_hook(lambda _m, i, o: subData2.append([[f(e) for e in i], [f(e) for e in o]])))
+        yield data
+    finally:
+        for h in handles: h.remove()
+@k1lib.patch(ModuleSelector)
+def intercept(self):
+    """Returns a context manager that intercept forward and backward signals
+to parts of the network. Example::
+
+    l = k1lib.Learner.sample()
+    with l.model.select("#lin1").intercept() as d:
+        l.run(2)
+    # returns (1, 2, 600, 2, 1, 32, 1), or (#selected modules, [forward, backward], #steps, [input, output], actual data)
+    d | shape()
+
+See also: :meth:`hookF`, :meth:`hookFp`, :meth:`hookB`"""
+    return _intercept(self, False)
+from contextlib import ExitStack
+@contextmanager
 def _freeze(self, value:bool, prop:str):
-    modules = [m for m in self.modules(prop)]
     with ExitStack() as stack:
         for m in self.modules(prop):
             stack.enter_context(m.nn.gradContext())

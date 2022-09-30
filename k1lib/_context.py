@@ -29,10 +29,13 @@ like this::
     with k1lib.captureStdout() as out:
         print("abc") # gets captured
         out.print("def") # not captured, will actually print out
+        # you can also access the stream like this
+        print("something", file=out.old)
 """
     _stdout = sys.stdout; sys.stdout = _stringio = io.StringIO()
     w = k1lib.Wrapper([])
     w.print = partial(print, file=_stdout)
+    w.old = _stdout
     try: yield w
     finally:
         w.value = [l.split("\r")[-1] for l in _stringio.getvalue().split("\n")]

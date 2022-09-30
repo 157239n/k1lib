@@ -39,6 +39,11 @@ You want to download this automatically? (y/n) """)
                 return f"""<img src="http://amigo.geneontology.org/visualize?mode=amigo&term_data_type=string&format=png&inline=false&term_data=GO%3A{term}" />"""
         return Repr()
 settings.add("phred", """!"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJ""", "Phred quality score")
+class toIdx(BaseCli):
+    def __init__(self, chars:str): self.chars = {v:k for k, v in enumerate(chars)}
+    def __ror__(self, it):
+        chars = self.chars
+        for e in it: yield chars[e]
 def quality(log=True):
     """Get numeric quality of sequence.
 Example::
@@ -47,8 +52,8 @@ Example::
     "##&?" | quality() | deref()
 
 :param log: whether to use log scale (0 -> 40), or linear scale (1 -> 0.0001)"""
-    if log: return cli.toIdx(settings.phred)
-    else: return cli.toIdx(settings.phred) | cli.apply(lambda x: 10**(-x/10))
+    if log: return toIdx(settings.phred)
+    else: return toIdx(settings.phred) | cli.apply(lambda x: 10**(-x/10))
 def longFa():
     """Takes in a fasta file and put each sequence on 1 line.
 File "gene.fa"::

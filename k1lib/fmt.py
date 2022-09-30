@@ -9,16 +9,19 @@ automatically with::
 import k1lib, math; from k1lib import cli
 from typing import Dict, Iterator, Tuple
 __all__ = ["generic", "metricPrefixes", "size", "sizeOf",
-           "comp", "compRate", "time", "item", "txt"]
+           "comp", "compRate", "time", "item", "throughput", "txt"]
+k1lib.settings.add("fmt", k1lib.Settings().add("separator", True, "whether to have a space between the number and the unit"), "from k1lib.fmt module");
+settings = k1lib.settings.fmt
 metricPrefixes = {-8:"y",-7:"z",-6:"a",-5:"f",-4:"p",-3:"n",-2:"u",-1:"m",0:"",1:"k",2:"M",3:"G",4:"T",5:"P",6:"E",7:"Z",8:"Y"}
 #metricPrefixes = ["", "k", "M", "G", "T", "P", "E", "Z", "Y"]
 def generic(x, units:Dict[int, str]):
+    c = " " if settings.separator else ""
     for i, unit in units.items():
         upperBound = 1000 * 1000**i
         if abs(x) < upperBound:
-            return f"{round(1e3*x/upperBound, 2)} {unit}"
-    return (f"{round(1e3*x/upperBound, 2)} {unit}").strip()
-sizes = {i: f"{p}B" for i, p in metricPrefixes.items() if i >= 0}; sizes[0] = "bytes"
+            return f"{round(1e3*x/upperBound, 2)}{c}{unit}"
+    return (f"{round(1e3*x/upperBound, 2)}{c}{unit}").strip()
+sizes = {i: f"{p}B" for i, p in metricPrefixes.items() if i >= 0}; #sizes[0] = "bytes"
 def size(_bytes=0):
     """Formats disk size.
 Example::
@@ -86,6 +89,30 @@ Example::
     fmt.item(5e5)
 """
     return generic(n, items).strip()
+def throughput(n, unit=""):
+    """Formats item throughput.
+Example::
+
+    # returns "3.16/year"
+    fmt.throughput(1e-7)
+    # returns "2.63/month"
+    fmt.throughput(1e-6)
+    # returns "3.6/hour"
+    fmt.throughput(1e-3)
+    # returns "100.0 k/s"
+    throughput(1e5)
+    
+    # returns "100.0 k epochs/s"
+    throughput(1e5, " epochs")
+
+:param n: items per second
+:param unit: optional item unit"""
+    if n < 10/(365.25*86400): return item(n*(365.25*86400)) + f"{unit}/year"
+    if n < 10/(30.4375*86400): return item(n*(30.4375*86400)) + f"{unit}/month"
+    if n < 10/86400: return item(n*86400) + f"{unit}/day"
+    if n < 10/3600: return item(n*3600) + f"{unit}/hour"
+    if n < 10/60: return item(n*60) + f"{unit}/minute"
+    return item(n) + f"{unit}/s"
 _esc = '\033['
 _end = f'{_esc}0m'
 class txt:

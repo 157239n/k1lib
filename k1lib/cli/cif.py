@@ -5,11 +5,13 @@ Expected to use behind the "cif" module name, like this::
     from k1lib.imports import *
     cif.cat("abc.cif")
 """
-from k1lib import cli; import k1lib
+import k1lib
+import k1lib.cli as cli; 
+from k1lib.cli.init import BaseCli, yieldT
 from typing import Iterator, List
 from k1lib.cli.typehint import *
 import k1lib._k1a as k1a
-__all__ = ["tables"]
+__all__ = ["tables", "records"]
 hasTable = lambda: cli.filt(cli.grep("loop_") | cli.shape(0) | (cli.op() > 0))
 toBlocks = lambda: cli.cat() | cli.grep("^#", sep=True).till()
 def collect(l):
@@ -20,18 +22,79 @@ def collect(l):
             if not inBlock: yield ("".join(tmp))[1:]; continue
         if not inBlock: yield e
         else: tmp.append(e)
-def tables():
+def tables(name=None, dikt=True):
     """Loads table info.
-Example::
+Dictionary mode::
 
-    "abc.cif" | cif.tables()
+    # both return output below
+    "1z7z.cif" | cif.tables() | op()["_audit_author"]
+    "1z7z.cif" | cif.tables("_audit_author")
+
+Potential output::
+
+    {'name': ("'Xiao, C.'",
+      "'Bator-Kelly, C.M.'",
+      "'Rieder, E.'",
+      "'Chipman, P.R.'",
+      "'Craig, A.'",
+      "'Kuhn, R.J.'",
+      "'Wimmer, E.'",
+      "'Rossmann, M.G.'"),
+     'pdbx_ordinal': ('1', '2', '3', '4', '5', '6', '7', '8')}
 
 Result is a dictionary of ``table name -> dict()``. That inner dictionary maps from
-column name to a list of elements. All columns should have the same number of rows."""
+column name to a list of elements. All columns should have the same number of elements.
+
+Table mode::
+
+    # both return output below
+    "1z7z.cif" | cif.tables("_audit_author", dikt=False)
+    "1z7z.cif" | cif.tables(dikt=False) | op()["_audit_author"]
+
+Potential output::
+
+    [['name', 'pdbx_ordinal'],
+     ["'Xiao, C.'", '1'],
+     ["'Bator-Kelly, C.M.'", '2'],
+     ["'Rieder, E.'", '3'],
+     ["'Chipman, P.R.'", '4'],
+     ["'Craig, A.'", '5'],
+     ["'Kuhn, R.J.'", '6'],
+     ["'Wimmer, E.'", '7'],
+     ["'Rossmann, M.G.'", '8']]
+
+Result is a dictionary of ``table name -> List[List[str]]``. So basically you're
+getting the table directly.
+
+:param name: if specified, only grabs the specified table, else returns every table
+:param dikt: whether to return a dict or table for each table"""
     def inner(url): # f is iden() or deref(), depending on perf characteristics that you want
         a = url | toBlocks() | hasTable() | cli.apply(~cli.head(2) | cli.op().strip().all()) | cli.deref() # preprocessing, split to blocks
         b = a | cli.apply(~cli.filt(cli.op().startswith("_")) | (cli.aS(k1a.str_split, " ") | cli.filt(cli.op() != "")).all() | cli.joinStreams())
         fieldss = a | cli.apply(cli.filt(cli.op().startswith("_")) | cli.op().split(".")[1].all()) | cli.toList().all()
-        c = [b, fieldss] | cli.transpose() | ~cli.apply(lambda l, fields: collect(l) | cli.batched(len(fields), True) | cli.insert(fields) | cli.transpose() | cli.apply(cli.item() & ~cli.head(1)) | cli.transpose() | cli.toDict())
-        return [a | cli.op()[0].split(".")[0].all(), c] | cli.toDict()
+        f = (cli.transpose() | cli.apply(cli.item() & ~cli.head(1)) | cli.transpose() | cli.toDict()) if dikt else cli.iden() # asDict
+        tableNames = a | cli.op()[0].split(".")[0].all() | cli.deref()
+        c = [b, fieldss, tableNames] | cli.transpose() | (cli.filt(cli.op() == name, 2) if name is not None else cli.iden()) | cli.cut(0, 1)\
+            | ~cli.apply(lambda l, fields: collect(l) | cli.batched(len(fields), True) | cli.insert(fields) | f)
+        d = [tableNames, c] | cli.toDict()
+        if name is None: return d
+        else:
+            if len(d) != 1: return None
+            else: return d.values() | cli.item()
     return cli.aS(inner)
+def records():
+    """Load record info.
+Example::
+
+    "1z7z.cif" | cif.records() | op()["_exptl"] | deref()
+
+Potential output::
+
+    [['entry_id', '1Z7Z'],
+     ['method', "'ELECTRON MICROSCOPY'"],
+     ['crystals_number', '?']]
+
+Result is a dictionary of ``record name -> (n, 2) table``"""
+    each = ~cli.head(1) | cli.op().strip().all() | cli.apply(cli.aS(k1a.str_split, " ") | cli.filt(cli.op() != "")) | cli.joinStreams() | cli.aS(collect) | cli.batched(2)\
+        | (cli.item(2) | cli.op().split(".")[0]) & (cli.apply(cli.op().split(".")[1], 0))
+    return toBlocks() | ~hasTable() | cli.filt(cli.op().ab_len() > 1) | each.all() | cli.transpose() | cli.toDict()

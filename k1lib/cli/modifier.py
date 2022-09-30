@@ -3,16 +3,18 @@
 This is for quick modifiers, think of them as changing formats
 """
 __all__ = ["applyS", "aS", "apply", "applyMp", "parallel",
-           "applyTh", "applySerial",
+           "applyTh",
            "sort", "sortF", "consume", "randomize", "stagger", "op",
            "integrate"]
 from typing import Callable, Iterator, Any, Union, List
 from k1lib.cli.init import patchDefaultDelim, BaseCli, T, fastF
-import k1lib.cli as cli, numpy as np, torch, threading
-import torch.multiprocessing as mp; from collections import deque
+import k1lib.cli as cli, numpy as np, threading
+from collections import deque
 from functools import partial, update_wrapper, lru_cache
 from k1lib.cli.typehint import *
 import dill, pickle, k1lib, warnings, atexit, signal, time, os, random
+try: import torch; import torch.multiprocessing as mp; hasTorch = True
+except: import multiprocessing as mp; hasTorch = False
 class applyS(BaseCli):
     def __init__(self, f:Callable[[T], T], *args, **kwargs):
         """Like :class:`apply`, but much simpler, just operating on the entire input
@@ -58,7 +60,7 @@ Example::
         f = self.f; a = self.args; kw = self.kwargs; return applyS(lambda x: f(*x, *a, **kw));
 aS = applyS
 class apply(BaseCli):
-    def __init__(self, f:Callable[[T], T], column:int=None, cache:int=0):
+    def __init__(self, f:Callable[[T], T], column:int=None, cache:int=0, **kwargs):
         """Applies a function f to every line.
 Example::
 
@@ -83,9 +85,17 @@ You can also add a cache, like this::
     # takes 5s
     range(5) | repeatFrom(2) | apply(calc) | deref()
 
+You can add custom keyword arguments into the function::
+
+    def f(x, y, z=3):
+        return x + y + z
+    # returns [15, 17, 19, 21, 23]
+    [range(5), range(10, 15)] | transpose() | ~apply(f, z=5) | deref()
+
 :param column: if not None, then applies the function to that column only
-:param cache: if specified, then caches this much number of values"""
-        super().__init__(fs=[f]); self.f = f;
+:param cache: if specified, then caches this much number of values
+:param kwargs: extra keyword arguments to pass in the function"""
+        super().__init__(fs=[f]); self.f = f; self.kwargs = kwargs
         self.column = column; self.cache = cache; self._fC = fastF(f)
         if cache > 0: self._fC = lru_cache(cache)(self._fC)
         self.normal = self.column is None and self.cache == 0 # cached value to say that this apply is just being used as a wrapper, nothing out of the ordinary
@@ -96,9 +106,9 @@ You can also add a cache, like this::
                 except: return tIter(tAny())
         return super()._typehint(inp)
     def __ror__(self, it:Iterator[str]):
-        c = self.column; f = self._fC
-        if c is None: return (f(line) for line in it)
-        else: return ([(e if i != c else f(e)) 
+        c = self.column; f = self._fC; kwargs = self.kwargs
+        if c is None: return (f(line, **kwargs) for line in it)
+        else: return ([(e if i != c else f(e, **kwargs)) 
                        for i, e in enumerate(row)] for row in it)
     def __invert__(self):
         """Same mechanism as in :class:`applyS`, it expands the
@@ -106,7 +116,7 @@ arguments out. Just for convenience really. Example::
 
     # returns [10, 12, 14, 16, 18]
     [range(5), range(10, 15)] | transpose() | ~apply(lambda x, y: x+y) | deref()"""
-        return apply(lambda x: self.f(*x), self.column, self.cache)
+        return apply(lambda x: self.f(*x, **self.kwargs), self.column, self.cache)
 def executeFunc(common, line):
     import dill
     f, kwargs = dill.loads(common)
@@ -114,6 +124,7 @@ def executeFunc(common, line):
 def terminateGraceful(): signal.signal(signal.SIGINT, signal.SIG_IGN)
 class applyMp(BaseCli):
     _pools = set()
+    _torchNumThreads = None
     def __init__(self, f:Callable[[T], T], prefetch:int=None, timeout:float=8, utilization:float=0.8, bs:int=1, **kwargs):
         """Like :class:`apply`, but execute ``f(row)`` of each row in
 multiple processes. Example::
@@ -206,9 +217,13 @@ ones. So, you can potentially do something like this::
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
         timeout = self.timeout; it = iter(it) # really make sure it's an iterator, for prefetch
         if self.bs > 1:
-            return it | cli.batched(self.bs, True) | applyMp(apply(self.f) | cli.deref(), self.prefetch, timeout, **self.kwargs) | cli.joinStreams()
+            return it | cli.batched(self.bs, True) | applyMp(apply(self.f) | cli.toList(), self.prefetch, timeout, **self.kwargs) | cli.joinStreams()
         os.environ["py_k1lib_in_applyMp"] = "True"
+        if hasTorch:
+            try: applyMp._torchNumThreads = applyMp._torchNumThreads or torch.get_num_threads(); torch.set_num_threads(1)
+            except: pass # why do all of this? Because some strange interaction between PyTorch and multiprocessing, outlined here: https://github.com/pytorch/pytorch/issues/82843
         self.p = p = mp.Pool(int(mp.cpu_count()*self.utilization), terminateGraceful)
+        if hasTorch and applyMp._torchNumThreads is not None: torch.set_num_threads(applyMp._torchNumThreads)
         applyMp._pools.add(p); common = dill.dumps([self.f, self.kwargs])
         def gen():
             try:
@@ -292,48 +307,6 @@ All examples from :class:`applyMp` should work perfectly here."""
                 for data in datas: data[0].join(0.01)
                 raise RuntimeError("Thread timed out!")
             yield data[1].value
-class applySerial(BaseCli):
-    def __init__(self, f, includeFirst=False):
-        """Applies a function repeatedly. First yields input iterator ``x``. Then
-yields ``f(x)``, then ``f(f(x))``, then ``f(f(f(x)))`` and so on. Example::
-
-    # returns [4, 8, 16, 32, 64]
-    2 | applySerial(op()*2) | head(5) | deref()
-
-If the result of your operation is an iterator, you might want to
-:class:`~k1lib.cli.utils.deref` it, like this::
-
-    rs = iter(range(8)) | applySerial(rows()[::2])
-    # returns [0, 2, 4, 6]
-    next(rs) | deref()
-    # returns []. This is because all the elements are taken by the previous deref()
-    next(rs) | deref()
-    # returns [[10, -6], [4, 16], [20, -12]]
-    [2, 8] | ~applySerial(lambda a, b: (a + b, a - b)) | head(3) | deref()
-
-    rs = iter(range(8)) | applySerial(rows()[::2] | deref())
-    # returns [0, 2, 4, 6]
-    next(rs)
-    # returns [0, 4]
-    next(rs)
-    # returns [0]
-    next(rs)
-
-:param f: function to apply repeatedly
-:param includeFirst: whether to include the raw input value or not"""
-        fs = [f]; super().__init__(fs=fs); self.f = fs[0]
-        self.includeFirst = includeFirst; self.unpack = False
-    def __ror__(self, it):
-        f = fastF(self.f)
-        if self.unpack:
-            if not self.includeFirst: it = f(*it)
-            while True: yield it; it = f(*it)
-        else:
-            if not self.includeFirst: it = f(it)
-            while True: yield it; it = f(it)
-    def __invert__(self):
-        ans = applySerial(self.f, self.includeFirst)
-        ans.unpack = True; return ans
 class sort(BaseCli):
     def __init__(self, column:int=0, numeric=True, reverse=False):
         """Sorts all lines based on a specific `column`.
@@ -400,7 +373,7 @@ Kinda like the bash command ``tee``. Example::
 This is useful whenever you want to mutate something, but don't want to
 include the function result into the main stream.
 
-See also: :class:`~output.tee`"""
+See also: :class:`~k1lib.cli.output.tee`"""
         fs = [f]; super().__init__(fs=fs); self.f = fs[0]
     def __ror__(self, it:T) -> T:
         self.f(it); return it
@@ -423,11 +396,13 @@ in ``float("inf")``, or ``None``. Example::
     # returns True, as the seed is the same
     range(10) | randomize(seed=4) | deref() == range(10) | randomize(seed=4) | deref()"""
         self.bs = bs if bs != None else float("inf")
-        r = random.Random(seed)
-        self.gen = torch.Generator().manual_seed(r.getrandbits(63))
+        if hasTorch:
+            gen = torch.Generator().manual_seed(random.Random(seed).getrandbits(63))
+            self.genn = lambda n: torch.randperm(n, generator=gen)
+        else: self.genn = np.random.permutation
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
         for batch in it | cli.batched(self.bs, True):
-            batch = list(batch); perms = torch.randperm(len(batch), generator=self.gen)
+            batch = list(batch); perms = self.genn(len(batch))
             for idx in perms: yield batch[idx]
 class StaggeredStream:
     def __init__(self, stream:Iterator[T], every:int):

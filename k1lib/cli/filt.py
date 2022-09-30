@@ -4,9 +4,11 @@ This is for functions that cuts out specific parts of the table
 """
 from typing import Callable, Union, List, overload, Iterator, Any, Set, Tuple
 from k1lib.cli.init import BaseCli, Table, T, fastF
-import k1lib.cli as cli; import k1lib, os, torch
+import k1lib.cli as cli; import k1lib, os
 from k1lib.cli.typehint import *
 import numpy as np; from collections import deque
+try: import torch; hasTorch = True
+except: hasTorch = False
 __all__ = ["filt", "inSet", "contains", "empty",
            "isNumeric", "instanceOf",
            "head", "tail", "columns", "cut", "rows",
@@ -60,17 +62,7 @@ Example::
     # returns [2, 3]
     range(5) | inSet([2, 8, 3]) | deref()
     # returns [0, 1, 4]
-    range(5) | ~inSet([2, 8, 3]) | deref()
-
-You can also use :class:`~k1lib.cli.modifier.op` like this, so you don't
-have to remember this cli::
-    
-    # returns [2, 3]
-    range(5) | filt(op() in [2, 8, 3]) | deref()
-    # returns [0, 1, 4]
-    range(5) | ~filt(op() in [2, 8, 3]) | deref()
-
-However, this feature is very experimental"""
+    range(5) | ~inSet([2, 8, 3]) | deref()"""
     values = set(values)
     return filt(lambda l: l in values, column)
 def contains(s:str, column:int=None) -> filt:
@@ -79,12 +71,7 @@ to :class:`~k1lib.cli.grep.grep`, but this is simpler, and can be inverted.
 Example::
 
     # returns ['abcd', '2bcr']
-    ["abcd", "0123", "2bcr"] | contains("bc") | deref()
-
-You can also use :class:`~k1lib.cli.modifier.op` like this::
-
-    # returns ['abcd', '2bcr']
-    ["abcd", "0123", "2bcr"] | filt("bc" in op()) | deref()"""
+    ["abcd", "0123", "2bcr"] | contains("bc") | deref()"""
     return filt(lambda e: s in e, column)
 class empty(BaseCli):
     def __init__(self, reverse=False):
@@ -257,7 +244,7 @@ Table[T]."""
     def __ror__(self, it:Table[T]) -> Table[T]:
         columns = self.columns; it = iter(it)
         sentinel = object(); row = next(it, sentinel)
-        if row == sentinel: return []
+        if row is sentinel: return []
         row = list(row); rs = range(len(row)+1000) # 1000 for longer rows below
         it = it | cli.insert(row)
         if isinstance(columns, slice): columns = set(rs[columns])
@@ -296,7 +283,7 @@ Example::
         for it in its:
             if answer is None: answer = set(it); continue
             answer = answer.intersection(it)
-        return answer
+        return set() if answer is None else answer
 class union(BaseCli):
     def __init__(self):
         """Returns the union of multiple streams.
@@ -320,8 +307,8 @@ Example::
     # returns [[1, "a"], [2, "a"]]
     [[1, "a"], [2, "a"], [1, "b"]] | unique(0) | deref()
 
-:param column: doesn't have the default case of None, because you can always use
-    :class:`k1lib.cli.conv.toSet`"""
+:param column: doesn't have the default case of None, because
+    you can always convert the entire thing to a set"""
         super().__init__(); self.column = column
     def __ror__(self, it:Table[T]) -> Table[T]:
         terms = set(); c = self.column

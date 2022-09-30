@@ -21,12 +21,14 @@ def nonEmptyList(_list):
 @k1lib.patch(Cbs)
 class Loss(Callback):
     " "
-    def __init__(self):
+    def __init__(self, f=lambda l: l.loss):
         """Records losses after each batch.
 Expected variables in :class:`~k1lib.Learner`:
 
-- loss: single float value"""
-        super().__init__(); self.order = 20
+- loss: single float value
+
+:param f: optional function to get the loss from :class:`~k1lib.Learner` object"""
+        super().__init__(); self.order = 20; self.f = f
         self.train = []; self.valid = [] # all stats all times
         # average stats for each epoch
         self.epoch = k1lib.Object.fromDict({"train": [], "valid": []})\
@@ -39,8 +41,9 @@ Expected variables in :class:`~k1lib.Learner`:
         self._trainLosses = []; self._validLosses = []
         self._landscape = k1lib.callbacks.Landscape(lambda l: l.loss, "_LossLandscape")
     def endLoss(self):
-        if self.l.model.training: self._trainLosses.append(self.l.loss)
-        else: self._validLosses.append(self.l.loss)
+        loss = self.f(self.l)
+        if self.l.model.training: self._trainLosses.append(loss)
+        else: self._validLosses.append(loss)
     def endEpoch(self):
         self.train.extend(self._trainLosses); self.epoch.train.append(np.mean(nonEmptyList(self._trainLosses)))
         self.valid.extend(self._validLosses); self.epoch.valid.append(np.mean(nonEmptyList(self._validLosses)))

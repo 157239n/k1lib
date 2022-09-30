@@ -8,6 +8,11 @@ is this possible? Check out :meth:`k1lib.patch`.
 .. automodule:: k1lib._monkey
     :members: dummy
 
+Python builtins
+--------------------------------------------------
+
+.. automethod:: builtins.str.splitCamel
+
 Class :class:`torch.nn.Module`
 -------------------------------
 
@@ -36,6 +41,7 @@ Module :mod:`torch`
 --------------------------------------------------
 
 .. automethod:: torch.loglinspace
+.. automethod:: torch.sameStorage
 
 Class :class:`graphviz.Digraph`
 -------------------------------------
