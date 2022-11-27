@@ -43,6 +43,7 @@ confusionMatrix module
 
 .. automodule:: k1lib.callbacks.confusionMatrix
    :members:
+   :undoc-members:
    :show-inheritance:
 
 core module
@@ -78,6 +79,7 @@ landscape module
 
 .. automodule:: k1lib.callbacks.landscape
    :members:
+   :undoc-members:
    :show-inheritance:
 
 loss\_accuracy module
@@ -85,6 +87,7 @@ loss\_accuracy module
 
 .. automodule:: k1lib.callbacks.loss_accuracy
    :members:
+   :undoc-members:
    :show-inheritance:
 
 paramFinder module
@@ -92,6 +95,7 @@ paramFinder module
 
 .. automodule:: k1lib.callbacks.paramFinder
    :members:
+   :undoc-members:
    :show-inheritance:
 
 profiler module

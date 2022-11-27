@@ -22,7 +22,7 @@ class Identity(Lambda):
 class LinBlock(nn.Module):
     def __init__(self, inC, outC):
         """Linear layer with relu behind it"""
-        super().__init__(); self.lin = nn.Linear(inC, outC); self.relu = nn.ReLU()
+        super().__init__(); self.lin = nn.Linear(inC, outC); self.relu = nn.LeakyReLU()
     def forward(self, x):
         return x | self.lin | self.relu
 class MultiheadAttention(nn.Module):

@@ -277,6 +277,13 @@
       input[type="file"] {
         font-size: 1em;
       }
+      
+      textarea {
+        font-size: 1em;
+        min-width: 400px;
+        padding: 10px;
+        width: 100%;
+      }
 
       .block {
         flex: 1;
@@ -350,6 +357,7 @@
           <div class="marker"></div>
           <div class="label">Server offline</div>
         </div>
+        <div class="scan" id="idle"><div class="label">Idle</div></div>
       </div>
       <h2>Parameters</h2>
       <div
@@ -398,24 +406,26 @@
     let [values, idxToArg] = [{}, {}]; // Dict[arg, value], Dict[idx, arg]
     for (let arg of meta.args) values[arg] = null;
     let [autoInc, autoRun] = [1, false];
-    let [requests, newRequest, pendingRequest, requestLastSent] = [[], false, false, 0];
+    let [requests, newRequest, nRequests, requestLastSent] = [[], false, 0, 0];
     setInterval(() => { // to rate limit the requests
-      if (!pendingRequest && newRequest && Date.now() / 1000 - requestLastSent > 0.2) {
+      if (!nRequests && newRequest && Date.now() / 1000 - requestLastSent > 0.2) {
         run(); newRequest = false;
         requestLastSent = Date.now() / 1000;
       }
     }, 100);
     const updated = () => (autoRun ? (newRequest = true) : 0);
     const autoRunToggle = () => {autoRun = !autoRun; updated();};
+    let currentRequests = 0;
     async function run() {
       console.log("Sent request");
-      pendingRequest = true;
+      nRequests++;
+      idle.innerHTML = "Executing...";
       const res = await fetch(prefix, {
         method: "POST",
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify(values),
       });
-      pendingRequest = false;
+      nRequests--;
       const text = await res.text();
       const anno = meta.annoStrs.return;
       if (["int", "float", "str", "bool"].includes(anno)) result.innerHTML = `<pre>${text}</pre>`;
@@ -424,13 +434,21 @@
       } else if (anno === "Image") result.innerHTML = `<div style="overflow: auto;"><img style="width: 100%; object-fit: cover;" src="data:image/jpg;base64, ${text}" alt="Result image" /></div>`
       else throw new Exception("Return value not recognized");
     }
+    setInterval(() => {
+      idle.innerHTML = nRequests ? "Executing..." : "Idle";
+    }, 100)
 
     function textBox(arg, doc, anno, def) {
       const i = ++autoInc; setTimeout(() => cb_textBox(i), 0); idxToArg[i] = arg;
-      return `
+      if (`${def}`.length < 100) return `
         <div class="block">
           <div>${arg} (${anno}): ${doc || "(no docs)"}</div>
           <input id="textBox_${i}" type="text" value="${def}" oninput="cb_textBox(${i})" />
+        </div>`;
+      return `
+        <div class="block">
+          <div>${arg} (${anno}): ${doc || "(no docs)"}</div>
+          <textarea id="textBox_${i}" rows="7" oninput="cb_textBox(${i})">${def}</textarea>
         </div>`;
     }
 
@@ -550,6 +568,7 @@
     const intro = document.querySelector("#intro");
     const blocks = document.querySelector("#blocks");
     const result = document.querySelector("#result");
+    const idle = document.querySelector("#idle");
     let blocksHtml = "";
     for (let arg of meta.args) {
       let anno = meta.annoStrs[arg]; let def = meta.defaults[arg]; let doc = meta.docs[arg];

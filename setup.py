@@ -11,7 +11,7 @@ except:
     md = ""
 
 deps = ["graphviz", "torchvision", "pillow",
-        "scikit-image", "pyperclip", "k1a>=1.1,<2", "torch"]
+        "scikit-image", "pyperclip", "k1a>=1.2,<2", "torch"]
 
 setup(
     name="k1lib",
@@ -21,7 +21,7 @@ setup(
               "k1lib.callbacks.lossFunctions",
               "k1lib._mo", "k1lib.serve"],
     data_files=[('k1lib/serve', ['k1lib/serve/main.html'])],
-    version="1.1",
+    version="1.2",
     python_requires='>=3.7',
     install_requires=["numpy>=1.14", "matplotlib>=2.0", "dill", "forbiddenfruit"],
     extras_require={"all": deps},

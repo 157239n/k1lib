@@ -7,7 +7,7 @@ goodTypes = (int, float, str, bool, bytes, PIL.Image.Image, k1.Range, range, lis
 
 spec = inspect.getfullargspec(endpoint); args = spec.args; annos = spec.annotations; defaults = spec.defaults or (); n = len(args)
 docs = (endpoint.__doc__ or "").split("\n") | grep(":param", sep=True).till() | filt(op().ab_len() > 0) | op().strip().all(2) | (join(" ") | op().split(":") | ~aS(lambda x, y, *z: [y.split(" ")[1], ":".join(z).strip()])).all() | transpose() | toDict()
-mainDoc = (endpoint.__doc__ or "").split("\n") | grep("", sep=True).till(":param") | ~filt(op()[0].startswith(":param ")) | join(" ").all() | join(" ")
+mainDoc = (endpoint.__doc__ or "").split("\n") | grep(".", sep=True).till(":param") | breakIf(op()[0].startswith(":param")) | join(" ").all() | join(" ")
 
 def raiseEx(ex): raise ex
 if len(annos) != n + 1: raise Exception(f"Please annotate all of your arguments ({n} args + 1 return != {len(annos)} annos). Args: {args}, annos: {annos}")

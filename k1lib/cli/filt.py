@@ -12,7 +12,7 @@ except: hasTorch = False
 __all__ = ["filt", "inSet", "contains", "empty",
            "isNumeric", "instanceOf",
            "head", "tail", "columns", "cut", "rows",
-           "intersection", "union", "unique", "breakIf", "mask"]
+           "intersection", "union", "unique", "breakIf", "mask", "tryout"]
 settings = k1lib.settings.cli
 class filt(BaseCli):
     def __init__(self, predicate:Callable[[T], bool], column:int=None):
@@ -63,7 +63,7 @@ Example::
     range(5) | inSet([2, 8, 3]) | deref()
     # returns [0, 1, 4]
     range(5) | ~inSet([2, 8, 3]) | deref()"""
-    values = set(values)
+    if not isinstance(values, (set, dict)): values = set(values)
     return filt(lambda l: l in values, column)
 def contains(s:str, column:int=None) -> filt:
     """Filters out lines that don't contain the specified substring. Sort of similar
@@ -346,3 +346,39 @@ Example::
         if isinstance(it, settings.arrayTypes):
             return it[list(self.mask)]
         return (e for e, m in zip(it, self.mask) if m)
+class tryout(BaseCli):
+    end = object()
+    def __init__(self, result=None):
+        """Wraps every cli operation after this in a try-catch block, returning ``result``.
+This can be a little finicky. Example::
+
+    # returns 9
+    3 | (tryout("failed") | op()**2)
+    # returns "failed", instead of raising an exception
+    "3" | (tryout("failed") | op()**2)
+    # returns "unsupported operand type(s) for ** or pow(): 'str' and 'int'"
+    "3" | (tryout(Exception) | op()**2)
+
+By default, this ``tryout()`` object will gobble up all clis behind it and wrap
+them inside a try-catch block. This might be undesirable, so you can stop it early::
+
+    # returns "failed"
+    3 | (tryout("failed") | op()**2 | aS(str) | op()**2)
+    # raises an exception, because it does not errors after `tryout.end`
+    3 | (tryout("failed") | op()**2 | tryout.end | aS(str) | op()**2)
+
+:param result: result to return if there is an exception. If passed in the class
+    `Exception`, then will return the exception's string instead"""
+        self.clis = []; self.ser = None; self.result = result; self.absorbing = True
+    def __or__(self, it):
+        if it is tryout.end: self.absorbing = False; return self
+        if isinstance(it, BaseCli):
+            if self.absorbing: self.clis.append(it); self.ser = None; return self
+            else: return super().__or__(it)
+        else: raise Exception("Can't pipe tryout() to a non-cli tool");
+    def __ror__(self, it):
+        if self.ser is None:
+            self.ser = cli.serial(*self.clis)
+            if len(self.clis) == 0: raise Exception("tryout() currently does not wrap around any other cli. You may need to change `data | tryout() | cli1() | cli2()` into `data | (tryout() | cli1() | cli2())`")
+        try: return it | self.ser
+        except Exception as e: return str(e) if self.result is Exception else self.result

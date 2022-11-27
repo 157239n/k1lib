@@ -268,6 +268,8 @@ inp module
    :undoc-members:
    :show-inheritance:
 
+   .. automethod:: k1lib.cli.inp.cat.pickle
+
 kcsv module
 -------------------------
 

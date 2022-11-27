@@ -10,7 +10,7 @@ try: import torch; hasTorch = True
 except: hasTorch = False
 __all__ = ["Object", "Range", "Domain", "AutoIncrement", "Wrapper", "Every",
            "RunOnce", "MaxDepth", "MovingAvg", "Absorber",
-           "Settings", "settings", "_settings", "UValue"]
+           "Settings", "settings", "_settings", "UValue", "ConstantPad"]
 class Object:
     """Convenience class that acts like :class:`~collections.defaultdict`. You
 can use it like a normal object::
@@ -880,7 +880,7 @@ settings.add("wd", os.getcwd(), "default working directory, will get from `os.ge
 settings.add("cancelRun_newLine", True, "whether to add a new line character at the end of the cancel run/epoch/batch message")
 or_patch = Settings()\
     .add("numpy", True, "whether to patch numpy arrays")\
-    .add("dict", True, "whether to patch Python dict keys and items")\
+    .add("dict", False, "whether to patch Python dict keys and items")\
     .add("pandas", True, "whether to patch pandas series")
 startup = Settings().add("or_patch", or_patch, "whether to patch __or__() method for several C-extension datatypes (numpy array, pandas data frame/series, etc). This would make cli operations with them a lot more pleasant, but might cause strange bugs. Haven't met them myself though")
 settings.add("startup", startup, "these settings have to be applied like this: `import k1lib; k1lib.settings.startup.or_patch = False; from k1lib.imports import *` to ensure that the values are set")
@@ -1149,3 +1149,30 @@ else:
     class UValue:
         def __init__(self):
             return NotImplemented
+class ConstantPad:
+    def __init__(self, left=False):
+        """Adds constant amount of padding to strings.
+Example::
+
+    p = k1.ConstantPad()
+    p("123")    # returns "123"
+    p("23")     # returns " 23"
+    "12345" | p # returns "12345", can pipe it in too, but is not strictly a cli tool
+    p("123")    # returns "  123"
+
+Basically, this is useful in situations when you're printing a table or status bar and
+needs relatively constant width but you don't know what's the desired width at the start.
+
+As you normally use a bunch of these in groups, there's a convenience function for
+that too::
+
+    p1, p2 = k1.ConstantPad.multi(2)
+
+:param left: whether to align left or not"""
+        self.left = left; self.length = 0
+    def __call__(self, s):
+        self.length = max(self.length, len(s))
+        return s.ljust(self.length) if self.left else s.rjust(self.length)
+    def __ror__(self, s): return self.__call__(s)
+    @staticmethod
+    def multi(n, *args, **kwargs): return [ConstantPad(*args, **kwargs) for i in range(n)]

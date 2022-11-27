@@ -32,3 +32,11 @@ class _Mo(wrapMod):
     def __dir__(self): return super().__dir__() + self._MoWrap_dirs
 from . import _mo; mo = _Mo(_mo)
 for _name, _f in _mo._a.items(): mo.registerSubstance(_name, _f)
+
+import os
+try:
+    _fn = os.path.expanduser("~/.k1lib/startup.py")
+    if os.path.exists(_fn) and os.path.isfile(_fn):
+        with open(_fn) as _f: exec(_f.read())
+except: pass
+

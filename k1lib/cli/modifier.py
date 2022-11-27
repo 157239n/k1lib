@@ -3,12 +3,12 @@
 This is for quick modifiers, think of them as changing formats
 """
 __all__ = ["applyS", "aS", "apply", "applyMp", "parallel",
-           "applyTh",
+           "applyTh", "applySerial",
            "sort", "sortF", "consume", "randomize", "stagger", "op",
            "integrate"]
 from typing import Callable, Iterator, Any, Union, List
 from k1lib.cli.init import patchDefaultDelim, BaseCli, T, fastF
-import k1lib.cli as cli, numpy as np, threading
+import k1lib.cli as cli, numpy as np, threading, gc
 from collections import deque
 from functools import partial, update_wrapper, lru_cache
 from k1lib.cli.typehint import *
@@ -43,7 +43,8 @@ and whatnot.
         if self.hasHint: return self._hint
         try: return self.f._typehint(inp)
         except: return tAny()
-    def __ror__(self, it:T) -> T: return self.f(it, *self.args, **self.kwargs)
+    def __ror__(self, it:T) -> T:
+        return self.f(it, *self.args, **self.kwargs)
     def __invert__(self):
         """Configures it so that it expand the arguments out.
 Example::
@@ -125,7 +126,7 @@ def terminateGraceful(): signal.signal(signal.SIGINT, signal.SIG_IGN)
 class applyMp(BaseCli):
     _pools = set()
     _torchNumThreads = None
-    def __init__(self, f:Callable[[T], T], prefetch:int=None, timeout:float=8, utilization:float=0.8, bs:int=1, **kwargs):
+    def __init__(self, f:Callable[[T], T], prefetch:int=None, timeout:float=8, utilization:float=0.8, bs:int=1, newPoolEvery:int=0, **kwargs):
         """Like :class:`apply`, but execute ``f(row)`` of each row in
 multiple processes. Example::
 
@@ -209,39 +210,53 @@ ones. So, you can potentially do something like this::
 :param bs: if specified, groups ``bs`` number of transforms into 1 job to be more
     efficient.
 :param kwargs: extra arguments to be passed to the function. ``args`` not
-    included as there're a couple of options you can pass for this cli."""
+    included as there're a couple of options you can pass for this cli.
+:param newPoolEvery: creates a new processing pool for every specific amount of input
+    fed. 0 for not refreshing any pools at all. Turn this on in case your process consumes
+    lots of memory and you have to kill them eventually to free up some memory"""
         super().__init__(fs=[f]); self.f = fastF(f)
         self.prefetch = prefetch or 1_000_000
         self.timeout = timeout; self.utilization = utilization
-        self.bs = bs; self.kwargs = kwargs
+        self.bs = bs; self.kwargs = kwargs; self.p = None; self.newPoolEvery = newPoolEvery; self.ps = []
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
         timeout = self.timeout; it = iter(it) # really make sure it's an iterator, for prefetch
-        if self.bs > 1:
-            return it | cli.batched(self.bs, True) | applyMp(apply(self.f) | cli.toList(), self.prefetch, timeout, **self.kwargs) | cli.joinStreams()
-        os.environ["py_k1lib_in_applyMp"] = "True"
-        if hasTorch:
-            try: applyMp._torchNumThreads = applyMp._torchNumThreads or torch.get_num_threads(); torch.set_num_threads(1)
-            except: pass # why do all of this? Because some strange interaction between PyTorch and multiprocessing, outlined here: https://github.com/pytorch/pytorch/issues/82843
-        self.p = p = mp.Pool(int(mp.cpu_count()*self.utilization), terminateGraceful)
-        if hasTorch and applyMp._torchNumThreads is not None: torch.set_num_threads(applyMp._torchNumThreads)
-        applyMp._pools.add(p); common = dill.dumps([self.f, self.kwargs])
-        def gen():
+        if self.bs > 1: return it | cli.batched(self.bs, True) | applyMp(apply(self.f) | cli.toList(), self.prefetch, timeout, **self.kwargs) | cli.joinStreams()
+        def newPool():
+            if hasTorch:
+                try: applyMp._torchNumThreads = applyMp._torchNumThreads or torch.get_num_threads(); torch.set_num_threads(1)
+                except: pass # why do all of this? Because some strange interaction between PyTorch and multiprocessing, outlined here: https://github.com/pytorch/pytorch/issues/82843
+            os.environ["py_k1lib_in_applyMp"] = "True"
+            self.p = mp.Pool(int(mp.cpu_count()*self.utilization), terminateGraceful); self.ps.append(self.p)
+            if hasTorch and applyMp._torchNumThreads is not None: torch.set_num_threads(applyMp._torchNumThreads)
+        def intercept(it, n):
+            for i, e in enumerate(it):
+                if i % n == 0:
+                    if self.p is not None: self.p.close(); self.ps.remove(self.p)
+                    gc.collect(); newPool()
+                yield e
+        common = dill.dumps([self.f, self.kwargs])
+        def gen(it):
             try:
+                if self.newPoolEvery > 0: it = intercept(it, self.newPoolEvery)
+                else: newPool()
                 fs = deque()
                 for i, line in zip(range(self.prefetch), it):
-                    fs.append(p.apply_async(executeFunc, [common, dill.dumps(line)]))
+                    fs.append(self.p.apply_async(executeFunc, [common, dill.dumps(line)]))
                 for line in it:
                     yield fs.popleft().get(timeout)
-                    fs.append(p.apply_async(executeFunc, [common, dill.dumps(line)]))
+                    fs.append(self.p.apply_async(executeFunc, [common, dill.dumps(line)]))
                 for f in fs: yield f.get(timeout)
             except KeyboardInterrupt as e:
                 print("applyMp interrupted. Terminating pool now")
-                self.p.terminate(); applyMp._pools.remove(self.p); raise e
+                for p in self.ps: p.terminate();
+                raise e
             except Exception as e:
                 print("applyMp encounter errors. Terminating pool now")
-                self.p.terminate(); applyMp._pools.remove(self.p); raise e
-            else: self.p.terminate(); applyMp._pools.remove(self.p)
-        return gen()
+                for p in self.ps: p.terminate();
+                raise e
+            else:
+                for p in self.ps: p.terminate();
+        return gen(it)
     @staticmethod
     def clearPools():
         """Terminate all existing pools. Do this before restarting/quitting the
@@ -307,6 +322,46 @@ All examples from :class:`applyMp` should work perfectly here."""
                 for data in datas: data[0].join(0.01)
                 raise RuntimeError("Thread timed out!")
             yield data[1].value
+class applySerial(BaseCli):
+    def __init__(self, f, *args, **kwargs):
+        """Applies a function repeatedly. First yields input iterator ``x``. Then
+yields ``f(x)``, then ``f(f(x))``, then ``f(f(f(x)))`` and so on. Example::
+
+    # returns [2, 4, 8, 16, 32]
+    2 | applySerial(op()*2) | head(5) | deref()
+
+If the result of your operation is an iterator, you might want to
+:class:`~k1lib.cli.utils.deref` it, like this::
+
+    rs = iter(range(8)) | applySerial(rows()[::2])
+    # returns [0, 2, 4, 6]
+    rs | rows(1) | item() | deref()
+    # returns []. This is because all the elements are taken by the previous deref()
+    rs | item() | deref()
+    # returns [[2, 8], [10, -6], [4, 16], [20, -12]]
+    [2, 8] | ~applySerial(lambda a, b: (a + b, a - b)) | head(4) | deref()
+
+    rs = iter(range(8)) | applySerial(rows()[::2] | deref())
+    # returns [0, 2, 4, 6]
+    rs | rows(1) | item()
+    # returns [0, 4]
+    rs | item() # or `next(rs)`
+    # returns [0]
+    rs | item() # or `next(rs)`
+
+:param f: function to apply repeatedly
+:param includeFirst: whether to include the raw input value or not"""
+        fs = [f]; super().__init__(fs=fs); self.f = fs[0]
+        self.unpack = False; self.args = args; self.kwargs = kwargs
+    def __ror__(self, it):
+        f = fastF(self.f)
+        if self.unpack:
+            while True: yield it; it = f(*it, *self.args, **self.kwargs)
+        else:
+            while True: yield it; it = f(it, *self.args, **self.kwargs)
+    def __invert__(self):
+        ans = applySerial(self.f, *self.args, **self.kwargs)
+        ans.unpack = True; return ans
 class sort(BaseCli):
     def __init__(self, column:int=0, numeric=True, reverse=False):
         """Sorts all lines based on a specific `column`.
@@ -395,11 +450,15 @@ in ``float("inf")``, or ``None``. Example::
     range(10) | randomize(None) | deref()
     # returns True, as the seed is the same
     range(10) | randomize(seed=4) | deref() == range(10) | randomize(seed=4) | deref()"""
-        self.bs = bs if bs != None else float("inf")
+        self.bs = bs if bs != None else float("inf"); self.seed = seed; self._initGenn()
+    def _initGenn(self):
         if hasTorch:
-            gen = torch.Generator().manual_seed(random.Random(seed).getrandbits(63))
+            gen = torch.Generator().manual_seed(random.Random(self.seed).getrandbits(63))
             self.genn = lambda n: torch.randperm(n, generator=gen)
         else: self.genn = np.random.permutation
+    def __getstate__(self):
+        genn = self.genn; self.genn = None; return self.__dict__
+    def __setstate__(self, d): self.__dict__.update(d); self._initGenn()
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
         for batch in it | cli.batched(self.bs, True):
             batch = list(batch); perms = self.genn(len(batch))

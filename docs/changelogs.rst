@@ -2,6 +2,26 @@
 Changelogs
 ==========
 
+`1.2 </1.2>`_
+---------------
+
+.. currentmodule:: k1lib.cli
+
+Cli:
+
+- Added newPoolEvery mode to :class:`~modifier.applyMp`
+- Added :class:`~inp.walk`, :class:`~filt.tryout`, :class:`~inp.splitSeek`,
+  :meth:`inp.cat.pickle`.
+- Added PIL image mode to :class:`~utils.size`
+- Added chemical structure mode to :class:`~conv.toPIL`
+- Added read speed profiler to :meth:`~inp.cat`
+
+Generic:
+
+- Added :class:`~k1lib.ConstantPad`
+- Changed :meth:`~k1lib.captureStdout` so that it can capture C library's output and
+  can capture stderr
+
 `1.1 </1.1>`_
 ---------------
 

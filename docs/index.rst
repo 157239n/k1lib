@@ -61,15 +61,9 @@ Installation
 
 Just do this::
 
-   pip install k1lib[extras]
+   pip install k1lib[all]
 
-If you're on Windows, do this::
-
-   pip install k1lib[extras_windows]
-
-This will install all extra dependencies, except for `k1a`, which is a supplementary
-library to accelerate functionalities within this library. If you can't install the
-optional extra dependencies for some reason then do this::
+If you can't install the optional extra dependencies for some reason then do this::
 
    pip install k1lib
 
@@ -82,7 +76,11 @@ cli tools more pleasant to use. However, if you're those diehard programmers
 who sworn to never import all, then you can just do `import k1lib` instead.
 Still, look over the `k1lib.imports` module to know what you should import.
 
-This library has very few dependencies, and all of them are very commonly used
+This library has very few dependencies, and all of them are very commonly used.
+The library has a soft dependency on PyTorch. It will run fine without PyTorch, but
+a lot of functionalities related to deep learning will not work. While tests are
+rigorously run in an environment where PyTorch is installed, they're not run for
+environments that don't, so strange bugs may appear.
 
 Repo is at https://github.com/157239n/k1lib/ btw. Also, the search bar is your
 friend, as there're lots of stuff here.

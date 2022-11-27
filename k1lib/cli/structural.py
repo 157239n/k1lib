@@ -344,7 +344,9 @@ def _batchSliceable(it, bs, includeLast):
     while (cur+1)*bs <= n:
         yield it[cur*bs:(cur+1)*bs]
         cur += 1
-    if includeLast: yield it[cur*bs:(cur+1)*bs]
+    if includeLast:
+        ans = it[cur*bs:(cur+1)*bs]
+        if len(ans) > 0: yield ans
 class batched(BaseCli):
     def __init__(self, bs=32, includeLast=False):
         """Batches the input stream.

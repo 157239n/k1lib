@@ -25,6 +25,8 @@ try: import PIL; hasPIL = True
 except: hasPIL = False
 try: import torch; hasTorch = True
 except: torch = k1lib.Object().withAutoDeclare(lambda: type("RandomClass", (object, ), {})); hasTorch = False
+try: import rdkit; hasRdkit = True
+except: hasRdkit = False
 class toTensor(BaseCli):
     def __init__(self, dtype=torch.float32):
         """Converts generator to :class:`torch.Tensor`. Essentially
@@ -143,10 +145,16 @@ Example::
     def __ror__(self, it:Iterator[float]) -> float:
         if isinstance(it, settings.arrayTypes): return it.min()
         return min(it)
-settings.add("font", None, "default font file. Best to use .ttf files")
-def cropToContent(im, pad=10):
-    coords = np.argwhere(im.max()-im); x_min, y_min = coords.min(axis=0)
-    x_max, y_max = coords.max(axis=0); return im[x_min-pad:x_max+1+pad, y_min-pad:y_max+1+pad]
+settings.add("font", None, "default font file. Best to use .ttf files, used by toPIL()")
+settings.add("chem", k1lib.Settings().add("imgSize", 200, "default image size used in toPIL() when drawing rdkit molecules"), "chemistry-related settings")
+def cropToContentNp(ogIm, pad=10):
+    dim = len(ogIm.shape); im = ogIm
+    if dim > 2: im = im.mean(0)
+    coords = np.argwhere(im.max()-im); x_min, y_min = coords.min(axis=0); x_max, y_max = coords.max(axis=0)
+    return ogIm[x_min-pad:x_max+1+pad, y_min-pad:y_max+1+pad] if dim == 2 else ogIm[:,x_min-pad:x_max+1+pad, y_min-pad:y_max+1+pad]
+def cropToContentPIL(im, pad=0):
+    im = im | toTensor(int) | cli.op().numpy() | cli.aS(cropToContentNp, pad)
+    return torch.from_numpy(im).permute(1, 2, 0) | toImg() if len(im.shape) > 2 else im | toImg()
 class toPIL(BaseCli):
     def __init__(self):
         """Converts multiple data types into a PIL image.
@@ -160,6 +168,8 @@ Example::
     "abc.jpg" | toPIL() | toBytes() | toPIL()
     # converts paragraphs to image
     ["abc", "def"] | toPIL()
+    # converts SMILES string to molecule, then to image
+    "c1ccc(C)cc1" | toMol() | toImg()
 
 You can also save a matplotlib figure by piping in a :class:`matplotlib.figure.Figure` object::
 
@@ -190,6 +200,9 @@ You can also save a matplotlib figure by piping in a :class:`matplotlib.figure.F
         if isinstance(path, mpl.figure.Figure):
             canvas = path.canvas; canvas.draw()
             return self.PIL.Image.frombytes('RGB', canvas.get_width_height(), canvas.tostring_rgb())
+        if hasRdkit and isinstance(path, rdkit.Chem.rdchem.Mol):
+            sz = settings.chem.imgSize
+            return self.__ror__(rdkit.Chem.Draw.MolsToGridImage([path], subImgSize=[sz, sz]).data) | cli.aS(cropToContentPIL)
         path = path | cli.deref()
         if len(path) > 0 and isinstance(path[0], str):
             from PIL import ImageDraw
@@ -197,7 +210,7 @@ You can also save a matplotlib figure by piping in a :class:`matplotlib.figure.F
             image = self.PIL.Image.new("L", (w*20, h*40), 255)
             font = PIL.ImageFont.truetype(settings.font, 18) if settings.font else None
             ImageDraw.Draw(image).text((20, 20), path | cli.join("\n"), 0, font=font)
-            return image | cli.toTensor() | cli.op().numpy()[0]/255 | cli.aS(cropToContent) | cli.op()*255 | toImg()
+            return image | cli.toTensor(int) | cli.op().numpy()[0]/255 | cli.aS(cropToContentNp) | cli.op()*255 | toImg()
         return NotImplemented
 toImg = toPIL
 class toRgb(BaseCli):
@@ -236,15 +249,21 @@ Example::
     def __ror__(self, i):
         return self.PIL.ImageOps.grayscale(i)
 class toDict(BaseCli):
-    def __init__(self):
+    def __init__(self, rows=False):
         """Converts 2 Iterators, 1 key, 1 value into a dictionary.
 Example::
 
     # returns {1: 3, 2: 4}
-    [[1, 2], [3, 4]] | toDict()"""
-        pass
+    [[1, 2], [3, 4]] | toDict()
+    # returns {1: 3, 2: 4}
+    [[1, 3], [2, 4]] | toDict(True)
+
+:params rows: if True, reads input in row by row, else reads
+    in list of columns"""
+        self.rows = rows
     def __ror__(self, it:Tuple[Iterator[T], Iterator[T]]) -> dict:
-        return {_k:_v for _k, _v in zip(*it)}
+        if self.rows: return {_k:_v for _k, _v in it}
+        else: return {_k:_v for _k, _v in zip(*it)}
 def _toop(toOp, c, force, defaultValue):
     return cli.apply(toOp, c) | (cli.apply(lambda x: x or defaultValue, c) if force else cli.filt(cli.op() != None, c))
 def _toFloat(e) -> Union[float, None]:
@@ -333,3 +352,23 @@ Example::
                 it.save(buffered, format="JPEG")
                 return buffered.getvalue()
         return NotImplemented
+try:
+    from rdkit import Chem
+    from rdkit.Chem import Draw
+    from rdkit.Chem import AllChem
+    from rdkit.Chem.Draw import IPythonConsole
+    IPythonConsole.drawOptions.addAtomIndices = True
+    __all__ = [*__all__, "toMol", "toSmiles"]
+    def toMol():
+        """Smiles to molecule.
+Example::
+
+    "c1ccc(C)cc1" | toMol()"""
+        return cli.aS(Chem.MolFromSmiles)
+    def toSmiles():
+        """Molecule to smiles.
+Example::
+
+    "c1ccc(C)cc1" | toMol() | toSmiles()"""
+        return cli.aS(Chem.MolToSmiles)
+except: pass

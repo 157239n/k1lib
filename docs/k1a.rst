@@ -1,10 +1,10 @@
 k1lib._k1a module
 --------------------
 
-`k1a <https://github.com/157239n/k1a>`_ is a supplementary library to this library
+`k1a <https://k1a.k1lib.com/>`_ is a supplementary library to this library
 that accelerates a lot of functionalities by compiling to C. It's exposed in this
 main library as the module :mod:`~k1lib._k1a`. When you install the library using
-``pip install k1lib[extras]``, k1a is automatically installed along with it. At
+``pip install k1lib[all]``, k1a is automatically installed along with it. At
 the moment, this only work on linux systems, could work on mac, and won't work
 on windows. Let's see an example::
 

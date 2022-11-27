@@ -9,6 +9,8 @@ import k1lib, time, math, os
 from collections import defaultdict
 try: import torch; hasTorch = True
 except: torch = k1lib.Object().withAutoDeclare(lambda: type("RandomClass", (object, ), {})); hasTorch = False
+try: import PIL; hasPIL = True
+except: hasPIL = False
 __all__ = ["size", "shape", "item", "iden", "join", "wrapList",
            "equals", "reverse", "ignore", "rateLimit", "timeLimit", "tab", "indent",
            "clipboard", "deref", "bindec", "smooth", "disassemble",
@@ -66,10 +68,13 @@ instead of actually looping over them.
         if self.idx is not None: return int
         return tList(int)
     def __ror__(self, it:Iterator[str]):
-        if self.idx == 0:
+        idx = self.idx
+        if idx == 0:
             try: return len(it)
             except: return exploreSize(it)[1]
-        if self.idx is None:
+        if hasPIL and isinstance(it, PIL.Image.Image):
+            return it.size if idx is None else it.size[idx]
+        if idx is None:
             answer = []
             try:
                 while True:

@@ -12,7 +12,7 @@ except: pass
 import matplotlib.pyplot as plt, matplotlib as mpl
 import numpy as np, dill as pickle, multiprocessing as mp, concurrent.futures as futures
 import math, os, time, sys, random, logging, traceback, re, typing, glob, warnings
-import dill, json, inspect, xml
+import dill, json, inspect, xml, base64, io
 import functools; from functools import partial, lru_cache
 import contextlib; from contextlib import contextmanager
 from collections import deque, defaultdict
@@ -38,7 +38,7 @@ def dummy():
     """Does nothing. Only here so that you can read source code of this file
 and see what's up."""
     pass
-try:
+try: # these are optional imports
     import torchvision as vision
     import torchvision.datasets as tvDs
     import torchvision.transforms as tf
@@ -47,8 +47,13 @@ try: import IPython
 except: pass
 try: import PIL
 except: pass
-try:
-    _fn = os.path.expanduser("~/.k1lib/startup.py")
-    if os.path.exists(_fn) and os.path.isfile(_fn):
-        with open(_fn) as _f: exec(_f.read())
+try: from scipy.optimize import fsolve
+except: pass
+try: import einops
+except: pass
+try: from tqdm import tqdm
+except: pass
+try: import sympy
+except: pass
+try: import rdkit; from rdkit import Chem
 except: pass

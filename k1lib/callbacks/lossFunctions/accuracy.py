@@ -11,7 +11,7 @@ PredFSig = Callable[[torch.Tensor], torch.Tensor]
 @k1lib.patch(Cbs)
 class AccF(Callback):
     " "
-    def __init__(self, predF:PredFSig=None, accF:AccFSig=None, integrations:bool=True):
+    def __init__(self, predF:PredFSig=None, accF:AccFSig=None, integrations:bool=True, variable:str="accuracy", hookToLearner:bool=True):
         """Generic accuracy function.
 
 Built in default accuracies functions are fine, if you don't do something too
@@ -33,10 +33,11 @@ Where:
 
 :param predF: takes in ``y``, returns predictions (tensor with int elements indicating the categories)
 :param accF: takes in ``(predictions, yb)``, returns accuracies (tensor with 0 or 1 elements)
-:param integrations: whether to integrate :class:`~k1lib.callbacks.confusionMatrix.ConfusionMatrix` or not."""
-        super().__init__(); self.order = 10; self.integrations = integrations; self.ownsConMat = False
+:param integrations: whether to integrate :class:`~k1lib.callbacks.confusionMatrix.ConfusionMatrix` or not.
+:param variable: variable to deposit into Learner"""
+        super().__init__(); self.order = 10; self.integrations = integrations; self.ownsConMat = False; self.hookToLearner = hookToLearner
         self.predF = predF or (lambda y: y.argmax(-1))
-        self.accF = accF or (lambda p, yb: (p == yb)+0)
+        self.accF = accF or (lambda p, yb: (p == yb)+0); self.variable = variable
     def attached(self):
         if self.integrations:
             if "ConfusionMatrix" not in self.cbs:
@@ -44,9 +45,11 @@ Where:
                 self.cbs.add(self.conMatCb); self.ownsConMat = True
             else: self.conMatCb = self.cbs.ConfusionMatrix
     def endLoss(self):
-        preds = self.predF(self.l.y); self.l.preds = preds.detach()
-        accs = self.accF(preds, self.l.yb); self.l.accuracies = accs.detach()
-        self.l.accuracy = accs.float().mean().item()
+        preds = self.predF(self.l.y); accs = self.accF(preds, self.l.yb);
+        if self.hookToLearner:
+            self.l.preds = preds.detach()
+            self.l.accuracies = accs.detach()
+        self.l.__dict__[self.variable] = accs.float().mean().item()
     def detach(self):
         super().detach()
         if self.conMatCb != None:

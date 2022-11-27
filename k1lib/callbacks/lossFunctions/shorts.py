@@ -39,12 +39,14 @@ class LossNLLCross(Callback):
         super().__init__(); self.integrations = integrations; self.ownsAccCb = False
         self.order = 11 # to make sure it's after AccF
         self.lossF = torch.nn.NLLLoss() if nll else torch.nn.CrossEntropyLoss()
+        self.accuracyCbTop5 = None
     def attached(self): # delayed initialization, so that learner and cbs has already been attached
         if self.integrations:
             if "AccF" not in self.cbs:
-                self.accuracyCb = Cbs.AccF()
-                self.cbs.add(self.accuracyCb)
                 self.ownsAccCb = True
+                self.accuracyCb = Cbs.AccF(); self.cbs.add(self.accuracyCb)
+                self.accuracyCbTop5 = Cbs.AccF(lambda y: y, lambda y, yb: (yb[:,None] == y.topk(5, dim=1).indices+0).sum(1), variable="accTop5", hookToLearner=False); self.cbs.add(self.accuracyCbTop5)
+                self.cbs.add(Cbs.Accuracy("accTop5"), name="AccuracyTop5")
             else: self.accuracyCb = self.cbs.AccF
     def inLoss(self):
         self.l.lossG = self.lossF(self.l.y, self.l.yb)
@@ -54,6 +56,9 @@ class LossNLLCross(Callback):
         if self.accuracyCb != None:
             if self.ownsAccCb: self.accuracyCb.detach()
             self.accuracyCb = None
+        if self.accuracyCbTop5 != None:
+            if self.ownsAccCb: self.accuracyCbTop5.detach()
+            self.accuracyCbTop5 = None
 @k1lib.patch(Cbs)
 @k1lib.patch(Callback.lossCls)
 class LossCrossEntropy(LossNLLCross):

@@ -73,7 +73,7 @@ try:
     import PIL; hasPIL = True
 except: hasPIL = False
 class file(BaseCli):
-    def __init__(self, fileName:str=None):
+    def __init__(self, fileName:str=None, flush:bool=False):
         """Opens a new file for writing. This will iterate through
 the iterator fed to it and put each element on a separate line. Example::
 
@@ -132,11 +132,12 @@ You can also append to file with the ">>" operator::
     cat(url) | deref()
 
 :param fileName: if not specified, create new temporary file and returns the url
-    when pipes into it"""
-        super().__init__(); self.fileName = fileName
+    when pipes into it
+:param flush: whether to flush to file immediately after every iteration"""
+        super().__init__(); self.fileName = fileName; self.flush = flush
         self.append = False # whether to append to file rather than erasing it
     def __ror__(self, it:Iterator[str]) -> None:
-        super().__ror__(it); fileName = self.fileName
+        super().__ror__(it); fileName = self.fileName; flushF = (lambda f: f.flush()) if self.flush else (lambda _: 0)
         if fileName is None:
             f = tempfile.NamedTemporaryFile()
             fileName = f.name; f.close()
@@ -153,17 +154,18 @@ You can also append to file with the ">>" operator::
         if text:
             with open(fileName, "a" if self.append else "w") as f:
                 if firstLine is not None: f.write(f"{firstLine}\n")
-                for line in it: f.write(f"{line}\n")
+                for line in it: f.write(f"{line}\n"); flushF(f)
         else:
             with open(fileName, "ab" if self.append else "wb") as f:
                 if firstLine is not None:
                     f.write(firstLine)
-                    for e in it: f.write(e)
+                    for e in it: f.write(e); flushF(f)
                 else: f.write(it)
         return fileName
     def __rrshift__(self, it):
-        self.append = True
-        return self.__ror__(it)
+        self.append = True # why do this? because `a | b >> c` will be interpreted as `a | (b >> c)`
+        if isinstance(it, BaseCli): return cli.serial(it, self)
+        else: return self.__ror__(it)
     @property
     def name(self):
         """File name of this :class:`file`"""
@@ -200,6 +202,8 @@ def headOut(lines:int=10):
     """Convenience method for head() | stdout()"""
     if lines is None: return stdout()
     else: return cli.head(lines) | stdout()
+def tab(text, pad="    "):
+    return "\n".join([pad + line for line in text.split("\n")])
 class intercept(BaseCli):
     def __init__(self, raiseError:bool=True):
         """Intercept flow at a particular point, analyze the object piped in, and
@@ -211,15 +215,13 @@ raises error to stop flow. Example::
         self.raiseError = raiseError
     def __ror__(self, s):
         print(type(s))
-        if isinstance(s, (numbers.Number, str, bool)):
-            print(k1lib.tab(f"{s}"))
+        if isinstance(s, (numbers.Number, str, bool)): print(tab(f"{s}"))
         elif isinstance(s, (tuple, list)):
-            print(k1lib.tab(f"Length: {len(s)}"))
-            for e in s: print(k1lib.tab(f"- {type(e)}"))
+            print(tab(f"Length: {len(s)}"))
+            for e in s: print(tab(f"- {type(e)}"))
         elif isinstance(s, settings.arrayTypes):
-            print(k1lib.tab(f"Shape: {s.shape}"))
-            if s.numel() < 1000:
-                print(k1lib.tab(f"{s}"))
+            print(tab(f"Shape: {s.shape}"))
+            if s.numel() < 1000: print(tab(f"{s}"))
         if self.raiseError: raise RuntimeError("intercepted")
         return s
 a = k1lib.AutoIncrement()
@@ -238,6 +240,11 @@ Overtime, there will be lots of split files after a session, so be sure
 to clean them up to reduce disk size::
 
     split.clear()
+
+.. warning::
+
+    Usage of this cli is discouraged, because performance characteristics
+    of this doesn't make sense. Use :class:`~k1lib.cli.inp.splitSeek` instead!
 
 :param n: Number of files to split into
 :param baseFolder: Base folder where all the splitted files are"""
@@ -284,3 +291,4 @@ Example::
             if isinstance(im, list): plt.imshow(im[0]); plt.title(im[1])
             else: plt.imshow(im)
             if not self.axis: ax.axis("off")
+        for i in range(len(imgs), len(axes)): axes[i].remove() # removing leftover axes

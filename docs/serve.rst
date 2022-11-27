@@ -30,6 +30,7 @@ That's pretty much it. You can add in your own callbacks, to enable further inte
 with your systems. You can also customize the given callbacks more.
 
 Currently, these data types are supported, together with their appearance on the interface:
+
 - int, float, str: text box
 - bool: checkbox toggle
 - bytes, :class:`PIL.Image.Image`: file upload

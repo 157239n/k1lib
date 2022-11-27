@@ -13,7 +13,7 @@ def cells(fileName, outputs=False):
 ``cell_type`` and ``source`` only. Example::
 
     nb.cells("file.ipynb")"""
-    js = json.loads(cli.cat(fileName) | cli.join(""))
+    js = json.loads(cli.cat(fileName) | cli.join("\n"))
     cells = []; fields = set(["cell_type", "source"])
     if outputs: fields.add("outputs")
     return [{k:cell[k] for k in cell.keys() if k in fields} for cell in js["cells"]]

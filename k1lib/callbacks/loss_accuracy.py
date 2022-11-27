@@ -75,14 +75,16 @@ accFMsg = "You have to specify how to compute the accuracy with the AccF callbac
 @k1lib.patch(Cbs)
 class Accuracy(Callback):
     " "
-    def __init__(self):
+    def __init__(self, variable:str="accuracy"):
         """Records accuracies after each batch.
 Expected variables in :class:`~k1lib.Learner`:
 
-- accuracy: single float value from 0 to 1"""
+- accuracy: single float value from 0 to 1
+
+:param variable: name of variable expected to be available in Learner"""
         super().__init__(); self.order = 20
-        self.train = [0]; self.valid = [0]; self.paused = True
-        self._landscape = k1lib.callbacks.Landscape(lambda l: l.accuracy, "_AccuracyLandscape")
+        self.train = [0]; self.valid = [0]; self.paused = True; self.variable = variable
+        self._landscape = k1lib.callbacks.Landscape(lambda l: l.__dict__[variable], "_AccuracyLandscape")
     @property
     def hasAccF(self):
         return any(isinstance(cb, Cbs.AccF) for cb in self.l.cbs.cbs)
@@ -95,7 +97,7 @@ Expected variables in :class:`~k1lib.Learner`:
             self.train = np.array(self.train); self.valid = np.array(self.valid)
     def endLoss(self):
         if not self.paused:
-            (self.train if self.l.model.training else self.valid).append(self.l.accuracy)
+            (self.train if self.l.model.training else self.valid).append(self.l.__dict__[self.variable])
     def plot(self, _f=cli.iden()):
         """Optional post-processing cli"""
         if not self.hasAccF: raise RuntimeError(accFMsg)

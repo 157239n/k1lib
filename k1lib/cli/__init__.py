@@ -16,8 +16,9 @@ from .structural import *
 from .conv import *
 from .utils import *
 
-# bio specific
+# bio/chem specific
 from .bio import *
+from .mol import *
 from . import mgi;  mgi  = _wrapMod(mgi)
 from . import cif;  #cif  = _wrapMod(cif)
 

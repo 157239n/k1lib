@@ -14,6 +14,7 @@ shorts module
 
 .. automodule:: k1lib.callbacks.lossFunctions.shorts
    :members:
+   :undoc-members:
    :show-inheritance:
 
 accuracy module
@@ -21,4 +22,5 @@ accuracy module
 
 .. automodule:: k1lib.callbacks.lossFunctions.accuracy
    :members:
+   :undoc-members:
    :show-inheritance:

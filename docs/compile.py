@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 from k1lib.imports import *
 import os
@@ -10,6 +10,8 @@ To build everything: `./compile.py`
 
 To build only the docs, skipping the tutorials: `./compile.py 0`
 """
+
+print(sys.version_info);
 
 os.system(f"./_compile.sh {k1lib.__version__} {' '.join(sys.argv[1:])}")
 
