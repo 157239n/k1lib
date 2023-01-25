@@ -115,7 +115,7 @@ This cli has lots of settings at :data:`~k1lib.settings`.cli.cat
     f = _cat(text, chunks, sB, eB)
     if profile: f = f | Profile(text)
     return f if fileName is None else fileName | f
-def _catPickle(fileName, pickleModule=dill):
+def _catPickle(fileName=None, pickleModule=dill):
     """Reads a file as a series of pickled objects.
 Example::
 
@@ -123,11 +123,18 @@ Example::
     "cd" | aS(dill.dumps) >> file("test/catTest.pth") # append to the file
     # returns ["ab", "cd"]
     cat.pickle("test/catTest.pth") | deref()
+    # also returns ["ab", "cd"], same style as :class:`cat`
+    "test/catTest.pth" | cat.pickle() | deref()
 
 :param fileName: name of the pickled file
 :param pickleModule: pickle module to use. Python's default is "pickle", but
-    I usually use "dill" because it's more robust"""
-    return cat(fileName, False) | cli.aS(io.BytesIO) | cli.repeat() | cli.apply(cli.tryout() | cli.aS(pickleModule.load)) | cli.breakIf(lambda x: x is None)
+    I usually use :mod:`dill` because it's more robust"""
+    def gen(fn):
+        with open(os.path.expanduser(fn), "rb") as f:
+            try:
+                while True: yield dill.load(f)
+            except: pass
+    return cli.aS(gen) if fileName is None else fileName | cli.aS(gen)
 cat.pickle = _catPickle
 class splitSeek(BaseCli):
     def __init__(self, n, c=b'\n'):
@@ -204,11 +211,15 @@ Example::
 :param f: file handle
 :param i: current seek point
 :param c: block-boundary character"""
-        f.seek(i)
-        while True:
-            b = f.tell(); s = f.read(1000); di = s.find(c)
-            if di > -1: return b + di + 1
-            if s == "": return -1
+        def inner(f):
+            f.seek(i)
+            while True:
+                b = f.tell(); s = f.read(1000); di = s.find(c)
+                if di > -1: return b + di + 1
+                if s == "": return -1
+        if isinstance(f, str):
+            with open(os.path.expanduser(f), "rb") as _f: return inner(_f)
+        else: return inner(f)
     @staticmethod
     def backward(f, i:int, c=b'\n') -> int:
         """Returns char location after the search char, going backward.
@@ -223,13 +234,17 @@ Example::
 :param f: file handle
 :param i: current seek point
 :param c: block-boundary character"""
-        mul = 1
-        while True:
-            begin = max(i-1000*mul, 0); end = max(i-1000*(mul-1), 0); mul += 1 # search range
-            f.seek(begin); b = f.tell()
-            s = f.read(end-begin); di = s.rfind(c)
-            if di > -1: return b + di + 1
-            if b == 0: return 0
+        def inner(f):
+            mul = 1
+            while True:
+                begin = max(i-1000*mul, 0); end = max(i-1000*(mul-1), 0); mul += 1 # search range
+                f.seek(begin); b = f.tell()
+                s = f.read(end-begin); di = s.rfind(c)
+                if di > -1: return b + di + 1
+                if b == 0: return 0
+        if isinstance(f, str):
+            with open(os.path.expanduser(f), "rb") as _f: return inner(_f)
+        else: return inner(f)
     def __ror__(self, fn):
         n = self.n; c = self.c
         def func(f): f.seek(0, os.SEEK_END); end = f.tell(); return [*range(n) | cli.apply(lambda x: int(x*end/n)) | cli.apply(lambda x: splitSeek.backward(f, x, c)), end]

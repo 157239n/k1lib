@@ -8,20 +8,17 @@ it lacks is surrounding infrastructure to make general debugging and discovery p
 better. Other more official wrapper frameworks sort of don't make sense to me, so this
 is an attempt at recreating a robust suite of tools that makes sense.
 
-Also, there's the package :mod:`k1lib.cli` which contains nice cli tools originally intended
-to replace the bash/awk/perl bioinformatics workflow. What does this have to do with
-PyTorch and DL? Originally nothing, but over time stuff like `batched` and `stagger`
-appeared which has largely replaced PyTorch data loaders.
-
-This cli stuff is quite insane man. You can literally perform extremely complex
-operations in 2-3 lines of code that would normally take >100 lines. It's also super
+This is more than just an ML library though. A prominent feature is the set of "cli tools"
+originally intended to replace the bash/awk/perl bioinformatics workflow. It essentially
+allows you to pipe inputs into functions, which returns an output which can be piped into
+other functions. Using these tools, you can literally perform complex operations in multiple
+dimensions in 2-3 lines of code that would normally take >100 lines. It's also super
 flexible, operates on multiple dimensions and not locked in, as you can change the
-dataflow in quite a fundamental level in ~5 minutes. It's like alchemy. Although I
-created it, I'm continously surprised at what it can do. Check
-`this post <https://mlexps.com/mo/3-cif-visualize/>`_ where cli is used to load,
-transform, analyze and visualize protein structural data.
+dataflow in quite a fundamental level in ~5 minutes. Check over the basics of it
+here: :mod:`k1lib.cli`.
 
-Check out the tutorials to get a feel of what the library can do.
+After doing that, you can check out the tutorials to get a large overview of how everything
+integrates together nicely.
 
 .. toctree::
    :maxdepth: 1
@@ -51,6 +48,7 @@ Submodules
    imports
    mo
    knn
+   p5
    schedule
    selector
    serve
@@ -82,8 +80,8 @@ a lot of functionalities related to deep learning will not work. While tests are
 rigorously run in an environment where PyTorch is installed, they're not run for
 environments that don't, so strange bugs may appear.
 
-Repo is at https://github.com/157239n/k1lib/ btw. Also, the search bar is your
-friend, as there're lots of stuff here.
+Repo is at https://github.com/157239n/k1lib/ btw. Also, if you have anything that
+looks strange, use the search bar on the top left to quickly lookup stuff.
 
 .. toctree::
    :hidden:

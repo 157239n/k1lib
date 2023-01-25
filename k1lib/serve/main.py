@@ -47,7 +47,7 @@ function signatures) to ``cbs.l``
             if count > initTime/0.1: raise Exception(f"Tried to start server up, but no responses yet. Port: {self.l['port']}, pythonFile: {self.l['pythonFile']}, metaFile: {self.l['metaFile']}")
             count += 1; time.sleep(0.1)
         self.l["meta"] = meta = self.l["metaFile"] | cli.cat(text=False) | cli.aS(dill.loads)
-        meta["annoStrs"] = meta["annos"].items() | cli.apply(lambda x: x.__name__, 1) | cli.transpose() | cli.toDict()
+        meta["annoStrs"] = meta["annos"].items() | cli.apply(lambda x: x.__name__, 1) | cli.toDict()
         meta["goodTypeStrs"] = meta["goodTypes"] | cli.apply(lambda x: x.__name__) | cli.deref()
 class GenerateHtml(k1.Callback):
     def __init__(self, serverPrefix=None, htmlFile=None, title="Interactive demo"):

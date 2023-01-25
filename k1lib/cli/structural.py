@@ -7,7 +7,7 @@ from typing import List, Union, Iterator, Callable, Any, Tuple, Dict
 from collections import defaultdict, Counter, deque
 from k1lib.cli.init import patchDefaultDelim, BaseCli, oneToMany, T, Table, fastF, yieldT
 import k1lib.cli as cli; from k1lib.cli.typehint import *
-import itertools, numpy as np, k1lib
+import itertools, numpy as np, k1lib; import matplotlib.pyplot as plt
 try: import torch; hasTorch = True
 except: torch = k1lib.Object().withAutoDeclare(lambda: type("RandomClass", (object, ), {})); hasTorch = True
 __all__ = ["transpose", "reshape", "insert", "splitW", "splitC",
@@ -17,6 +17,7 @@ __all__ = ["transpose", "reshape", "insert", "splitW", "splitC",
            "expandE", "unsqueeze",
            "count", "permute", "accumulate", "AA_", "peek", "peekF",
            "repeat", "repeatF", "repeatFrom", "oneHot", "indexTable"]
+settings = k1lib.settings.cli
 class transpose(BaseCli):
     def __init__(self, dim1:int=0, dim2:int=1, fill=None):
         """Join multiple columns and loop through all rows. Aka transpose.
@@ -148,39 +149,24 @@ iterator with :class:`joinStreams` first, like this::
         else:
             for i in range(self.dims[0]): yield _formStructure(it, self.dims, 1)
 class insert(BaseCli):
-    def __init__(self, *elements, begin=True):
+    def __init__(self, elements, begin=True):
         """Join element into list.
 Example::
 
     # returns [5, 2, 6, 8]
-    [5, [2, 6, 8]] | insert() | deref()
-    # returns [5, 2, 6, 8]
     [2, 6, 8] | insert(5) | deref()
     # returns [2, 6, 8, 5]
     [2, 6, 8] | insert(5, begin=False) | deref()
-    
-    # returns [[3, 1], 2, 6, 8]
-    [2, 6, 8] | insert([3lo, 1]) | deref()
-    # returns [[3, 1], 2, 6, 8]
-    [2, 6, 8] | ~insert(3, 1) | deref()
-    # returns [[3, 1], 2, 6, 8]
-    [[3, 1], [2, 6, 8]] | ~insert() | deref()
 
-:param element: the element to insert. If None, then takes the input [e, [...]],
-    else takes the input [...] as usual"""
+    # returns [[3, 1], 2, 6, 8]
+    [2, 6, 8] | insert([3, 1]) | deref()
+
+:param element: the element to insert"""
         super().__init__(); self.elements = elements; self.begin = begin; self.expand = False
     def __ror__(self, it:Tuple[T, Iterator[T]]) -> Iterator[T]:
         elements = self.elements; it = iter(it)
-        if len(elements) == 0:
-            if self.begin: yield next(it); yield from next(it)
-            else: e = next(it); yield from next(it); yield e
-        else:
-            if not self.expand: elements = elements[0]
-            if self.begin: yield elements; yield from it
-            else: yield from it; yield elements
-    def __invert__(self):
-        ans = insert(*self.elements, begin=self.begin)
-        ans.expand = True; return ans
+        if self.begin: yield elements; yield from it
+        else: yield from it; yield elements
 class splitW(BaseCli):
     def __init__(self, *weights:List[float]):
         """Splits elements into multiple weighted lists. If no weights are provided,
@@ -191,13 +177,18 @@ then automatically defaults to [0.8, 0.2]. Example::
     # same as the above
     range(10) | splitW() | deref()
 
+This also works with array types::
+
+    torch.randn(100, 3) | splitW() # returns 2 tensors with shapes (80, 3) and (20, 3)
+
 See also: :class:`splitC`"""
         super().__init__();
         if len(weights) == 0: weights = [0.8, 0.2]
         self.weights = np.array(weights)
     def __ror__(self, it):
-        it = list(it); ws = self.weights; c = 0
-        ws = (ws * len(it) / ws.sum()).astype(int)
+        try: it[0]; len(it)
+        except: it = list(it)
+        ws = self.weights; c = 0; ws = (ws * len(it) / ws.sum()).astype(int)
         for w in ws[:-1]: yield it[c:c+w]; c += w
         yield it[c:]
 class splitC(BaseCli):
@@ -207,12 +198,22 @@ Example::
 
     # returns [[0, 1], [2, 3, 4], [5, 6, 7, 8, 9]]
     range(10) | splitC(2, 5) | deref()
-    # returns [[0, 1], [2, 3, 4, 5], [6, 7, 8, 9]]
-    range(10) | splitC(0.2, 0.6) | deref()
     # returns ['01', '234', '56789']
     "0123456789" | splitC(2, 5) | deref()
 
-See also: :class:`splitC`"""
+Here, you're specifying 2 checkpoints, 2 and 5, so it will split
+the list up into 3 sections. First section is 0-2, second section
+is 2-5, third section is 5-end. You can pass in fractional
+checkpoints too::
+
+    # returns [[0, 1], [2, 3, 4, 5], [6, 7, 8, 9]]
+    range(10) | splitC(0.2, 0.6) | deref()
+
+This cli might be unintuitive to remember, so if you want to just
+split it up into 2 parts, check out :meth:`~k1lib.cli.filt.head.split`.
+
+If you want to split things up by weighted length, check
+out :class:`splitW`"""
         self.checkpoints = checkpoints | cli.aS(np.array)
         self.intMode = checkpoints | cli.apply(lambda x: int(x) == x) | cli.aS(all)
     def __ror__(self, it):
@@ -235,19 +236,40 @@ Example::
     # returns [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     [[[0, 1], [2], [3, 4, 5]], [[6, 7, 8], [], [9, 10]]] | joinStreams(2) | deref()
 
+If you pass in :class:`numpy.ndarray` or :class:`torch.Tensor`, then it will
+automatically use the C-accelerated version, like this::
+
+    # returns Tensor with shape (6, 4)
+    torch.randn(2, 3, 4) | joinStreams()
+    # returns array with shape (6, 4)
+    np.random.randn(2, 3, 4) | joinStreams()
+
 Sometimes, you may want to impose some dimensional structure after joining all streams
 together, which :class:`reshape` does."""
         if dims < 1: raise AttributeError(f"`dims` ({dims}) can't be less than 1, as it doesn't make any sense!")
-        self.multi = cli.serial(*(joinStreams().all(dims-d-1) for d in range(dims))) if dims > 1 else None
+        self.multi = cli.serial(*(joinStreams() for d in range(dims))) if dims > 1 else None
     def __ror__(self, streams:Iterator[Iterator[T]]) -> Iterator[T]:
-        if self.multi != None: yield from streams | self.multi
+        if self.multi != None:
+            def gen(): yield from streams | self.multi
+            return gen()
         else:
-            for stream in streams: yield from stream
+            if isinstance(streams, settings.arrayTypes): return streams.reshape(-1, *streams.shape[2:])
+            else:
+                def gen():
+                    for stream in streams: yield from stream
+                return gen()
+def probScale(ps, t): # t from 0 -> 1, for typical usage
+    l = np.log(ps); avg = l.mean()
+    a = (l-avg)*t+avg; a -= a.max()
+    ans = np.exp(a); return ans/ans.sum()
 import random
-def rand(n):
-    while True: yield random.randrange(n)
+def rand(n, ps=None):
+    if ps is None:
+        while True: yield random.randrange(n)
+    else:
+        while True: yield from np.random.choice(n, size=100, p=ps)
 class joinStreamsRandom(BaseCli):
-    def __init__(self):
+    def __init__(self, alpha=0, ps=None):
         """Join multiple streams randomly. If any streams runs out, then quits. If
 any stream yields :data:`~k1lib.cli.init.yieldT`, then just ignores that result and
 continue. Could be useful in active learning. Example::
@@ -257,12 +279,41 @@ continue. Could be useful in active learning. Example::
     
     stream2 = [[-5, yieldT, -4, -3], yieldT | repeat()] | joinStreams()
     # could return [-5, -4, 0, -3, 1, 2, 3, 4, 5, 6], demonstrating yieldT
-    [range(7), stream2] | joinStreamsRandom() | deref()"""
-        super().__init__()
+    [range(7), stream2] | joinStreamsRandom() | deref()
+
+By default, all streams are treated equally, and are yielded with equal probabilities.
+However, you can tweak these probabilities a little bit, to your liking. This is
+controlled by the parameter ``alpha``:
+
+.. image:: ../images/probScale.png
+
+If ``alpha`` is 0, then all probabilities will be the same. If ``alpha`` is 1,
+then all probabilities are proportional to the length of the input stream. The
+original intention was to vary ``alpha`` just from 0 to 1, but it can actually
+be of any number::
+
+    [range(0, 10), range(10, 100)] | joinStreamsRandom(0) | shape(0) # returns around 21, because it favors both streams equally
+    [range(0, 10), range(10, 100)] | joinStreamsRandom(1) | shape(0) # returns around 90, because it favors the second array 9x more
+    [range(0, 10), range(10, 100)] | joinStreamsRandom(100) | shape(0) # returns 90, because it highly favors the second array
+    [range(0, 10), range(10, 100)] | joinStreamsRandom(-100) | shape(0) # returns 10, because it highly favors the first array
+
+:param alpha: if not zero, does a weighted joining, instead of totally uniform probability
+:param ps: if specified, use these probabilities, else try to determine from the lengths of the input streams"""
+        super().__init__(); self.alpha = alpha; self.ps = ps
     def __ror__(self, streams:Iterator[Iterator[T]]) -> Iterator[T]:
+        alpha = self.alpha; ps = self.ps; streams = list(streams); nStreams = len(streams)
+        if alpha != 0:
+            if ps is None:
+                try: ps = np.array([len(st) for st in streams])
+                except:
+                    streams = [list(st) for st in streams]
+                    ps = np.array([len(st) for st in streams])
+            else: ps = np.array(list(ps))*1.0
+        else: ps = np.array([1/nStreams]*nStreams)
+        ps = probScale(ps/ps.sum(), alpha)
         streams = [iter(st) for st in streams]
         try:
-            for streamIdx in rand(len(streams)):
+            for streamIdx in rand(len(streams), ps):
                 o = next(streams[streamIdx])
                 if not o is yieldT: yield o # "not is" to fix numpy `==`
         except StopIteration: pass
@@ -385,13 +436,16 @@ ranges will be returned, instead of a bunch of lists, for performance::
         if isinstance(it, range): return _batchRange(it, bs, includeLast)
         try: it[0]; len(it); return _batchSliceable(it, bs, includeLast)
         except: return _batch(it, bs, includeLast)
+nothing = object()
 class window(BaseCli):
-    def __init__(self, n, newList=False):
+    def __init__(self, n, newList=False, pad=nothing):
         """Slides window of size n forward and yields the windows.
 Example::
 
     # returns [[0, 1, 2], [1, 2, 3], [2, 3, 4]]
     range(5) | window(3) | deref()
+    # returns [[0, 1, 2], [1, 2, 3], [2, 3, 4], [3, 4, None], [4, None, None]]
+    range(5) | window(3, pad=None) | deref()
 
 If you are doing strange transformations to the result, like
 transposing it, then it might complain that the internal deque
@@ -403,13 +457,24 @@ allocation, which will be slower::
     # takes 15ms
     range(100000) | window(100) | ignore()
     # takes 48ms, because of allocating lists
-    range(100000) | window(100) | ignore()"""
-        self.n = n; self.listF = (lambda x: list(x)) if newList else (lambda x: iter(x))
+    range(100000) | window(100) | ignore()
+
+:param n: size of the window
+:param newList: whether to create a new list out of every window or
+    not. If False (default), less robust but faster. If True, more
+    robust but slower
+:param pad: whether to pad the output stream on the end, so that it
+    has the same number of elements as the input stream or not"""
+        self.n = n; self.listF = (lambda x: list(x)) if newList else (lambda x: iter(x)); self.pad = pad
     def __ror__(self, it):
-        n = self.n; q = deque([], n); listF = self.listF
+        n = self.n; pad = self.pad; q = deque([], n); listF = self.listF
         for e in it:
             q.append(e)
             if len(q) == n: yield listF(q); q.popleft()
+        if pad is not nothing:
+            for i in range(n-1):
+                q.append(pad)
+                yield listF(q); q.popleft()
 class groupBy(BaseCli):
     def __init__(self, column:int):
         """Groups table by some column.
@@ -731,6 +796,50 @@ class repeatFrom(BaseCli):
     # returns [1, 2, 3, 1, 2, 3]
     [1, 2, 3] | repeatFrom(2) | deref()
 
+.. note::
+
+    For advanced users who wants to modify the resulting stream mid-way, read this section
+
+    Because this reuses elements inside the input iterator, it's necessary
+    that the input feels like a list and not an iterator. So in order to make
+    this work::
+
+        # returns [1, 2, 3, 1, 2, 3]
+        iter([1, 2, 3]) | repeatFrom(2) | deref()
+
+    It's necessary to turn the input iterator into a list. However, sometimes you
+    may want to update the input iterator values, so as to make things extra
+    dynamic, like this::
+
+        l = [1, 2, 3]
+        def g(): yield from l; yield from l
+        def h():
+            for i, e in enumerate(g()):
+                if i == 3: l.append(5) # modifies the list mid-way
+                yield e
+
+        h() | deref() # returns [1, 2, 3, 1, 2, 3, 5]
+
+    But if you do this, it wouldn't work::
+
+        l = [1, 2, 3]
+        def h():
+            for i, e in enumerate(iter(l) | repeatFrom(2)):
+                if i == 3: l.append(5)
+                yield e
+        h() | deref() # returns [1, 2, 3, 1, 2, 3]
+
+    This is because internally, :class:`repeatFrom` turns the iterator into a
+    list, and continues yielding from that list, and thus won't use the updated
+    values. To do it, you have to make the input feels like a list (can get length)::
+
+        l = [1, 2, 3]
+        def h():
+            for i, e in enumerate(l | repeatFrom(2)):
+                if i == 3: l.append(5)
+                yield e
+        h() | deref() # returns [1, 2, 3, 1, 2, 3, 5]
+
 :param limit: if None, then repeats indefinitely"""
         super().__init__(); self.limit = limit
     def _typehint(self, inp):
@@ -739,7 +848,9 @@ class repeatFrom(BaseCli):
         if isinstance(inp, tArrayTypes): i = inp
         return tIter(i)
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
-        it = list(it); limit = self.limit or k1lib.settings.cli.inf
+        try: len(it)
+        except: it = list(it)
+        limit = self.limit or k1lib.settings.cli.inf
         for i in itertools.count():
             if i >= limit: break
             yield from it
@@ -851,4 +962,4 @@ Example::
     def __ror__(self, it):
         if len(self.cols) == 0: return it
         col = self.cols[0]
-        return it | groupBy(col) | cli.apply(lambda group: [group[0][col], group | indexTable(*self.cols[1:])]) | transpose() | cli.toDict()
+        return it | groupBy(col) | cli.apply(lambda group: [group[0][col], group | indexTable(*self.cols[1:])]) | cli.toDict()

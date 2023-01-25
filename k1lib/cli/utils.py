@@ -34,34 +34,33 @@ class size(BaseCli):
 Example::
 
     # returns (3, 2)
-    [[2, 3], [4, 5, 6], [3]] | size()
+    [[2, 3], [4, 5, 6], [3]] | shape()
     # returns 3
-    [[2, 3], [4, 5, 6], [3]] | size(0)
+    [[2, 3], [4, 5, 6], [3]] | shape(0)
     # returns 2
-    [[2, 3], [4, 5, 6], [3]] | size(1)
+    [[2, 3], [4, 5, 6], [3]] | shape(1)
     # returns (2, 0)
-    [[], [2, 3]] | size()
+    [[], [2, 3]] | shape()
     # returns (3,)
-    [2, 3, 5] | size()
+    [2, 3, 5] | shape()
     # returns 3
-    [2, 3, 5] | size(0)
+    [2, 3, 5] | shape(0)
     # returns (3, 2, 2)
-    [[[2, 1], [0, 6, 7]], 3, 5] | size()
+    [[[2, 1], [0, 6, 7]], 3, 5] | shape()
     # returns (1, 3)
-    ["abc"] | size()
+    ["abc"] | shape()
     # returns (1, 2, 3)
-    [torch.randn(2, 3)] | size()
+    [torch.randn(2, 3)] | shape()
     # returns (2, 3, 5)
-    size()(np.random.randn(2, 3, 5))
+    shape()(np.random.randn(2, 3, 5))
+
+:class:`shape` is an alias of this cli. Use whichever is more intuitive for you.
 
 There's also :class:`lengths`, which is sort of a simplified/faster version of
 this, but only use it if you are sure that ``len(it)`` can be called.
 
-If encounter PyTorch tensors or Numpy arrays, then this will just get the shape
-instead of actually looping over them.
-
-:param idx: if idx is None return (rows, columns). If 0 or 1, then rows or
-    columns"""
+:param idx: if not specified, returns a tuple of ints. If specified,
+    then returns the specific index of the tuple"""
         super().__init__(); self.idx = idx;
         if idx is not None: self._f = cli.item(idx)
     def _typehint(self, inp):
@@ -88,11 +87,11 @@ shape = size
 noFill = object()
 class item(BaseCli):
     def __init__(self, amt:int=1, fill=noFill):
-        """Returns the first row.
+        """Returns the first element of the input iterator.
 Example::
 
     # returns 0
-    iter(range(5)) | item()
+    range(5) | item()
     # returns torch.Size([5])
     torch.randn(3,4,5) | item(2) | shape()
     # returns 3
@@ -138,7 +137,10 @@ class join(BaseCli):
 class wrapList(BaseCli):
     def __init__(self):
         """Wraps inputs inside a list. There's a more advanced cli tool
-built from this, which is :meth:`~k1lib.cli.structural.unsqueeze`."""
+built from this, which is :meth:`~k1lib.cli.structural.unsqueeze`. Example::
+
+    # returns [5]
+    5 | wrapList()"""
         super().__init__()
     def _typehint(self, inp): return tList(inp)
     def __ror__(self, it:T) -> List[T]: return [it]
@@ -467,7 +469,7 @@ strange, so this is mainly for visualization. Example::
 :param depth: explore depth
 :param ff: optional file filter function
 :param df: optional directory filter function"""
-    processFolders = cli.apply(lambda x: [shortName(x), x]) | cli.apply(lambda x: x | tree(fL, dL, depth-1, ff, df) if depth > 0 else [], 1) | cli.transpose() | cli.toDict()
+    processFolders = cli.apply(lambda x: [shortName(x), x]) | cli.apply(lambda x: x | tree(fL, dL, depth-1, ff, df) if depth > 0 else [], 1) | cli.toDict()
     a = cli.filt(os.path.isfile) | cli.filt(ff) | cli.head(fL) | cli.apply(shortName) | cli.aS(set)
     b = ~cli.filt(os.path.isfile) | cli.filt(df) | cli.head(dL) | processFolders
     return cli.ls() | ~cli.sortF(os.path.isfile) | (a & b)

@@ -6,15 +6,14 @@ from functools import partial
 import matplotlib.pyplot as plt
 from typing import Callable
 __all__ = ["Loss", "Accuracy"]
-def plotF(losses, f, _slice): # actual function stored by the sliceable plot
-    plt.figure(figsize=(10, 3), dpi=100); step = _slice.step or 1
-    f = f | cli.deref()
-    tR, vR = k1lib.Range.proportionalSlice(len(losses.train), len(losses.valid), _slice)
+def plotF(losses, f): # actual function stored by the sliceable plot
+    plt.figure(figsize=(10, 3), dpi=100); f = f | cli.deref()
     try:
-        plt.subplot(1, 2, 1); plt.plot(tR.range_[::step] | f, losses.train[tR.slice_][::step] | f); plt.title(f"Train loss")
-        plt.subplot(1, 2, 2); plt.plot(vR.range_[::step] | f, losses.valid[vR.slice_][::step] | f); plt.title(f"Valid loss")
+        plt.subplot(1, 2, 1); plt.plot(range(len(losses.train)) | f, losses.train | f); plt.title(f"Train loss")
+        plt.subplot(1, 2, 2); plt.plot(range(len(losses.valid)) | f, losses.valid | f); plt.title(f"Valid loss")
     except: pass
 def commonPlot(obj, f=cli.iden()):
+    plotF(obj, f); return
     return k1lib.viz.SliceablePlot(partial(plotF, obj, f), docs="""\n\nReminder: the actual slice you put in is for the training plot. The valid loss's plot will update automatically to be in the same time frame""")
 def nonEmptyList(_list):
     return [0] if _list == [] else _list
@@ -98,18 +97,15 @@ Expected variables in :class:`~k1lib.Learner`:
     def endLoss(self):
         if not self.paused:
             (self.train if self.l.model.training else self.valid).append(self.l.__dict__[self.variable])
-    def plot(self, _f=cli.iden()):
-        """Optional post-processing cli"""
+    def plot(self, f=cli.iden()):
+        """
+:param f:Optional post-processing cli"""
         if not self.hasAccF: raise RuntimeError(accFMsg)
-        def plotF(_slice):
-            plt.figure(figsize=(10, 3), dpi=100); step = _slice.step or 1
-            f = _f | cli.deref()
-            tR, vR = k1lib.Range.proportionalSlice(len(self.train), len(self.valid), _slice)
-            try:
-                plt.subplot(1, 2, 1); plt.plot(tR.range_[::step] | f, 100*self.train[tR.slice_][::step] | f); plt.title(f"Train accuracy")
-                plt.subplot(1, 2, 2); plt.plot(vR.range_[::step] | f, 100*self.valid[vR.slice_][::step] | f); plt.title(f"Valid accuracy")
-            except: pass
-        return k1lib.viz.SliceablePlot(plotF)
+        plt.figure(figsize=(10, 3), dpi=100); f = f | cli.deref()
+        try:
+            plt.subplot(1, 2, 1); plt.plot(range(len(self.train)) | f, 100*self.train | f); plt.title(f"Train accuracy")
+            plt.subplot(1, 2, 2); plt.plot(range(len(self.valid)) | f, 100*self.valid | f); plt.title(f"Valid accuracy")
+        except: pass
     @property
     def Landscape(self):
         """Gets accuracy-landscape-plotting Callback.

@@ -4,27 +4,31 @@ This is for functions that cuts out specific parts of the table
 """
 from typing import Callable, Union, List, overload, Iterator, Any, Set, Tuple
 from k1lib.cli.init import BaseCli, Table, T, fastF
-import k1lib.cli as cli; import k1lib, os
+import k1lib.cli as cli; import k1lib, os, math
 from k1lib.cli.typehint import *
 import numpy as np; from collections import deque
 try: import torch; hasTorch = True
 except: hasTorch = False
 __all__ = ["filt", "inSet", "contains", "empty",
            "isNumeric", "instanceOf",
-           "head", "tail", "columns", "cut", "rows",
+           "head", "tail", "cut", "rows",
            "intersection", "union", "unique", "breakIf", "mask", "tryout"]
 settings = k1lib.settings.cli
 class filt(BaseCli):
-    def __init__(self, predicate:Callable[[T], bool], column:int=None):
-        """Filters out lines.
+    def __init__(self, predicate:Callable[[T], bool], column:int=None, catchErrors:bool=False):
+        """Filters out elements.
 Examples::
 
-    # returns [2, 6]
+    # returns [2, 6], grabbing all the even elements
     [2, 3, 5, 6] | filt(lambda x: x%2 == 0) | deref()
-    # returns [3, 5]
+    # returns [3, 5], grabbing all the odd elements
     [2, 3, 5, 6] | ~filt(lambda x: x%2 == 0) | deref()
-    # returns [[2, 'a'], [6, 'c']]
+    # returns [[2, 'a'], [6, 'c']], grabbing all the even elements in the 1st column
     [[2, "a"], [3, "b"], [5, "a"], [6, "c"]] | filt(lambda x: x%2 == 0, 0) | deref()
+    # throws error, because strings can't mod divide
+    [1, 2, "b", 8] | filt(lambda x: x % 2 == 0) | deref()
+    # returns [2, 8]
+    [1, 2, "b", 8] | filt(lambda x: x % 2 == 0, catchErrors=True) | deref()
 
 You can also pass in :class:`~k1lib.cli.modifier.op`, for extra intuitiveness::
 
@@ -35,26 +39,62 @@ You can also pass in :class:`~k1lib.cli.modifier.op`, for extra intuitiveness::
     # returns [3, 4, 5, 6, 7, 8, 9]
     range(100) | filt(3 <= op() < 10) | deref()
 
-If you need more extensive filtering capabilities, check out :class:`~k1lib.cli.grep.grep`
+If you pass in :class:`numpy.ndarray` or :class:`torch.Tensor`, then it will
+automatically use the C-accelerated versions if possible, like this::
 
-:param column:
-    - if integer, then predicate(row[column])
-    - if None, then predicate(row)"""
+    # returns np.array([2, 3, 4]), instead of iter([2, 3, 4])
+    np.array([1, 2, 3, 4]) | filt(lambda x: x>=2) | deref()
+    # returns [2, 3, 4], instead of np.array([2, 3, 4]), because `math.exp` can't operate on numpy arrays
+    np.array([1, 2, 3, 4]) | filt(lambda x: math.exp(x) >= 3) | deref()
+
+If you need more extensive filtering capabilities involving text, check out :class:`~k1lib.cli.grep.grep`
+
+:param predicate: function that returns True or False
+:param column: if not specified, then filters elements of the input
+    array, else filters the specific column only
+:param catchErrors: whether to catch errors in the function or not (reject
+    elements that raise errors). Runs slower if enabled though"""
         fs = [predicate]; super().__init__(fs)
-        self.predicate = fs[0]; self.column = column
+        f = fs[0]; self.column = column
+        if catchErrors:
+            def g(x):
+                try: return f(x)
+                except: return False
+            self.predicate = g
+        else: self.predicate = f
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
         p = fastF(self.predicate); c = self.column
-        if c is None: yield from (l for l in it if p(l))
+        if c is None:
+            if isinstance(it, settings.arrayTypes):
+                try: return it[p(it)]
+                except: pass
+            return (l for l in it if p(l))
         else:
-            for es in it:
-                es = list(es)
-                if c < len(es) and p(es[c]): yield es
+            def gen():
+                for es in it:
+                    es = list(es)
+                    if c < len(es) and p(es[c]): yield es
+            return gen()
     def __invert__(self):
         """Negate the condition"""
-        return filt(lambda s: not self.predicate(s), self.column)
+        def f(s):
+            if isinstance(s, settings.arrayTypes):
+                res = self.predicate(s) # can cause an exception, but that's ok, as that's the signal telling the code in __ror__ to not pass in array types
+                if isinstance(res, settings.arrayTypes): return ~res
+            return not self.predicate(s)
+        return filt(f, self.column)
     def __neg__(self):
         """Also negates the condition"""
         return ~self
+    def split(self):
+        """Splits the input into positive and negative samples.
+Example::
+
+    # returns [[0, 2, 4, 6, 8], [1, 3, 5, 7, 9]]
+    range(10) | filt(lambda x: x%2 == 0).split() | deref()
+    # also returns [[0, 2, 4, 6, 8], [1, 3, 5, 7, 9]], exactly like above
+    range(10) | filt(lambda x: x%2 == 0) & filt(lambda x: x%2 != 0) | deref()"""
+        f = self.predicate; c = self.column; return filt(f, c) & ~filt(f, c)
 def inSet(values:Set[Any], column:int=None) -> filt:
     """Filters out lines that is not in the specified set.
 Example::
@@ -138,7 +178,7 @@ def _head(n, inverted, it):
         else: yield from deque(it, -n) # -3 to end
 class head(BaseCli):
     def __init__(self, n=10):
-        """Only outputs first ``n`` lines. You can also negate it (like
+        """Only outputs first ``n`` elements. You can also negate it (like
 ``~head(5)``), which then only outputs after first ``n`` lines. Examples::
 
     "abcde" | head(2) | deref() # returns ["a", "b"]
@@ -166,13 +206,26 @@ and other sliceable types::
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
         n = self.n; inverted = self.inverted
         if n is not None and round(n) != n: # fractional head
-            if not sliceable(it): raise Exception(f"Can't do fractional head (`head({n})`) if input is not sliceable (aka not a list, tuple, numpy array or pytorch tensors, etc). Convert to a list first by passing through `toList()`")
+            if not sliceable(it): it = list(it)
             i = int(len(it)*n)
             return it[i:] if inverted else it[:i]
         if inverted and n is None: return [] # special case
         if sliceable(it): return it[n:] if inverted else it[:n]
         else: return _head(self.n, self.inverted, it)
-    def __invert__(self): self.inverted = not self.inverted; return self
+    def __invert__(self):
+        h = head(self.n); h.inverted = not self.inverted
+        return h
+    def split(self):
+        """Splits the list up into a head and tail sections.
+Example::
+
+    # returns [[0, 1, 2, 3], [4, 5, 6, 7, 8, 9]]
+    range(10) | head(4).split() | deref()
+
+This only splits it into 2 parts. If you want to split it up
+into many more parts with specified checkpoints, check out
+:class:`~k1lib.cli.structural.splitC`."""
+        return self & ~self
 def tail(n:int=10):
     """Basically an inverted :class:`head`.
 Examples::
@@ -188,12 +241,9 @@ class lazyList:
         return elems[idx]
 class rows(BaseCli):
     def __init__(self, *rows:List[int]):
-        """Cuts out specific rows. Space complexity O(1) as a list is not
-constructed (unless you're using some really weird slices).
-
-:param rows: ints for the row indices
-
-Example::
+        """Selects specific elements given an iterator of indexes.
+Space complexity O(1) as a list is not constructed (unless you're
+slicing it in really weird way). Example::
 
     "0123456789" | rows(2) | toList() # returns ["2"]
     "0123456789" | rows(5, 8) | toList() # returns ["5", "8"]
@@ -201,7 +251,15 @@ Example::
     "0123456789" | ~rows()[2:5] | toList() # returns ["0", "1", "5", "6", "7", "8", "9"]
     "0123456789" | ~rows()[:7:2] | toList() # returns ['1', '3', '5', '7', '8', '9']
     "0123456789" | rows()[:-4] | toList() # returns ['0', '1', '2', '3', '4', '5']
-    "0123456789" | ~rows()[:-4] | toList() # returns ['6', '7', '8', '9']"""
+    "0123456789" | ~rows()[:-4] | toList() # returns ['6', '7', '8', '9']
+
+Why it's called "rows" is because I couldn't find a good name for
+it. There was :class:`cut`, which the name of an actual bash cli
+that selects out columns given indicies. When I needed a way to
+do what this cli does, it was in the context of selecting out rows,
+so the name stuck.
+
+:param rows: ints for the row indices"""
         if len(rows) == 1 and isinstance(rows[0], slice):
             self.slice = rows[0]; self.idxMode = False
         else: self.rows = rows; self.sortedRows = sorted(rows); self.idxMode = True
@@ -227,63 +285,108 @@ Example::
                 idxs = set((e if e >= 0 else n+e) for e in self.rows)
             else: idxs = set(range(n)[self.slice])
             yield from (e for i, e in enumerate(it) if i not in idxs)
-class columns(BaseCli):
+class cut(BaseCli):
     def __init__(self, *columns:List[int]):
         """Cuts out specific columns, sliceable. Examples::
 
+    ["0123456789", "abcdefghij"] | cut(5, 8) | deref() # returns [['5', '8'], ['f', 'i']]
     ["0123456789"] | cut(5, 8) | deref() # returns [['5', '8']]
+    ["0123456789"] | cut(8, 5) | deref() # returns [['8', '5']], demonstrating permutation-safe
+    ["0123456789", "abcdefghij"] | cut(2) | deref() # returns ['2', 'c'], instead of [['2'], ['c']] as usual
     ["0123456789"] | cut(2) | deref() # returns ['2']
     ["0123456789"] | cut(5, 8) | deref() # returns [['5', '8']]
     ["0123456789"] | ~cut()[:7:2] | deref() # returns [['1', '3', '5', '7', '8', '9']]
 
-If you're selecting only 1 column, then Iterator[T] will be returned, not
-Table[T]."""
+In the first example, you can imagine that we're operating on this table::
+
+    0123456789
+    abcdefghij
+
+Then, we want to grab the 5th and 8th column (0-indexed), which forms this table::
+
+    58
+    fi
+
+So, result of that is just ``[['5', '8'], ['f', 'i']]``
+
+In the fourth example, if you're only cutting out 1 column, then it
+will just grab that column directly, instead of putting it in a list.
+
+If you pass in :class:`numpy.ndarray` or :class:`torch.Tensor`, then it will
+automatically use the C-accelerated versions, like this::
+
+    torch.randn(4, 5, 6) | cut(2, 3)  # returns tensor of shape (4, 2, 6)
+    torch.randn(4, 5, 6) | cut(2)     # returns tensor of shape (4, 6)
+    torch.randn(4, 5, 6) | ~cut()[2:] # returns tensor of shape (4, 2, 6)"""
         super().__init__()
         if len(columns) == 1 and isinstance(columns[0], slice): columns = columns[0]
         self.columns = columns; self.inverted = False
     def __ror__(self, it:Table[T]) -> Table[T]:
-        columns = self.columns; it = iter(it)
-        sentinel = object(); row = next(it, sentinel)
-        if row is sentinel: return []
-        row = list(row); rs = range(len(row)+1000) # 1000 for longer rows below
-        it = it | cli.insert(row)
-        if isinstance(columns, slice): columns = set(rs[columns])
-        if self.inverted: columns = set(e for e in rs if e not in columns)
+        columns = self.columns; inverted = self.inverted
+        isArray = isinstance(it, settings.arrayTypes)#; isArray = False
+        if isArray: rs = range(len(it[0]))
+        else:
+            it = iter(it); sentinel = object(); row = next(it, sentinel)
+            if row is sentinel: return []
+            row = list(row); it = it | cli.insert(row)
+            rs = range(len(row)+1000) # 1000 for longer rows below. Also "rs" is not a great name, deal with it
+        if isinstance(columns, slice): columns = list(set(rs[columns]))
+        if self.inverted: columns = list(set(e for e in rs if e not in columns))
         if len(columns) == 1:
             c = list(columns)[0];
+            if isArray: return it[:,c]
             return (r[c] for r in (list(row) for row in it) if len(r) > c)
-        else: return ((e for i, e in enumerate(row) if i in columns) for row in it)
-    def __getitem__(self, idx):
-        answer = columns(idx); answer.inverted = self.inverted; return answer
+        else:
+            if isArray: return it[:,columns]
+            return ([row[c] for c in columns if c < len(row)] for row in (list(row) for row in it))
+            # old impl, may remove later
+            #return ((e for i, e in enumerate(row) if i in columns) for row in it)
+    def __getitem__(self, idx): answer = cut(idx); answer.inverted = self.inverted; return answer
     def __invert__(self): self.inverted = not self.inverted; return self
-cut = columns
 class intersection(BaseCli):
-    def __init__(self):
+    def __init__(self, column=None):
         """Returns the intersection of multiple streams.
 Example::
 
     # returns set([2, 4, 5])
-    [[1, 2, 3, 4, 5], [7, 2, 4, 6, 5]] | intersection()"""
-        super().__init__()
+    [[1, 2, 3, 4, 5], [7, 2, 4, 6, 5]] | intersection()
+    # returns ['2g', '4h', '5j']
+    [["1a", "2b", "3c", "4d", "5e"], ["7f", "2g", "4h", "6i", "5j"]] | intersection(0) | deref()
+
+:param column: what column to apply the intersection
+    on. Defaulted to None"""
+        super().__init__(); self.column = column
     def _typehint(self, inp):
-        if isinstance(inp, tArrayTypes): return tSet(inp.child)
-        if isinstance(inp, tListIterSet):
-            if isinstance(inp.child, tListIterSet):
-                return tSet(inp.child.child)
-            return tSet(tAny())
-        if isinstance(inp, tCollection):
-            a = inp.children[0]
-            for e in inp.children:
-                if not isinstance(e, tListIterSet): return tSet(tAny())
-                if e.child != a.child: return tSet(tAny())
-            return tSet(a.child)
-        return tSet(tAny());
+        if self.column is None:
+            if isinstance(inp, tArrayTypes): return tSet(inp.child)
+            if isinstance(inp, tListIterSet):
+                if isinstance(inp.child, tListIterSet):
+                    return tSet(inp.child.child)
+                return tSet(tAny())
+            if isinstance(inp, tCollection):
+                a = inp.children[0]
+                for e in inp.children:
+                    if not isinstance(e, tListIterSet): return tSet(tAny())
+                    if e.child != a.child: return tSet(tAny())
+                return tSet(a.child)
+            return tSet(tAny());
+        else: return tAny()
     def __ror__(self, its:Iterator[Iterator[Any]]) -> Set[Any]:
-        answer = None
-        for it in its:
-            if answer is None: answer = set(it); continue
-            answer = answer.intersection(it)
-        return set() if answer is None else answer
+        c = self.column
+        if c is None:
+            answer = None
+            for it in its:
+                if answer is None: answer = set(it); continue
+                answer = answer.intersection(it)
+            return set() if answer is None else answer
+        else:
+            its = its | cli.deref(2); ans = {}
+            ids = its | cut(c).all() | intersection() | cli.aS(set)
+            for it in its:
+                for row in it:
+                    e = row[c]
+                    if e in ids: ans[e] = row
+            return ans.values()
 class union(BaseCli):
     def __init__(self):
         """Returns the union of multiple streams.
@@ -300,22 +403,35 @@ Example::
         for it in its: answer = set.union(answer, set(it))
         return answer
 class unique(BaseCli):
-    def __init__(self, column:int):
+    def __init__(self, column:int=None):
         """Filters out non-unique row elements.
 Example::
 
     # returns [[1, "a"], [2, "a"]]
     [[1, "a"], [2, "a"], [1, "b"]] | unique(0) | deref()
+    # returns [0, 1, 2, 3, 4]
+    [*range(5), *range(3)] | unique() | deref()
 
-:param column: doesn't have the default case of None, because
-    you can always convert the entire thing to a set"""
+In the first example, because the 3rd element's first column is
+1, which has already appeared, so it will be filtered out.
+
+:param column: the column to detect unique elements. Can be
+    None, which will behave like converting the input iterator
+    into a set, but this cli will maintain the order"""
         super().__init__(); self.column = column
     def __ror__(self, it:Table[T]) -> Table[T]:
-        terms = set(); c = self.column
-        for row in it:
-            row = list(row); e = row[c]
-            if e not in terms: yield row
-            terms.add(e)
+        c = self.column
+        if c is None:
+            terms = set()
+            for e in it:
+                if e not in terms: yield e
+                terms.add(e)
+        else:
+            terms = set()
+            for row in it:
+                row = list(row); e = row[c]
+                if e not in terms: yield row
+                terms.add(e)
 class breakIf(BaseCli):
     def __init__(self, f):
         """Breaks the input iterator if a condition is met.

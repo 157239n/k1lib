@@ -19,8 +19,9 @@ from ._learner import *
 from . import schedule; schedule = wrapMod(schedule)
 from . import viz;      viz      = wrapMod(viz)
 from . import _k1a;
-from . import k1ui;
+from . import k1ui;     #k1ui     = wrapMod(k1ui)
 from . import serve;
+from . import p5;
 
 #from . import gE
 from . import eqn;      eqn      = wrapMod(eqn)

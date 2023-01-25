@@ -1,4 +1,3 @@
-from k1lib.imports import *
 import inspect, io, base64
 from flask import Flask, request
 from flask_cors import CORS
@@ -6,7 +5,7 @@ from flask_cors import CORS
 goodTypes = (int, float, str, bool, bytes, PIL.Image.Image, k1.Range, range, list)
 
 spec = inspect.getfullargspec(endpoint); args = spec.args; annos = spec.annotations; defaults = spec.defaults or (); n = len(args)
-docs = (endpoint.__doc__ or "").split("\n") | grep(":param", sep=True).till() | filt(op().ab_len() > 0) | op().strip().all(2) | (join(" ") | op().split(":") | ~aS(lambda x, y, *z: [y.split(" ")[1], ":".join(z).strip()])).all() | transpose() | toDict()
+docs = (endpoint.__doc__ or "").split("\n") | grep(":param", sep=True).till() | filt(op().ab_len() > 0) | op().strip().all(2) | (join(" ") | op().split(":") | ~aS(lambda x, y, *z: [y.split(" ")[1], ":".join(z).strip()])).all() | toDict()
 mainDoc = (endpoint.__doc__ or "").split("\n") | grep(".", sep=True).till(":param") | breakIf(op()[0].startswith(":param")) | join(" ").all() | join(" ")
 
 def raiseEx(ex): raise ex
@@ -19,7 +18,7 @@ defaults = defaults | apply(lambda x: [x.start, x.stop] if isinstance(x, k1.Rang
     | apply(lambda x: x | aS(base64.b64encode) | op().decode("ascii") if isinstance(x, bytes) else x)\
     | apply(lambda x: x | toBytes() | aS(base64.b64encode) | op().decode("ascii") if isinstance(x, PIL.Image.Image) else x)\
     | apply(lambda x: x | apply(str) if isinstance(x, list) else x) | deref()
-defaults = [args, defaults] | toDict()
+defaults = [args, defaults] | toDict(False)
 
 # args:list, annos:dict, defaults:list, docs:dict
 
@@ -59,7 +58,10 @@ def main():
     js = request.json
     return pyToWeb(endpoint(*[webToPy(js[arg], annos[arg]) for arg in args]), annos["return"])
 
-app.run(host='0.0.0.0', port=SOCKET_PORT)
+try:
+    import waitress
+    waitress.serve(app, host='0.0.0.0', port=SOCKET_PORT)
+except: app.run(host='0.0.0.0', port=SOCKET_PORT)
 
 
 

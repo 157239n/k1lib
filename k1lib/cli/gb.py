@@ -136,7 +136,7 @@ With filters::
             | (cli.op().split("=") | ~cli.aS(lambda a, *b: [a[1:], b[0][1:-1] if len(b) > 0 else ""])).all()
         if len(tags) == 0: return f | cli.deref()
         def g(it):
-            d = it | f | cli.transpose() | cli.toDict()
+            d = it | f | cli.toDict()
             return [[tag, d[tag] if tag in d else ""] for tag in tags]
         return cli.aS(g)
 class origin(cli.BaseCli):

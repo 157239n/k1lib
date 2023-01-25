@@ -62,7 +62,7 @@ Example::
 aS = applyS
 class apply(BaseCli):
     def __init__(self, f:Callable[[T], T], column:int=None, cache:int=0, **kwargs):
-        """Applies a function f to every line.
+        """Applies a function f to every element in the incoming list/iterator.
 Example::
 
     # returns [0, 1, 4, 9, 16]
@@ -127,11 +127,11 @@ class applyMp(BaseCli):
     _pools = set()
     _torchNumThreads = None
     def __init__(self, f:Callable[[T], T], prefetch:int=None, timeout:float=8, utilization:float=0.8, bs:int=1, newPoolEvery:int=0, **kwargs):
-        """Like :class:`apply`, but execute ``f(row)`` of each row in
-multiple processes. Example::
+        """Like :class:`apply`, but execute a function over the input iterator
+in multiple processes. Example::
 
     # returns [3, 2]
-    ["abc", "de"] | applyMp(lambda s: len(s)) | deref()
+    ["abc", "de"] | applyMp(len) | deref()
     # returns [5, 6, 9]
     range(3) | applyMp(lambda x, bias: x**2+bias, bias=5) | deref()
     
@@ -142,11 +142,9 @@ multiple processes. Example::
 Internally, this will continuously spawn new jobs up until 80% of all CPU
 cores are utilized. On posix systems, the default multiprocessing start method is
 ``fork()``. This sort of means that all the variables in memory will be copied
-over. This might be expensive (might also not, with copy-on-write), so you might
-have to think about that. On windows and macos, the default start method is
-``spawn``, meaning each child process is a completely new interpreter, so you have
-to pass in all required variables and reimport every dependencies. Read more at
-https://docs.python.org/3/library/multiprocessing.html#contexts-and-start-methods
+over. On windows and macos, the default start method is ``spawn``, meaning each
+child process is a completely new interpreter, so you have to pass in all required
+variables and reimport every dependencies. Read more at https://docs.python.org/3/library/multiprocessing.html#contexts-and-start-methods
 
 If you don't wish to schedule all jobs at once, you can specify a ``prefetch``
 amount, and it will only schedule that much jobs ahead of time. Example::
@@ -257,6 +255,14 @@ ones. So, you can potentially do something like this::
             else:
                 for p in self.ps: p.terminate();
         return gen(it)
+    def _copy(self): return applyMp(self.f, self.prefetch, self.timeout, self.utilization, self.bs, self.newPoolEvery, **self.kwargs)
+    def __invert__(self):
+        """Expands the arguments out, just like :class:`apply`.
+Example::
+
+    # returns [20, 20, 18, 14, 8, 0, -10, -22, -36, -52]
+    [range(10), range(20, 30)] | transpose() | ~applyMp(lambda x, y: y-x**2) | deref()"""
+        res = self._copy(); f = res.f; res.f = lambda x: f(*x); return res
     @staticmethod
     def clearPools():
         """Terminate all existing pools. Do this before restarting/quitting the
@@ -349,8 +355,7 @@ If the result of your operation is an iterator, you might want to
     # returns [0]
     rs | item() # or `next(rs)`
 
-:param f: function to apply repeatedly
-:param includeFirst: whether to include the raw input value or not"""
+:param f: function to apply repeatedly"""
         fs = [f]; super().__init__(fs=fs); self.f = fs[0]
         self.unpack = False; self.args = args; self.kwargs = kwargs
     def __ror__(self, it):
@@ -537,6 +542,19 @@ class op(k1lib.Absorber, BaseCli):
         """Absorbs operations done on it and applies it on the stream. Based
 on :class:`~k1lib.Absorber`. Example::
 
+    # returns 16
+    4 | op()**2
+    # returns 16, equivalent to the above
+    4 | aS(lambda x: x**2)
+    # returns [0, 1, 4, 9, 16]
+    range(5) | apply(op()**2) | deref()
+    # returns [0, 1, 4, 9, 16], equivalent to the above
+    range(5) | apply(lambda x: x**2) | deref()
+
+Main advantage is that you don't have to waste keystrokes when you just want
+to do a simple operation. How it works underneath is a little magical, so just
+treat it as a blackbox. A more complex example::
+
     t = torch.tensor([[1, 2, 3], [4, 5, 6.0]])
     # returns [torch.tensor([[4., 5., 6., 7., 8., 9.]])]
     [t] | (op() + 3).view(1, -1).all() | deref()
@@ -566,11 +584,11 @@ you can still combine with other cli tools as usual, for example::
     range(100) | filt(3 <= op() < 10) | deref()
 
 This can only deal with simple operations only. For complex operations, resort
-to the longer version ``applyS(lambda x: ...)`` instead!
+to the longer version ``aS(lambda x: ...)`` instead!
 
 There are also operations that are difficult to achieve, like
 ``len(op())``, as Python is expecting an integer output, so
-``op()`` can't exactly take over. Instead, you have to use ``applyS``,
+``op()`` can't exactly take over. Instead, you have to use :class:`aS`,
 or do ``op().ab_len()``. Get a list of all of these special operations
 in the source of :class:`~k1lib.Absorber`.
 

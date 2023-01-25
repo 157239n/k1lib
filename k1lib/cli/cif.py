@@ -72,11 +72,11 @@ getting the table directly.
         a = url | toBlocks() | hasTable() | cli.apply(~cli.head(2) | cli.op().strip().all()) | cli.deref() # preprocessing, split to blocks
         b = a | cli.apply(~cli.filt(cli.op().startswith("_")) | (cli.aS(k1a.str_split, " ") | cli.filt(cli.op() != "")).all() | cli.joinStreams())
         fieldss = a | cli.apply(cli.filt(cli.op().startswith("_")) | cli.op().split(".")[1].all()) | cli.toList().all()
-        f = (cli.transpose() | cli.apply(cli.item() & ~cli.head(1)) | cli.transpose() | cli.toDict()) if dikt else cli.iden() # asDict
+        f = (cli.transpose() | cli.apply(cli.item() & ~cli.head(1)) | cli.transpose() | cli.toDict(False)) if dikt else cli.iden() # asDict
         tableNames = a | cli.op()[0].split(".")[0].all() | cli.deref()
         c = [b, fieldss, tableNames] | cli.transpose() | (cli.filt(cli.op() == name, 2) if name is not None else cli.iden()) | cli.cut(0, 1)\
             | ~cli.apply(lambda l, fields: collect(l) | cli.batched(len(fields), True) | cli.insert(fields) | f)
-        d = [tableNames, c] | cli.toDict()
+        d = [tableNames, c] | cli.toDict(False)
         if name is None: return d
         else:
             if len(d) != 1: return None
@@ -97,4 +97,4 @@ Potential output::
 Result is a dictionary of ``record name -> (n, 2) table``"""
     each = ~cli.head(1) | cli.op().strip().all() | cli.apply(cli.aS(k1a.str_split, " ") | cli.filt(cli.op() != "")) | cli.joinStreams() | cli.aS(collect) | cli.batched(2)\
         | (cli.item(2) | cli.op().split(".")[0]) & (cli.apply(cli.op().split(".")[1], 0))
-    return toBlocks() | ~hasTable() | cli.filt(cli.op().ab_len() > 1) | each.all() | cli.transpose() | cli.toDict()
+    return toBlocks() | ~hasTable() | cli.filt(cli.op().ab_len() > 1) | each.all() | cli.toDict()

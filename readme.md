@@ -1,10 +1,11 @@
 # k1lib
 
-PyTorch is awesome, and it provides a very effective way to execute ML code fast. What it lacks is surrounding infrastructure to make general debugging and discovery process better. Other more official wrapper frameworks sort of don't make sense to me, so this is an attempt at recreating a robust suite of tools that makes sense.
+PyTorch is awesome, and it provides a very effective way to execute ML code fast. What
+it lacks is surrounding infrastructure to make general debugging and discovery process
+better. Other more official wrapper frameworks sort of don't make sense to me, so this
+is an attempt at recreating a robust suite of tools that makes sense.
 
-Also, there's the package `k1lib.cli` which contains nice cli tools originally intended to replace the bash/awk/perl bioinformatics workflow. What does this have to do with PyTorch and DL? Originally nothing, but over time stuff like `batched` and `stagger` appeared which has largely replaced PyTorch data loaders.
-
-This cli stuff is quite insane man. You can literally perform extremely complex operations in 2-3 lines of code that would normally take >100 lines. It's also super flexible, operates on multiple dimensions and not locked in, as you can change the dataflow in quite a fundamental level in ~5 minutes. It's like alchemy. Although I created it, I'm continously surprised at what it can do. Check [this post](https://mlexps.com/mo/3-cif-visualize/) where cli is used to load, transform, analyze and visualize protein structural data.
+This is more than just an ML library though. A prominent feature is the set of "cli tools" originally intended to replace the bash/awk/perl bioinformatics workflow. It essentially allows you to pipe inputs into functions, which returns an output which can be piped into other functions. Using these tools, you can literally perform complex operations in multiple dimensions in 2-3 lines of code that would normally take >100 lines. It's also super flexible, operates on multiple dimensions and not locked in, as you can change the dataflow in quite a fundamental level in ~5 minutes. Check over the basics of it here: [cli](https://k1lib.com/latest/cli/index.html)
 
 ## Installation
 

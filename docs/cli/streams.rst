@@ -77,8 +77,8 @@ others use any elements, then that would slow things down.
 Also, there's another way to join cli operators together. Let's check over an
 example::
 
-    even = filt(lambda x: x % 2 == 0, None)
-    odd = filt(lambda x: x % 2 == 1, None)
+    even = filt(lambda x: x % 2 == 0)
+    odd = filt(lambda x: x % 2 == 1)
     # returns [[10, 12, 14, 16, 18], [31, 33, 35, 37, 39]]
     [range(10, 20), range(30, 40)] | (even + odd) | deref()
     # pretty much identical to:

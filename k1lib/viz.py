@@ -6,6 +6,7 @@ This module is for nice visualization tools. This is exposed automatically with:
    viz.mask # exposed
 """
 import k1lib, base64, io, os, matplotlib as mpl
+import k1lib.cli as cli
 import matplotlib.pyplot as plt, numpy as np
 from typing import Callable, List, Union
 from functools import partial, update_wrapper
@@ -13,8 +14,8 @@ try: import torch; import torch.nn as nn; hasTorch = True
 except:
     torch = k1lib.Object().withAutoDeclare(lambda: type("RandomClass", (object, ), {}))
     nn = k1lib.Object().withAutoDeclare(lambda: type("RandomClass", (object, ), {})); hasTorch = False
-__all__ = ["SliceablePlot", "plotSegments", "Carousel", "confusionMatrix", "FAnim",
-           "mask"]
+__all__ = ["SliceablePlot", "plotSegments", "Carousel", "HtmlImage", "ToggleImage",
+           "confusionMatrix", "FAnim", "mask"]
 class _PlotDecorator:
     """The idea with decorators is that you can do something like this::
 
@@ -124,12 +125,12 @@ element, else return the entire list."""
         if type(idx) == tuple and all([isinstance(elem, slice) for elem in idx]):
             return SliceablePlot(self.plotF, idx, self.plotDecorators, self.docs)
         raise Exception(f"Don't understand {idx}")
-    def __repr__(self):
+    def __repr__(self, show=True):
         self.plotF(self.squeezedSlices)
         for ax in plt.gcf().get_axes():
             plt.sca(ax)
             for decorator in self.plotDecorators: decorator.run()
-        plt.show()
+        if show: plt.show()
         return f"""Sliceable plot. Can...
 - p[a:b]: to focus on a specific range of the plot
 - p.yscale("log"): to perform operation as if you're using plt{self.docs}"""
@@ -172,62 +173,25 @@ the same length as your data, filled with ints, like this::
         plt.plot(_x, _y, colors[state])
 class Carousel:
     _idx = k1lib.AutoIncrement.random()
-    def __init__(self):
+    def __init__(self, imgs=[]):
         """Creates a new Carousel. You can then add images and whatnot.
 Will even work even when you export the notebook as html. Example::
 
-    import numpy as np, matplotlib.pyplot as plt, k1lib
-    c = k1lib.viz.Carousel()
-    x = np.linspace(-2, 2); plt.plot(x, x ** 2); c.savePlt()
-    x = np.linspace(-1, 3); plt.plot(x, x ** 2); c.savePlt()
+    c = viz.Carousel()
+    x = np.linspace(-2, 2); plt.plot(x, x ** 2); plt.gcf() | toImg() | c
+    x = np.linspace(-1, 3); plt.plot(x, x ** 2); plt.gcf() | toImg() | c
     c # displays in notebook cell
+
+:param imgs: List of initial images. Can add more images later on by using :meth:`__ror__`
 
 .. image:: images/carousel.png
 """
         self.imgs:List[Tuple[str, str]] = [] # Tuple[format, base64 img]
         self.defaultFormat = "jpeg"
-    def saveBytes(self, _bytes:bytes, fmt:str=None):
-        """Saves bytes as another image.
-
-:param fmt: format of image"""
-        self.imgs.append((fmt or self.defaultFormat, base64.b64encode(_bytes).decode()))
-    def save(self, f:Callable[[io.BytesIO], None]):
-        """Generic image save function. Treat :class:`io.BytesIO` as if it's
-a file when you're doing this::
-    
-    with open("file.txt") as f:
-        pass # "f" is similar to io.BytesIO
-
-So, you can do stuff like::
-
-    import matplotlib.pyplot as plt, numpy as np
-    x = np.linspace(-2, 2)
-    plt.plot(x, x**2)
-    c = k1lib.viz.Carousel()
-    c.save(lambda io: plt.savefig(io, format="png"))
-
-:param f: lambda that provides a :class:`io.BytesIO` for you to write to
-"""
-        byteArr = io.BytesIO(); f(byteArr); byteArr.seek(0)
-        self.saveBytes(byteArr.read())
-    def savePlt(self):
-        """Saves current plot from matplotlib"""
-        self.save(lambda byteArr: plt.savefig(byteArr, format=self.defaultFormat))
-        plt.clf()
-    def savePIL(self, image):
-        """Saves a PIL image"""
-        self.save(lambda byteArr: image.save(byteArr, format=self.defaultFormat))
-    def saveFile(self, fileName:str, fmt:str=None):
-        """Saves image from file.
-
-:param fmt: format of the file. Will figure out from file extension
-    automatically if left empty
-"""
-        with open(fileName, "rb") as f:
-            if fmt is None: # automatically infer image format
-                baseName = os.path.basename(fileName)
-                if "." in baseName: fmt = baseName.split(".")[-1]
-            self.saveBytes(f.read(), fmt)
+        for im in imgs: im | self
+    def __ror__(self, it):
+        """Adds an image to the collection"""
+        self.imgs.append(["png", base64.b64encode(it | cli.toBytes()).decode()])
     def saveGraphviz(self, g):
         """Saves a graphviz graph"""
         import tempfile; a = tempfile.NamedTemporaryFile()
@@ -237,29 +201,33 @@ So, you can do stuff like::
         return self.imgs.pop()
     def __getitem__(self, idx): return self.imgs[idx]
     def _repr_html_(self):
-        imgs = [f"\"<img src='data:image/{fmt};base64, {img}' />\"" for fmt, img in self.imgs]
-        idx = Carousel._idx.value
+        imgs = [f"\"<img alt='' src='data:image/{fmt};base64, {img}' />\"" for fmt, img in self.imgs]
+        idx = Carousel._idx()
         pre = f"k1c_{idx}"
-        html = f"""
+        html = f"""<!-- k1lib.Carousel -->
 <style>
     .{pre}_btn {{
         cursor: pointer;
-        padding: 10px 15px;
-        background: #9e9e9e;
-        float: left;
-        margin-right: 5px;
+        padding: 6px 12px;
+        /*background: #9e9e9e;*/
+        background-color: #eee;
+        margin-right: 8px;
         color: #000;
+        box-shadow: 0 3px 5px rgb(0,0,0,0.3);
+        border-radius: 18px;
         user-select: none
     }}
     .{pre}_btn:hover {{
+        box-shadow: box-shadow: 0 3px 10px rgb(0,0,0,0.6);
         background: #4caf50;
         color: #fff;
     }}
 </style>
 <div>
-    <div id="{pre}_prevBtn" class="{pre}_btn">Prev</div>
-    <div id="{pre}_nextBtn" class="{pre}_btn">Next</div>
-    <div style="clear:both"/>
+    <div style="display: flex; flex-direction: row; padding: 8px">
+        <div id="{pre}_prevBtn" class="{pre}_btn">Prev</div>
+        <div id="{pre}_nextBtn" class="{pre}_btn">Next</div>
+    </div>
     <div id="{pre}_status" style="padding: 10px"></div>
 </div>
 <div id="{pre}_imgContainer"></div>
@@ -281,8 +249,69 @@ So, you can do stuff like::
         {pre}_display();
     }};
     {pre}_display();
-</script>
-        """
+</script>"""
+        return html
+class HtmlImage:
+    def __init__(self, im, style=""):
+        """Creates a html image from a PIL image
+
+:param im: PIL image
+:param style: extra styles"""
+        self.imB64 = base64.b64encode(im | cli.toBytes()).decode(); self.style = style
+    def _repr_html_(self): return f"""<img alt='' src='data:image/jpg;base64,{self.imB64}' style='{self.style}' />"""
+class ToggleImage:
+    _idx = k1lib.AutoIncrement.random()
+    def __init__(self):
+        """Creates a new toggle image, which is just an image that
+is hidden by default, but can be shown with a button. Will even work
+even when you export the notebook as html. Example::
+
+    x = np.linspace(-2, 2); plt.plot(x, x ** 2)
+    plt.gcf() | cli.toImg() | viz.ToggleImage()
+
+This will plot a graph, then create a button where you can toggle the image's visibility"""
+        self.imgs:List[Tuple[str, str]] = [] # Tuple[format, base64 img]
+        self.img = None
+    def __ror__(self, it): self.img = base64.b64encode(it | cli.toBytes()).decode(); return self
+    def _repr_html_(self):
+        pre = f"k1ti_{ToggleImage._idx()}"
+        html = f"""<!-- k1lib.ToggleImage -->
+<style>
+    #{pre}_btn {{
+        cursor: pointer;
+        padding: 6px 12px;
+        background: #eee;
+        margin-right: 5px;
+        color: #000;
+        user-select: none;
+        box-shadow: 0 3px 5px rgb(0,0,0,0.3);
+        border-radius: 18px;
+    }}
+    #{pre}_btn:hover {{
+        box-shadow: 0 3px 5px rgb(0,0,0,0.6);
+        background: #4caf50;
+        color: #fff;
+    }}
+</style>
+<div>
+    <div style="display: flex; flex-direction: row; padding: 4px">
+        <div id="{pre}_btn">Show image</div>
+        <div style="flex: 1"></div>
+    </div>
+    <img id="{pre}_img" src='data:image/jpg;base64,{self.img}' style="display: none; margin-top: 12px" />
+</div>
+<script>
+    console.log("setup script ran for {pre}");
+    {pre}_btn = document.querySelector("#{pre}_btn");
+    {pre}_img = document.querySelector("#{pre}_img");
+    
+    {pre}_displayed = false;
+    {pre}_btn.onclick = () => {{
+        {pre}_displayed = !{pre}_displayed;
+        {pre}_btn.innerHTML = {pre}_displayed ? "Hide image" : "Show image";
+        {pre}_img.style.display = {pre}_displayed ? "block" : "none";
+    }};
+</script>"""
         return html
 def confusionMatrix(matrix:torch.Tensor, categories:List[str]=None, **kwargs):
     """Plots a confusion matrix. Example::

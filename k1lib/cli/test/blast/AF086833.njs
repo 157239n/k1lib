@@ -6,7 +6,7 @@
   "description": "test/blast/AF086833.fa",
   "number-of-letters": 18959,
   "number-of-sequences": 1,
-  "last-updated": "2022-11-27T04:09:00",
+  "last-updated": "2023-01-25T00:41:00",
   "number-of-volumes": 1,
   "bytes-total": 41878,
   "bytes-to-cache": 4861,

@@ -167,6 +167,8 @@ Functions
 .. autofunction:: k1lib.pValue
 .. autofunction:: k1lib.now
 .. autofunction:: k1lib.pushNotification
+.. autofunction:: k1lib.dep
+.. autofunction:: k1lib.ticks
 .. autofunction:: k1lib.perlin3d
 .. autofunction:: k1lib.graph
 .. autofunction:: k1lib.digraph

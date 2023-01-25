@@ -15,12 +15,28 @@ Cli:
 - Added PIL image mode to :class:`~utils.size`
 - Added chemical structure mode to :class:`~conv.toPIL`
 - Added read speed profiler to :meth:`~inp.cat`
+- Added table mode to :class:`~output.plotImgs`
+- Added :meth:`filt.filt.split`, :meth:`filt.head.split`
+- Removed :class:`output.split`, because it's horribly inefficient. Use
+  :class:`~inp.splitSeek` instead.
+- Added argument expand mode to :class:`~modifier.applyMp`.
+- Added column mode to :class:`~filt.intersection` and added None column mode to :class:`~filt.union`
+- Simplified :class:`~structural.insert`
+- Accelerated :class:`~filt.filt`, :class:`~filt.cut`, :class:`~structural.joinStreams` for array types
+- Added complex yielding functionality to :class:`~structural.repeatF`.
+- Added automatic error checking for :class:`~filt.filt`.
+- Added padding option to :class:`~structural.window`
+- Added probability weighting mode to :class:`~structural.joinStreamsRandom`
 
 Generic:
 
-- Added :class:`~k1lib.ConstantPad`
+- Added :class:`~k1lib.ConstantPad`, :class:`~k1lib.viz.ToggleImage`, :meth:`~k1lib.dep`
+  and :meth:`~k1lib.ticks`.
+- Added more features to :class:`~k1lib.viz.Carousel`
 - Changed :meth:`~k1lib.captureStdout` so that it can capture C library's output and
   can capture stderr
+- Added :mod:`~k1lib.p5` module for quick Processing-like image manipulation
+- Developed :mod:`~k1lib.k1ui` module a lot further
 
 `1.1 </1.1>`_
 ---------------

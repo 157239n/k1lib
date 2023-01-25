@@ -343,7 +343,8 @@ something called marching cubes.
 :param heatMap: 3d numpy array
 :param level: array value to form the surface on"""
         from skimage import measure
-        verts, faces, normals, values = measure.marching_cubes(heatMap, level)
+        try: verts, faces, normals, values = measure.marching_cubes(heatMap, level)
+        except: verts, faces, normals, values = measure.marching_cubes_lewiner(heatMap, level)
         mesh = art3d.Poly3DCollection(verts[faces])
         if facecolor is not None: mesh.set_facecolor(facecolor)
         if edgecolor is not None: mesh.set_edgecolor(edgecolor)
@@ -361,7 +362,8 @@ something called marching cubes.
 
 :param labels: whether to include xyz labels or not
 :param size: figure size"""
-        fig = plt.figure(figsize=(size,size), constrained_layout=True, *args, **kwargs)
+        if isinstance(size, (int, float)): size = (size, size)
+        fig = plt.figure(figsize=size, constrained_layout=True, *args, **kwargs)
         ax = fig.add_subplot(projection="3d")
         if labels:
             ax.set_xlabel('x')

@@ -1,0 +1,8 @@
+
+k1lib.p5 module
+--------------------------
+
+.. automodule:: k1lib.p5
+   :members:
+   :undoc-members:
+   :show-inheritance:

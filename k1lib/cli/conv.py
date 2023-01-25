@@ -27,6 +27,8 @@ try: import torch; hasTorch = True
 except: torch = k1lib.Object().withAutoDeclare(lambda: type("RandomClass", (object, ), {})); hasTorch = False
 try: import rdkit; hasRdkit = True
 except: hasRdkit = False
+try: import graphviz; hasGraphviz = True
+except: hasGraphviz = False
 class toTensor(BaseCli):
     def __init__(self, dtype=torch.float32):
         """Converts generator to :class:`torch.Tensor`. Essentially
@@ -49,8 +51,17 @@ and return."""
         return torch.tensor(list(it)).to(self.dtype)
 class toList(BaseCli): # this still exists cause some LLVM optimizations are done on this, and too tired to change that at the moment
     def __init__(self):
-        """Converts generator to list. :class:`list` would do the
-same, but this is just to maintain the style"""
+        """Converts generator to list. 
+Example::
+
+    # returns [0, 1, 2, 3, 4]
+    range(5) | toList()
+    # returns [0, 1, 2, 3, 4]
+    range(5) | aS(list)
+
+So this cli is sort of outdated. It still works fine, nothing wrong
+with it, but just do ``aS(list)`` instead. It's not removed to
+avoid breaking old projects."""
         super().__init__()
 
     def _typehint(self, inp):
@@ -62,7 +73,11 @@ def _toRange(it):
     for i, _ in enumerate(it): yield i
 class toRange(BaseCli):
     def __init__(self):
-        """Returns iter(range(len(it))), effectively"""
+        """Returns iter(range(len(it))), effectively.
+Example::
+
+    # returns [0, 1, 2]
+    [3, 2, 5] | toRange() | deref()"""
         super().__init__()
     def __ror__(self, it:Iterator[Any]) -> Iterator[int]:
         try: return range(len(it))
@@ -156,7 +171,7 @@ def cropToContentPIL(im, pad=0):
     im = im | toTensor(int) | cli.op().numpy() | cli.aS(cropToContentNp, pad)
     return torch.from_numpy(im).permute(1, 2, 0) | toImg() if len(im.shape) > 2 else im | toImg()
 class toPIL(BaseCli):
-    def __init__(self):
+    def __init__(self, closeFig=True):
         """Converts multiple data types into a PIL image.
 Example::
 
@@ -185,8 +200,10 @@ You can also save a matplotlib figure by piping in a :class:`matplotlib.figure.F
     
     Also it's expected that
     your tensor image ranges from 0-255, and not 0-1. Make sure you
-    renormalize it"""
-        import PIL; self.PIL = PIL
+    renormalize it
+
+:param closeFig: if input is a matplotlib figure, then closes the figure after generating the image"""
+        import PIL; self.PIL = PIL; self.closeFig = closeFig
     def _typehint(self, inp):
         return PIL.Image.Image
     def __ror__(self, path) -> "PIL.Image.Image":
@@ -199,7 +216,16 @@ You can also save a matplotlib figure by piping in a :class:`matplotlib.figure.F
             return self.PIL.Image.fromarray(path.astype("uint8"))
         if isinstance(path, mpl.figure.Figure):
             canvas = path.canvas; canvas.draw()
-            return self.PIL.Image.frombytes('RGB', canvas.get_width_height(), canvas.tostring_rgb())
+            img = self.PIL.Image.frombytes('RGB', canvas.get_width_height(), canvas.tostring_rgb())
+            if self.closeFig: plt.close(path)
+            return img | cli.aS(cropToContentPIL)
+        if isinstance(path, graphviz.dot.Digraph):
+            import tempfile; a = tempfile.NamedTemporaryFile()
+            path.render(a.name, format="jpeg");
+            fn = f"{a.name}.jpeg"; im = fn | toImg()
+            try: os.remove(fn)
+            except: pass
+            return im
         if hasRdkit and isinstance(path, rdkit.Chem.rdchem.Mol):
             sz = settings.chem.imgSize
             return self.__ror__(rdkit.Chem.Draw.MolsToGridImage([path], subImgSize=[sz, sz]).data) | cli.aS(cropToContentPIL)
@@ -207,7 +233,7 @@ You can also save a matplotlib figure by piping in a :class:`matplotlib.figure.F
         if len(path) > 0 and isinstance(path[0], str):
             from PIL import ImageDraw
             h = path | cli.shape(0); w = path | cli.shape(0).all() | cli.aS(max)
-            image = self.PIL.Image.new("L", (w*20, h*40), 255)
+            image = self.PIL.Image.new("L", (w*20, h*60), 255)
             font = PIL.ImageFont.truetype(settings.font, 18) if settings.font else None
             ImageDraw.Draw(image).text((20, 20), path | cli.join("\n"), 0, font=font)
             return image | cli.toTensor(int) | cli.op().numpy()[0]/255 | cli.aS(cropToContentNp) | cli.op()*255 | toImg()
@@ -249,14 +275,14 @@ Example::
     def __ror__(self, i):
         return self.PIL.ImageOps.grayscale(i)
 class toDict(BaseCli):
-    def __init__(self, rows=False):
+    def __init__(self, rows=True):
         """Converts 2 Iterators, 1 key, 1 value into a dictionary.
 Example::
 
     # returns {1: 3, 2: 4}
-    [[1, 2], [3, 4]] | toDict()
+    [[1, 3], [2, 4]] | toDict()
     # returns {1: 3, 2: 4}
-    [[1, 3], [2, 4]] | toDict(True)
+    [[1, 2], [3, 4]] | toDict(False)
 
 :params rows: if True, reads input in row by row, else reads
     in list of columns"""
@@ -334,22 +360,25 @@ See also: :meth:`toFloat`"""
             return it | _toop(_toInt, None, mode == 1, 0.0)
         else: return it | cli.init.serial(*(_toop(_toInt, c, mode == 1, 0.0) for c in columns))
 class toBytes(BaseCli):
-    def __init__(self):
+    def __init__(self, imgType="JPEG"):
         """Converts several object types to bytes.
 Example::
 
     # converts string to bytes
     "abc" | toBytes()
     # converts image to base64 bytes
-    torch.randn(200, 100) | toImg() | toBytes()"""
-        pass
+    torch.randn(200, 100) | toImg() | toBytes()
+
+:param imgType: if input is an image then this is the image type. Can
+    change to "PNG" or sth like that"""
+        self.imgType = imgType
     def __ror__(self, it):
         if isinstance(it, str): return it.encode()
         if hasPIL:
             if isinstance(it, PIL.Image.Image):
                 it = it | toRgb()
                 buffered = io.BytesIO()
-                it.save(buffered, format="JPEG")
+                it.save(buffered, format=self.imgType)
                 return buffered.getvalue()
         return NotImplemented
 try:

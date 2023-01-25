@@ -11,20 +11,20 @@ try:
 except: pass
 import matplotlib.pyplot as plt, matplotlib as mpl
 import numpy as np, dill as pickle, multiprocessing as mp, concurrent.futures as futures
-import math, os, time, sys, random, logging, traceback, re, typing, glob, warnings
+import math, os, time, sys, random, logging, traceback, re, typing, glob, warnings, asyncio
 import dill, json, inspect, xml, base64, io
 import functools; from functools import partial, lru_cache
 import contextlib; from contextlib import contextmanager
 from collections import deque, defaultdict
 from typing import List, Tuple, Callable, Union, Iterator, Set, Dict, Any
 import k1lib; from k1lib import schedule, graphEqn, mo, knn, fmt, selector,\
-viz, Cbs, settings, cli, _k1a, serve
+viz, Cbs, settings, cli, _k1a, serve, p5, k1ui
 from k1lib.cli import *; k1 = k1lib; k1a = _k1a
 for e in cli._scatteredClis: globals()[e.__name__] = e
 if "py_k1lib_in_applyMp" not in os.environ: k1lib.dontWrap()
 plt.rcParams['figure.dpi'] = 100
 plt.rcParams["animation.html"] = "jshtml"
-from math import e, pi; inf = float("inf"); # this section is for constants
+from math import e, pi; inf = float("inf"); nan = float("nan"); # this section is for constants
 h = 6.62607015e-34; hbar = h/(2*pi); Na = 6.0221408e23; kb = 1.380649e-23
 c = 299_792_458; qe = 1.60217663e-19; me = 9.1093837e-31; mn = 1.67262192e-27
 e0 = 8.85418782e-12; Dal = u = 1.6605390666e-27; R = 8.3145; sb = 5.670374e-8
@@ -47,7 +47,7 @@ try: import IPython
 except: pass
 try: import PIL
 except: pass
-try: from scipy.optimize import fsolve
+try: from scipy.optimize import fsolve; import scipy
 except: pass
 try: import einops
 except: pass
@@ -56,4 +56,8 @@ except: pass
 try: import sympy
 except: pass
 try: import rdkit; from rdkit import Chem
+except: pass
+try: import requests
+except: pass
+try: import seaborn as sns
 except: pass

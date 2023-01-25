@@ -3,6 +3,7 @@ from .callbacks import Callback, Callbacks, Cbs
 import k1lib, numpy as np, time
 import matplotlib.pyplot as plt
 from typing import Callable
+import k1lib.cli as cli
 try: import torch; hasTorch = True
 except: hasTorch = False
 __all__ = ["Landscape"]

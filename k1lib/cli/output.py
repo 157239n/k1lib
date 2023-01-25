@@ -5,13 +5,13 @@ For operations that feel like the termination of operations
 from collections import defaultdict
 from typing import Iterator, Any
 from k1lib.cli.init import BaseCli, Table
-import numbers, numpy as np, k1lib, tempfile, os, sys, time, shutil, math
+import numbers, numpy as np, k1lib, tempfile, os, sys, time, math
 from k1lib import cli; from k1lib.cli.typehint import *
 import matplotlib.pyplot as plt
 try: import torch; hasTorch = True
 except: hasTorch = False
 __all__ = ["stdout", "tee", "file", "pretty", "display", "headOut",
-           "intercept", "split", "plotImgs"]
+           "intercept", "plotImgs"]
 settings = k1lib.settings.cli
 class stdout(BaseCli):
     def __init__(self):
@@ -224,47 +224,8 @@ raises error to stop flow. Example::
             if s.numel() < 1000: print(tab(f"{s}"))
         if self.raiseError: raise RuntimeError("intercepted")
         return s
-a = k1lib.AutoIncrement()
-class split(BaseCli):
-    def __init__(self, n=10, baseFolder="/tmp"):
-        """Splits a large file into multiple fragments, and returns the
-path to those files. Example::
-
-    # returns a list of 20 files
-    "big-file.csv" | split(20)
-
-This uses the underlying ``split`` linux cli tool. This also means that
-it's not guaranteed to work on macos or windows.
-
-Overtime, there will be lots of split files after a session, so be sure
-to clean them up to reduce disk size::
-
-    split.clear()
-
-.. warning::
-
-    Usage of this cli is discouraged, because performance characteristics
-    of this doesn't make sense. Use :class:`~k1lib.cli.inp.splitSeek` instead!
-
-:param n: Number of files to split into
-:param baseFolder: Base folder where all the splitted files are"""
-        baseFolder = os.path.expanduser(baseFolder); self.n = n
-        self.folder = f"{baseFolder}/k1lib_split/{int(time.time())}_{a()}"
-        try: shutil.rmtree(self.folder)
-        except: pass
-    def __ror__(self, file):
-        os.makedirs(self.folder, exist_ok=True)
-        if not isinstance(file, str): raise RuntimeError("Not a file name!")
-        None | cli.cmd(f"split -n l/{self.n} \"{os.path.expanduser(file)}\" \"{self.folder}/pr-\"") | cli.ignore()
-        return [f"{self.folder}/{f}" for f in os.listdir(self.folder)]
-    @staticmethod
-    def clear(baseFolder="/tmp"):
-        """Clears all splitted temporary files."""
-        baseFolder = os.path.expanduser(baseFolder)
-        try: shutil.rmtree(f"{baseFolder}/k1lib_split")
-        except: pass
 class plotImgs(BaseCli):
-    def __init__(self, col=5, aspect=1, fac=2, axis=False):
+    def __init__(self, col=5, aspect=1, fac=2, axis=False, table=False, im=False):
         """Plots a bunch of images at the same time in a table.
 Example::
 
@@ -273,22 +234,43 @@ Example::
     # plots all images with titles
     [[torch.randn(10, 20), "img 1"], [torch.randn(20, 10), "img 2"]] | plotImgs()
 
+If you have multiple rows with different number of images, you can
+plot that with this too, just set ``table=True`` like this::
+
+    [[torch.randn(10, 20), torch.randn(20, 10)], [torch.randn(10, 20)]] | plotImgs(table=True)
+
 :param col: number of columns in the table. If explicitly None, it will turn
-    into the number of images fed
+    into the number of images fed. Not available if ``table=True``
 :param aspect: aspect ratio of each images, or ratio between width and height
 :param fac: figsize factor. The higher, the more resolution
-:param axis: whether to display the axis or not"""
-        self.col = col; self.fac = fac; self.axis = axis; self.aspect = aspect
+:param axis: whether to display the axis or not
+:param table: whether to plot using table mode
+:param im: if True, returns an image"""
+        self.col = col; self.fac = fac; self.axis = axis; self.aspect = aspect; self.table = table; self.im = im
     def __ror__(self, imgs):
-        imgs = imgs | cli.deref(); col = self.col; fac = self.fac
-        if len(imgs) == 0: return
-        if col is None or col > len(imgs): col = len(imgs)
-        n = math.ceil(len(imgs)/col); aspect = self.aspect**0.5
-        fig, axes = plt.subplots(n, col, figsize=(col*fac*aspect, n*fac/aspect));
-        axes = axes.flatten() if isinstance(axes, np.ndarray) else [axes]
-        for ax, im in zip(axes, imgs):
-            plt.sca(ax)
-            if isinstance(im, list): plt.imshow(im[0]); plt.title(im[1])
-            else: plt.imshow(im)
-            if not self.axis: ax.axis("off")
-        for i in range(len(imgs), len(axes)): axes[i].remove() # removing leftover axes
+        imgs = imgs | cli.deref(); col = self.col; fac = self.fac; aspect = self.aspect**0.5
+        if not self.table: # main code
+            if len(imgs) == 0: return
+            if col is None or col > len(imgs): col = len(imgs)
+            n = math.ceil(len(imgs)/col)
+            fig, axes = plt.subplots(n, col, figsize=(col*fac*aspect, n*fac/aspect));
+            axes = axes.flatten() if isinstance(axes, np.ndarray) else [axes]
+            for ax, im in zip(axes, imgs):
+                plt.sca(ax)
+                if isinstance(im, list): plt.imshow(im[0]); plt.title(im[1])
+                else: plt.imshow(im)
+                if not self.axis: ax.axis("off")
+            for i in range(len(imgs), len(axes)): axes[i].remove() # removing leftover axes
+        else:
+            if col != 5: raise Exception("Currently in table mode, can't set `col` parameter") # change this value to match col's default value
+            h = imgs | cli.shape(0); w = imgs | cli.shape(0).all() | cli.toMax()
+            fig, axes = plt.subplots(h, w, figsize=(w*fac*aspect, h*fac/aspect));
+            for rAx, rIm in zip(axes, imgs):
+                for cAx, cIm in zip(rAx, rIm):
+                    plt.sca(cAx)
+                    if isinstance(cIm, list): plt.imshow(cIm[0]); plt.title(cIm[1])
+                    else: plt.imshow(cIm)
+                    if not self.axis: cAx.axis("off")
+                for i in range(len(rIm), len(rAx)): rAx[i].remove() # removing leftover axes
+        plt.tight_layout()
+        if self.im: return plt.gcf() | cli.toImg()
