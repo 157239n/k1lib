@@ -233,7 +233,7 @@ You can also save a matplotlib figure by piping in a :class:`matplotlib.figure.F
         if len(path) > 0 and isinstance(path[0], str):
             from PIL import ImageDraw
             h = path | cli.shape(0); w = path | cli.shape(0).all() | cli.aS(max)
-            image = self.PIL.Image.new("L", (w*20, h*60), 255)
+            image = self.PIL.Image.new("L", ((w+1)*20, (h+1)*60), 255)
             font = PIL.ImageFont.truetype(settings.font, 18) if settings.font else None
             ImageDraw.Draw(image).text((20, 20), path | cli.join("\n"), 0, font=font)
             return image | cli.toTensor(int) | cli.op().numpy()[0]/255 | cli.aS(cropToContentNp) | cli.op()*255 | toImg()
@@ -249,6 +249,7 @@ Example::
         import PIL; self.PIL = PIL
     def _typehint(self, inp): return inp
     def __ror__(self, i):
+        if i.getbands() == ("R", "G", "B"): return i
         rgbI = self.PIL.Image.new("RGB", i.size)
         rgbI.paste(i); return rgbI
 class toRgba(BaseCli):
@@ -261,6 +262,7 @@ Example::
         import PIL; self.PIL = PIL
     def _typehint(self, inp): return inp
     def __ror__(self, i):
+        if i.getbands() == ("R", "G", "B", "A"): return i
         rgbI = self.PIL.Image.new("RGBA", i.size)
         rgbI.paste(i); return rgbI
 class toGray(BaseCli):
@@ -273,6 +275,7 @@ Example::
         import PIL; self.PIL = PIL
     def _typehint(self, inp): return inp
     def __ror__(self, i):
+        if i.getbands() == ("L"): return i
         return self.PIL.ImageOps.grayscale(i)
 class toDict(BaseCli):
     def __init__(self, rows=True):

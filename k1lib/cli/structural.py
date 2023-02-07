@@ -250,6 +250,7 @@ together, which :class:`reshape` does."""
         self.multi = cli.serial(*(joinStreams() for d in range(dims))) if dims > 1 else None
     def __ror__(self, streams:Iterator[Iterator[T]]) -> Iterator[T]:
         if self.multi != None:
+            return streams | self.multi
             def gen(): yield from streams | self.multi
             return gen()
         else:

@@ -88,7 +88,7 @@ Example::
     # returns "500.0 k"
     fmt.item(5e5)
 """
-    return generic(n, items).strip()
+    return generic(n, items)
 def throughput(n, unit=""):
     """Formats item throughput.
 Example::

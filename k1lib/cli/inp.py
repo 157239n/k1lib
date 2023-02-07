@@ -298,7 +298,7 @@ class lazySt:
             while True:
                 line = self.st.readline()
                 if len(line) == 0: break
-                yield line.decode()
+                yield line.decode().rstrip("\n")
         else:
             while True:
                 line = self.st.readline()
@@ -314,7 +314,7 @@ def executeCmd(cmd:str, inp:bytes, text):
             for e in inp:
                 if not isinstance(e, (str, bytes)): e = str(e)
                 if not isinstance(e, bytes): e = e.encode()
-                p.stdin.write(e)
+                p.stdin.write(e); p.stdin.write(b"\n")
     p.stdin.close(); return lazySt(p.stdout, text), lazySt(p.stderr, text)
 def printStderr(err):
     if not k1lib.settings.cli.quiet:

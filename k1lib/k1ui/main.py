@@ -66,8 +66,9 @@ another 10 seconds and then terminates the connection.
 
 This interface is quite low-level, and is the basis for all other functionalities.
 Some of them include:
-- :meth:`record`: recording a session
-- :meth:`execute`: executes a list of events
+
+* :meth:`record`: recording a session
+* :meth:`execute`: executes a list of events
 
 :param eventCb: (async) will be called whenever there's a new event
 :param mainThreadCb: (async) will be called after setting up everything
@@ -419,7 +420,7 @@ class ContourTrack(Track): # mouse movements
         super().__init__(*coords | cut(2) | toMin() & toMax()); self.coords = coords; self._cachedImg = None
     @staticmethod
     def parse(events) -> List["ContourTrack"]:
-        coords = events | filt(op()["type"] == "mouseMoved") | apply(lambda x: [x["x"], x["y"], x["timestamp"]/1000]) | deref() | aS(np.array)
+        coords = events | filt(lambda x: x["type"] == "mouseMoved" or x["type"] == "mouseDragged") | apply(lambda x: [x["x"], x["y"], x["timestamp"]/1000]) | deref() | aS(np.array)
         return [] if coords | shape(0) == 0 else [ContourTrack(coords)]
     def _img(self):
         if self._cachedImg: return self._cachedImg
@@ -621,6 +622,23 @@ def sample() -> Recording:
     """Creates a Recording from :meth:`sampleEvents`"""
     return Recording(Recording.sampleEvents())
 @k1.patch(ContourTrack)
+def split(self, times:List[float]):
+    """Splits this contour track by multiple timestamps relative
+to recording's start time. Example::
+
+    r = k1ui.Recording.sample()
+    r.sel1(klass=k1ui.ContourTrack).split([5])"""
+    rec = self.recording; c = self.coords; i = 0; x = 0; y = 0; d = []; cps = np.array(times) + rec.startTime
+    while True:
+        if cps[i] > c[y,2]: y += 1
+        else:
+            if y > x: d.append(c[x:y])
+            x = y; i += 1
+        if y >= len(c): d.append(c[x:y]); break
+        if i >= len(cps): d.append(c[x:]); break
+    rec.removeTracks(self)
+    rec.addTracks(d | apply(ContourTrack))
+@k1.patch(ContourTrack)
 def splitClick(self, clickTracks:List["ClickTrack"]=None):
     """Splits this contour track by click events. Essentially, the click
 events chops this contour into multiple segments. Example::
@@ -631,16 +649,7 @@ events chops this contour into multiple segments. Example::
 :param clickTracks: if not specified, use all ClickTracks from the recording"""
     rec = self.recording; c = self.coords; i = 0; x = 0; y = 0; d = []
     if clickTracks is None: clickTracks = rec.sel(*self.time0Rec()) | instanceOf(ClickTrack)
-    cps = clickTracks | ~filt(op().isClick(-1)) | op().timeUnix().all() | joinStreams() | sort(None) | deref()
-    while True:
-        if cps[i] > c[y,2]: y += 1
-        else:
-            if y > x: d.append(c[x:y])
-            x = y; i += 1
-        if y >= len(c): d.append(c[x:y]); break
-        if i >= len(cps): break
-    rec.removeTracks(self)
-    rec.addTracks(d | apply(ContourTrack))
+    self.split(clickTracks | ~filt(op().isClick(-1)) | op().timeUnix().all() | joinStreams() | sort(None) | apply(op()-rec.startTime) | deref())
 @k1.patch(Recording)
 def addTime(self, t:float, duration:float) -> Recording:
     """Inserts a specific duration into a specific point in time.
@@ -800,6 +809,8 @@ class MLP(nn.Module):
     def forward(self, xb): return xb | self.l1 | self.l2
 whatever = object()
 class TrainScreen:
+    data: List[Tuple[int, str]]
+    """Core dataset of TrainScreen. Essentially just a list of (frameId, screen name)"""
     def __init__(self, r:Recording):
         """Creates a screen training system that will train a small neural network
 to recognize different screens using a small amount of feedback from the user.
@@ -837,12 +848,12 @@ Saving the model::
     This won't actually save the associated recording, because recordings are
     very heavy objects (several GB). It is expected that you manually manage
     the lifecycle of the recording."""
-        self.r = r; self._data = []; # [(frame id, screen name)]
+        self.r = r; self.data = []; # [(frame id, screen name)]
         self._aspect = self.frames | item() | op().shape[:2] | ~aS(lambda x, y: y/x)
         self._distNet = distNet(); self._rules = set(); self._trainParams = {"joinAlpha": 0, "epochs": 300}
         self._lastScreenName = None; self._screenDump = Buffer(); self._screenTransients = discardTransients(self._screenDump, regular=True)
     @property
-    def _coldStart(self): return len(self._data) == 0 # whether there are any data at all to work with
+    def _coldStart(self): return len(self.data) == 0 # whether there are any data at all to work with
     def _coldGuard(self):
         if self._coldStart: raise Exception("TrainScreen has not started yet. Run `next(ts)`, choose a few frames using `ts.register()` to access this functionality")
     def _learner(self):
@@ -889,7 +900,7 @@ stacked array for memory performance"""
             b = self._randomConsidering() | aS(iter); c = self._midBoundaryConsidering() | aS(iter)
             self._considering = [a, a, b, c, c, c] | apply(wrapList() | insert(yieldT | repeat(), False) | joinStreams() | randomize()) | joinStreamsRandom() | head(20) | deref()
         return self._considering | lookup(self.frames) | insertIdColumn(begin=False) | plotImgs(5, self._aspect-0.2, im=True)
-    def _refreshIdx(self): self.idx2Name, self.name2Idx = self._data | cut(1) | aS(set) | insertIdColumn() | toDict() & (permute(1, 0) | toDict()) | deref()
+    def _refreshIdx(self): self.idx2Name, self.name2Idx = self.data | cut(1) | aS(set) | insertIdColumn() | toDict() & (permute(1, 0) | toDict()) | deref()
     def register(self, d):
         """Tells the object which images previously displayed by :meth:`__next__`
 associate with what screen name. Example::
@@ -901,7 +912,7 @@ This will also quickly (around 6 seconds) train a small neural network on all
 available frames based on the new information you provided.
 
 See also: :meth:`registerFrames`"""
-        self._data = [self._data, deref()(d.items()) | apply(repeat(), 0) | transpose().all() | joinStreams() | permute(1, 0) | lookup(self._considering, 0)] | joinStreams() | sort(0) | unique(0) | deref()
+        self.data = [self.data, deref()(d.items()) | apply(repeat(), 0) | transpose().all() | joinStreams() | permute(1, 0) | lookup(self._considering, 0)] | joinStreams() | sort(0) | unique(0) | deref()
         self._refreshIdx(); self.train()
     def registerFrames(self, data:Dict[str, List[int]]):
         """Tells the object which frames should have which labels.
@@ -912,7 +923,7 @@ Example::
 This differs from :meth:`register` in that the frame id here is the
 absolute frame index in the recording, while in :meth:`register`,
 it's the frame displayed by :meth:`__next__`."""
-        self._data = [self._data, deref()(data.items()) | apply(repeat(), 0) | transpose().all() | joinStreams() | permute(1, 0)] | joinStreams() | sort(0) | unique(0) | deref(); self._refreshIdx(); self.train()
+        self.data = [self.data, deref()(data.items()) | apply(repeat(), 0) | transpose().all() | joinStreams() | permute(1, 0)] | joinStreams() | sort(0) | unique(0) | deref(); self._refreshIdx(); self.train()
     def addRule(self, *screenNames:List[str]) -> "TrainScreen":
         """Adds a screen transition rule. Let's say that the transition
 dynamic looks like this:
@@ -973,7 +984,7 @@ Rules are added using :meth:`addRule`. See also: :meth:`graphs`"""
         return [self.transitionGraph(), self.ruleGraph()] | toImg().all() | aS(viz.Carousel)
     def labeledData(self) -> viz.Carousel:
         """Visualizes labeled data"""
-        return self._data | groupBy(1) | apply(randomize(None) | head(5) | lookup(self.frames, 0)) | batched(5) | plotImgs(5, self._aspect-0.2, table=True, im=True).all() | aS(viz.Carousel)
+        return self.data | groupBy(1) | apply(randomize(None) | head(5) | lookup(self.frames, 0)) | batched(5) | plotImgs(5, self._aspect-0.2, table=True, im=True).all() | aS(viz.Carousel)
     def __getstate__(self): d = dict(self.__dict__); del d["r"]; del d["_lastScreenName"]; del d["_screenDump"]; del d["_screenTransients"]; return d
     def __setstate__(self, d):
         self.__dict__.update(d); self._lastScreenName = None; self._screenDump = Buffer()
@@ -1001,8 +1012,8 @@ def blocks(it):
     yield min(lastIs), max(lastIs), lastE
 @k1.patch(TrainScreen)
 def _dataF(self, bs=64):
-    self._coldGuard(); v1 = fillIn(len(self), self._data) | filt(op(), 1) # old version. A bit more liveral than v2, and will accidentally auto label wrongly from time to time
-    v2 = blocks(self._data) | ~apply(lambda x, y, z: [range(x, y+1), z | repeat()] | transpose()) | joinStreams()
+    self._coldGuard(); v1 = fillIn(len(self), self.data) | filt(op(), 1) # old version. A bit more liveral than v2, and will accidentally auto label wrongly from time to time
+    v2 = blocks(self.data) | ~apply(lambda x, y, z: [range(x, y+1), z | repeat()] | transpose()) | joinStreams()
     js = deref() | aS(lambda xs: xs | apply(repeatFrom() | randomize()) | joinStreamsRandom(self._trainParams["joinAlpha"], xs | apply(len) | deref())) # joinStreams
     return v2 | randomize(None) | groupBy(1) | filt(lambda x: len(x) > 1) | splitW().all() | transpose()\
         | apply(js | lookup(self.feats, 0) | lookup(self.name2Idx, 1) | batched(bs)\
@@ -1015,4 +1026,4 @@ def midBounds(it): # to grab data samples that's in between blocks. Aka the real
         lastI = i
     return it
 @k1.patch(TrainScreen)
-def _midBoundaryConsidering(self): return midBounds(self._data) | ~head(1) | ~sort(1) | cut(0)
+def _midBoundaryConsidering(self): return midBounds(self.data) | ~head(1) | ~sort(1) | cut(0)

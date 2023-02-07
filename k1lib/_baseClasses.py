@@ -880,7 +880,7 @@ settings.add("wd", os.getcwd(), "default working directory, will get from `os.ge
 settings.add("cancelRun_newLine", True, "whether to add a new line character at the end of the cancel run/epoch/batch message")
 or_patch = Settings()\
     .add("numpy", True, "whether to patch numpy arrays")\
-    .add("dict", False, "whether to patch Python dict keys and items")\
+    .add("dict", True, "whether to patch Python dict keys and items")\
     .add("pandas", True, "whether to patch pandas series")
 startup = Settings().add("or_patch", or_patch, "whether to patch __or__() method for several C-extension datatypes (numpy array, pandas data frame/series, etc). This would make cli operations with them a lot more pleasant, but might cause strange bugs. Haven't met them myself though")
 settings.add("startup", startup, "these settings have to be applied like this: `import k1lib; k1lib.settings.startup.or_patch = False; from k1lib.imports import *` to ensure that the values are set")

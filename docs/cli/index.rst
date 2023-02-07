@@ -346,7 +346,7 @@ init module
    :show-inheritance:
 
 .. automodule:: k1lib.cli.init
-   :members: serial, oneToMany, mtmS, fastF
+   :members: serial, oneToMany, mtmS, fastF, patchNumpy, patchDict, patchPandas
    :undoc-members:
    :show-inheritance:
 

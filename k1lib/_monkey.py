@@ -387,6 +387,19 @@ Example::
                 ax.view_init(elevStart+frame*elevSpeed, azimStart+frame*azimSpeed)
         if close: plt.close()
         return k1lib.viz.FAnim(fig, f, frames)
+    @k1lib.patch(plt)
+    def getFig():
+        """Grab figure of the current plot.
+Example::
+
+    plt.plot() | plt.getFig() | toImg()
+
+Internally, this just calls ``plt.gcf()`` and that's it, pretty simple.
+But I usually plot things as a part of the cli pipeline, and it's very
+annoying that I can't quite chain ``plt.gcf()`` operation, so I created
+this"""
+        def inner(_): return plt.gcf()
+        return inner
 except: pass
 try:
     @k1lib.patch(Axes3D)

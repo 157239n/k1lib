@@ -22,11 +22,14 @@ Cli:
 - Added argument expand mode to :class:`~modifier.applyMp`.
 - Added column mode to :class:`~filt.intersection` and added None column mode to :class:`~filt.union`
 - Simplified :class:`~structural.insert`
-- Accelerated :class:`~filt.filt`, :class:`~filt.cut`, :class:`~structural.joinStreams` for array types
+- Accelerated :class:`~filt.filt`, :class:`~filt.cut`, :class:`~structural.joinStreams`
+  and :class:`~modifier.randomize` for array types
 - Added complex yielding functionality to :class:`~structural.repeatF`.
 - Added automatic error checking for :class:`~filt.filt`.
 - Added padding option to :class:`~structural.window`
 - Added probability weighting mode to :class:`~structural.joinStreamsRandom`
+- Fixed :mod:`forbiddenfruit` or-patching of :class:`~numpy.ndarray`, :class:`dict`,
+  :class:`pandas.core.series.Series` and :class:`pandas.core.frame.DataFrame`
 
 Generic:
 

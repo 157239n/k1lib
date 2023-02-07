@@ -15,6 +15,7 @@ from k1lib.cli.typehint import *
 import dill, pickle, k1lib, warnings, atexit, signal, time, os, random
 try: import torch; import torch.multiprocessing as mp; hasTorch = True
 except: import multiprocessing as mp; hasTorch = False
+settings = k1lib.settings.cli
 class applyS(BaseCli):
     def __init__(self, f:Callable[[T], T], *args, **kwargs):
         """Like :class:`apply`, but much simpler, just operating on the entire input
@@ -465,9 +466,14 @@ in ``float("inf")``, or ``None``. Example::
         genn = self.genn; self.genn = None; return self.__dict__
     def __setstate__(self, d): self.__dict__.update(d); self._initGenn()
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
-        for batch in it | cli.batched(self.bs, True):
-            batch = list(batch); perms = self.genn(len(batch))
-            for idx in perms: yield batch[idx]
+        bs = self.bs
+        if isinstance(it, settings.arrayTypes):
+            if bs is None or len(it) <= bs: return it if len(it) == 1 else it[self.genn(len(it))]
+        def gen():
+            for batch in it | cli.batched(bs, True):
+                batch = list(batch); perms = self.genn(len(batch))
+                for idx in perms: yield batch[idx]
+        return gen()
 class StaggeredStream:
     def __init__(self, stream:Iterator[T], every:int):
         """Not intended to be instantiated by the end user. Use :class:`stagger`

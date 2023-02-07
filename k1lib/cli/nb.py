@@ -77,7 +77,7 @@ everything is nice and clean
                 k1lib.settings.wd = os.path.dirname(self.fileName) or "."
             for cell in cells:
                 if cell["cell_type"] != "code": continue
-                source = "\n".join(cell["source"])
+                source = "\n".join(cell["source"] | cli.apply(lambda x: x.strip("\n")))
                 try: exec(source, self._globals); plt.show()
                 except Exception as e:
                     print("Problematic cell:\n")
