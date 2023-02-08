@@ -152,7 +152,7 @@ Example::
         return graphviz.Digraph(graph_attr={"rankdir":"TB"})
     def graph():
         """Convenience method for creating a new graphviz Graph. See also: :meth:`digraph`"""
-        return graphviz.Graph(graph_attr={"rankdir":"TB"})
+        return graphviz.Graph(graph_attr={"rankdir":"TB", "overlap": "false"})
 except ImportError:
     digraph = graph = lambda: print("Module `graphviz` not found! Please install it first, something like `pip install graphviz`")
 def beep(seconds=0.3):

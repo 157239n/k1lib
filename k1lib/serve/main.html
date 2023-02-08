@@ -416,6 +416,23 @@
     const updated = () => (autoRun ? (newRequest = true) : 0);
     const autoRunToggle = () => {autoRun = !autoRun; updated();};
     let currentRequests = 0;
+    function base64ToArrayBuffer(base64) {
+        var binaryString = window.atob(base64);
+        var binaryLen = binaryString.length;
+        var bytes = new Uint8Array(binaryLen);
+        for (var i = 0; i < binaryLen; i++) {
+            var ascii = binaryString.charCodeAt(i);
+            bytes[i] = ascii;
+        }
+        return bytes;
+    }
+    function saveByteArray(byte) {
+        var blob = new Blob([byte], {type: "application/octet-stream"});
+        var link = document.createElement('a');
+        link.href = window.URL.createObjectURL(blob);
+        link.download = "data";
+        link.click();
+    };
     async function run() {
       console.log("Sent request");
       nRequests++;
@@ -427,12 +444,12 @@
       });
       nRequests--;
       const text = await res.text();
-      const anno = meta.annoStrs.return;
-      if (["int", "float", "str", "bool"].includes(anno)) result.innerHTML = `<pre>${text}</pre>`;
-      else if (anno === "ndarray") {
-        // TODO: download button
-      } else if (anno === "Image") result.innerHTML = `<div style="overflow: auto;"><img style="width: 100%; object-fit: cover;" src="data:image/jpg;base64, ${text}" alt="Result image" /></div>`
-      else throw new Exception("Return value not recognized");
+      const anno = meta.annos.return;
+      if (["int", "float", "text", "checkbox"].includes(anno)) result.innerHTML = `<pre>${text}</pre>`;
+      else if (anno === "bytes") {
+        result.innerHTML = `<div onclick="saveByteArray(base64ToArrayBuffer('${text}'))"></div>`
+      } else if (anno === "image") result.innerHTML = `<div style="overflow: auto;"><img style="width: 100%; object-fit: cover;" src="data:image/jpg;base64, ${text}" alt="Result image" /></div>`
+      else throw new Error("Return value not recognized");
     }
     setInterval(() => {
       idle.innerHTML = nRequests ? "Executing..." : "Idle";
@@ -440,15 +457,15 @@
 
     function textBox(arg, doc, anno, def) {
       const i = ++autoInc; setTimeout(() => cb_textBox(i), 0); idxToArg[i] = arg;
-      if (`${def}`.length < 100) return `
+      if (def[1]) return `
         <div class="block">
           <div>${arg} (${anno}): ${doc || "(no docs)"}</div>
-          <input id="textBox_${i}" type="text" value="${def}" oninput="cb_textBox(${i})" />
+          <textarea id="textBox_${i}" rows="7" oninput="cb_textBox(${i})">${def[0]}</textarea>
         </div>`;
       return `
         <div class="block">
           <div>${arg} (${anno}): ${doc || "(no docs)"}</div>
-          <textarea id="textBox_${i}" rows="7" oninput="cb_textBox(${i})">${def}</textarea>
+          <input id="textBox_${i}" type="text" value="${def[0]}" oninput="cb_textBox(${i})" />
         </div>`;
     }
 
@@ -459,15 +476,13 @@
 
     function slider(arg, doc, anno, def) {
       const i = ++autoInc; idxToArg[i] = arg; let start, stop, step;
-      if (anno === "Range") {
-        [start, stop] = def; step = (stop - start) / 100;
-      } else [start, stop, step] = def;
+      [value, start, stop, step] = def
       setTimeout(() => cb_slider(i), 0);
       return `
         <div class="block">
           <div>${arg} (${anno}): ${doc || "(no docs)"}</div>
             <div style="display: flex; flex-direction: row; align-items: center">
-              <input id="slider_${i}" type="range" min="${start}" max="${stop}" step="${step}" oninput="cb_slider(${i})"/>
+              <input id="slider_${i}" type="range" min="${start}" max="${stop}" step="${step}" value="${value}" oninput="cb_slider(${i})"/>
               <div id="slider_${i}_value" style="margin-left: 10px; min-width: 50px"></div>
             </div>
         </div>`;
@@ -527,8 +542,8 @@
     }
 
     function dropdown(arg, doc, anno, def) {
-      const i = ++autoInc; idxToArg[autoInc] = arg; values[arg] = def;
-      const selects = def.map(e => `<option value="${e}">${e}</option>`).join("");
+      const i = ++autoInc; idxToArg[autoInc] = arg; values[arg] = def[1];
+      const selects = def[1].map((e, i) => `<option value="${e}" ${def[0] === i ? 'selected' : ''}>${e}</option>`).join("");
       setTimeout(() => cb_dropdown(i), 0);
       return `
         <div class="block" style="overflow-x: auto; min-width: 300px">
@@ -571,12 +586,12 @@
     const idle = document.querySelector("#idle");
     let blocksHtml = "";
     for (let arg of meta.args) {
-      let anno = meta.annoStrs[arg]; let def = meta.defaults[arg]; let doc = meta.docs[arg];
-      if (anno === "int" || anno === "float" || anno === "str") blocksHtml += textBox(arg, doc, anno, def);
-      if (anno === "bool") blocksHtml += checkBox(arg, doc, anno, def);
-      if (anno === "Range" || anno === "range") blocksHtml += slider(arg, doc, anno, def);
-      if (anno === "bytes" || anno === "Image") blocksHtml += fileUpload(arg, doc, anno, def);
-      if (anno === "list") blocksHtml += dropdown(arg, doc, anno, def);
+      let anno = meta.annos[arg]; let def = meta.defaults[arg]; let doc = meta.docs[arg];
+      if (anno === "int" || anno === "float" || anno === "text") blocksHtml += textBox(arg, doc, anno, def);
+      if (anno === "checkbox") blocksHtml += checkBox(arg, doc, anno, def);
+      if (anno === "slider") blocksHtml += slider(arg, doc, anno, def);
+      if (anno === "bytes" || anno === "image") blocksHtml += fileUpload(arg, doc, anno, def);
+      if (anno === "dropdown") blocksHtml += dropdown(arg, doc, anno, def);
     }
     blocks.innerHTML = blocksHtml;
     intro.innerHTML = `${meta.mainDoc}`;
@@ -585,7 +600,7 @@
     setTimeout(() => {
       let reqBody = "";
       for (let arg of meta.args) {
-        const anno = meta.annoStrs[arg]; let s = `${values[arg]}`;
+        const anno = meta.annos[arg]; let s = `${values[arg]}`;
         s = (s.length > 23) ? s.slice(0, 20) + "..." : s; reqBody += `    "${arg}": "${s}",\n`;
       }
       document.querySelector("#apiRequest").innerHTML = `

@@ -1,4 +1,3 @@
-
 k1lib.serve module
 ------------------
 
@@ -29,16 +28,25 @@ This will start up a local server at the specified port (this case 5138), and du
 That's pretty much it. You can add in your own callbacks, to enable further integration
 with your systems. You can also customize the given callbacks more.
 
-Currently, these data types are supported, together with their appearance on the interface:
+An example of all supported data types and interfaces::
 
-- int, float, str: text box
-- bool: checkbox toggle
-- bytes, :class:`PIL.Image.Image`: file upload
-- :class:`k1lib.Range`: continuous slider
-- :class:`range`: stepped slider
-- :class:`list`: dropdown
+   def endpoint(a:int=3, b:float=5.2, c:str="short string", d:serve.text(True)="paragraph",
+                e:bool=True, f:range(3, 21)=6, g:serve.slider(1, 2)=1.2,
+                h:PIL.Image.Image=someImg, i:bytes=someBinaryData,
+                j:["opt 1", "opt 2"]="opt 1") -> float:
+      pass
 
-See a few demo examples at https://mlexps.com/
+And how they're displayed:
+
+- ``int, float, str, serve.text(True)``: text box. Could be multiline for :class:`~k1lib.serve.main.text` case
+- ``bool``: checkbox
+- ``range(3, 21)``: discrete slider
+- ``serve.slider(1, 2)``: continuous slider
+- ``PIL.Image.Image```: file upload. If return value is this then will just display the image directly
+- ``bytes``: file upload
+- ``["opt 1", "opt 2"]``: dropdown menu
+
+See a few demo examples at https://mlexps.com/ (at the very bottom of the page)
 
 .. automodule:: k1lib.serve.main
    :members:

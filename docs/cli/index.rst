@@ -77,11 +77,14 @@ Let's see a really basic example::
    # returns 9, demonstrating that you can also pipe into them
    3 | f
 
+Here, :class:`~modifier.aS` is pretty much the simplest cli available. It just makes whatever
+function you give it pipe-able, as you can't quite pipe things to lambda functions in vanilla Python.
+
 You can think of the flow of these clis in terms of 2 phases. 1 is configuring what you
 want the cli to do, and 2 is actually executing it. Let's say you want to take a list
 of numbers and take the square of them::
 
-   # configuration stage. You provide a function to `apply` to tell it what to apply to each element in the list
+   # configuration stage. You provide a function to `apply` to tell it what function to apply to each element in the list, kinda like Python's "map" function
    f = apply(lambda x: x**2)
    # initialize the input
    x = range(5)
@@ -98,22 +101,22 @@ of numbers and take the square of them::
 You may wonder why do we have to turn it into a list. That's because all cli tools execute
 things lazily, so they will return iterators, instead of lists. Here's how iterators work::
 
-   def gen(): # this is a generator. It generates elements
+   def gen(): # this is a generator, a special type of iterator. It generates elements
        yield 3
        print("after yielding 3")
        yield 2
        yield 5
    for e in gen():
-       print(e)
+       print("in for loop:", e)
 
 It will print this out:
 
 .. code-block:: text
 
-   3
+   in for loop: 3
    after yielding 3
-   2
-   5
+   in for loop: 2
+   in for loop: 5
 
 So, iterators feels like lists. In fact, a list is an iterator, ``range(5)``, numpy arrays
 and strings are also iterators. Basically anything that you can iterate through is an
@@ -155,35 +158,188 @@ Is equivalent to this list::
 
    [["col1", "col2", "col3"], [1, 2, 3], [4, 5, 6]]
 
-:class:`~structural.transpose` and :class:`~init.mtmS` provides more flexible ways
-to transform a table structure (but usually involves more code).
+.. warning::
 
-Besides operating on string iterators alone, this package can also be extra meta,
-and operate on streams of strings, or streams of streams of anything. I think this
-is one of the most powerful concept of the cli workflow. Check over it here:
+   If you're not an advanced user, just skip this warning.
 
-.. toctree::
-   :maxdepth: 1
+   All cli tools should work fine with :class:`torch.Tensor`, :class:`numpy.ndarray` and :class:`pandas.core.series.Series`,
+   but k1lib actually modifies Numpy arrays and Pandas series deep down for it to work.
+   This means that you can still do normal bitwise or with a numpy float value, and
+   they work fine in all regression tests that I have, but you might encounter strange bugs.
+   You can disable it manually by changing :attr:`~k1lib.settings`.startup.or_patch like this::
 
-   streams
+      import k1lib
+      k1lib.settings.startup.or_patch.numpy = False
+      from k1lib.imports import *
 
-All cli tools should work fine with :class:`torch.Tensor`, :class:`numpy.ndarray` and :class:`pandas.core.series.Series`,
-but k1lib actually modifies Numpy arrays and Pandas series deep down for it to work.
-This means that you can still do normal bitwise or with a numpy float value, and
-they work fine in all regression tests that I have, but you might encounter strange bugs.
-You can disable it manually by changing :attr:`~k1lib.settings`.startup.or_patch. If you
-chooses to do this, you have to be careful and use these workarounds::
+   If you choose to do this, you'll have to be careful and use these workarounds::
 
-   # returns (2, 3, 5), works fine
-   torch.randn(2, 3, 5) | shape()
-   # will not work, returns weird numpy array of shape (2, 3, 5)
-   np.random.randn(2, 3, 5) | shape()
-   # returns (2, 3, 5), mitigation strategy #1
-   shape()(np.random.randn(2, 3, 5))
-   # returns (2, 3, 5), mitigation strategy #2
-   [np.random.randn(2, 3, 5)] | (item() | shape())
+      torch.randn(2, 3, 5) | shape()                  # returns (2, 3, 5), works fine
+      np.random.randn(2, 3, 5) | shape()              # will not work, returns weird numpy array of shape (2, 3, 5)
+      shape()(np.random.randn(2, 3, 5))               # returns (2, 3, 5), mitigation strategy #1
+      [np.random.randn(2, 3, 5)] | (item() | shape()) # returns (2, 3, 5), mitigation strategy #2
+
+   Again, please note that you only need to do these workarounds if you choose to turn off C-type
+   modifications. If you keep things by default, then all examples above should work just fine.
 
 All cli-related settings are at :attr:`~k1lib.settings`.cli.
+
+Argument expansion
+------------------
+
+I'd like to quickly mention the argument expansion motif that's prominent in some cli tools. Check out this example::
+
+   [3, 5] | aS(lambda a: a[0] + a[1]) # returns 8, long version, not descriptive elements ("a[0]" and "a[1]")
+   [3, 5] | ~aS(lambda x, y: x + y) # returns 8, short version, descriptive elements ("x" and "y")
+
+   [[3, 5], [2, 7]] | apply(lambda a: a[0] + a[1]) | aS(list) # returns [8, 9], long version
+   [[3, 5], [2, 7]] | ~apply(lambda x, y: x + y) | aS(list) # returns [8, 9], short version
+
+Here, the tilde operator ("~", officially called "invert" in Python) used on :class:`~modifier.aS` and
+:class:`~modifier.apply` means that the input object/iterator will be expanded so that it fills all
+available arguments. This is a small quality-of-life feature, but makes a big difference, as parameters
+can now be named separately and nicely ("x" and "y", which can convey that this is a coordinate of some
+sort, instead of "a[0]" and "a[1]", which conveys nothing).
+
+Inverting conditions
+--------------------
+
+The tilde operator does not always mean expanding the arguments though. Sometimes it's used for actually
+inverting the functionality of some clis::
+
+   range(5) |  filt(lambda x: x % 2 == 0) | aS(list) # returns [0, 2, 4]
+   range(5) | ~filt(lambda x: x % 2 == 0) | aS(list) # returns [1, 3]
+
+   [3, 5.5, "text"] | ~instanceOf(int) | aS(list) # returns [5.5, "text"]
+
+Cli composition
+---------------
+
+One of the very powerful things about this workflow is that you can easily combine cli tools together,
+to reach unfathomable levels of complexity while using very little code and still remain relatively readable.
+For example, this is an `image dataloader <https://mlexps.com/imagenet/8-vit/>`_ built pretty much from
+scratch, but will full functionality comparable to PyTorch's dataloaders::
+
+   base = "~/ssd/data/imagenet/set1/192px"
+   idxToCat = base | ls() | head(80) | op().split("/")[-1].all() | insertIdColumn() | toDict()
+   catToIdx = idxToCat.items() | permute(1, 0) | toDict()
+   # stage 1, (train/valid, classes, samples (url of img))
+   st1 = base | ls() | head(80) | apply(ls() | splitW()) | transpose() | deref() | aS(k1.Wrapper)
+   # stage 2, (train/valid, classes, samples, [img, class])
+   st2 = st1() | (apply(lambda x: [x | toImg() | toTensor(torch.uint8), catToIdx[x.split("/")[-2]]]) | repeatFrom(4) | apply(aS(tf.Resize(192)) | aS(tf.AutoAugment()) | op()/255, 0)).all(2) | deref() | aS(k1.Wrapper)
+   def dataF(bs): return st2() | apply(repeatFrom().all() | joinStreamsRandom() | batched(bs) | apply(transpose() | aS(torch.stack) + toTensor(torch.long))) | stagger.tv(10000/bs) | aS(list)
+
+These 6 lines of code will read from a directory, grabs all images from the first 80 categories, splits
+them into train and valid sets. Then it will extend the data infinitely (so that we never run out of batches
+to train), load the images on multiple worker processes, do augmentations on them, renormalize them, batch
+them up, stack them together into a tensor, and split batches into multiple epochs.
+
+All of that, from scratch, where you're in control of every detail, operating in 7 dimensions, in multiple
+processes, in just 6 lines of code. This is just so ridiculously powerful that it boggles my mind every day.
+Yes, you can argue that it's not clear what's going on, but for a person that is already familiar with them
+like I do, seeing exactly how data is being transformed at every stage is quite straightforward and trivial.
+
+Serial composition
+******************
+
+So let's see a few examples on how to compose clis together. Let's say you have a list of files::
+
+   fileNames = ["a.txt", "b.txt", "c.txt"]
+
+Let's say you now want to read every line from every file quickly, using cli tools,
+and get the number of lines in each file. Instead of something like this::
+
+   sizes = []
+   for fileName in fileNames:
+      sizes.append(cat(fileName) | shape(0)) # shape(0) is kinda like aS(len). It just returns the length of the input iterator, but difference is that aS(len) can only operate on lists
+
+...which really defeats the purpose of the elegant cli workflow, you can do::
+
+   sizes = fileNames | apply(cat() | shape(0)) | aS(list)
+
+In this example, there is 1 "composition": ``cat() | shape(0)``. If you check out the
+docs for :class:`~inp.cat`, which is used to read files, you'd know that there're 2 modes of operation::
+
+   cat("a.txt") | shape(0) # mode 1: cat() acts like a function, returning a list of lines in the file
+   "a.txt" | cat() | shape(0) # mode 2: cat() acts like a cli tool, which will return a list of lines in the file when a file name is piped into it
+   "a.txt" | (cat() | shape(0)) # mode 2: cat() acts like a cli tool, "cat() | shape(0)" acts as a "serial" cli
+
+   s = cat() | shape(0); "a.txt" | s # equivalent to the 3rd line, but this time declaring "cat() | shape(0)" as a separate object
+
+In the second case, ``"a.txt" | cat()`` will be executed first, then getting the number of elements will be
+executed later (``... | shape(0)``), but in the third case, ``cat() | shape(0)`` will be executed first, which
+returns the special cli :class:`~init.serial`, then the file name will be piped in later (``"a.txt" | (...)``)
+
+Because cli tools are also functions, which includes :class:`~init.serial`, you can pass them into other cli
+tools that expects a function, like :class:`~modifier.apply`. You can be extra meta, like this::
+
+   # assume a.txt, b.txt, c.txt has 10, 20, 30 lines
+   fileNames = [["a.txt"], ["b.txt", "c.txt"]]
+   # returns [[10], [20, 30]]
+   sizes = fileNames | apply(apply(cat() | shape(0)))
+   # also returns [[10], [20, 30]], and is equivalent to the line above, as "apply(apply(...))" is equivalent to "(...).all(2)"
+   sizes = fileNames | (cat() | shape(0)).all(2)
+
+This type of composition is quite straightforward, unlike the next 2.
+
+"&" composition, or "oneToMany"
+*******************************
+
+Take a look at this example::
+
+   arr = ["a", "b", "c"]
+   arr | toRange()                       # returns range(3), equivalent to [0, 1, 2]
+   arr | iden()                          # returns ["a", "b", "c"]
+   arr | (toRange() & iden()) | aS(list) # returns [range(3), ["a", "b", "c"]]
+   arr | toRange() & iden() | aS(list)   # returns [range(3), ["a", "b", "c"]], demonstrating "&" will be executed before "|", so you don't need parentheses around it
+   arr | toRange() & iden() | joinStreams() | aS(list) # returns [0, 1, 2, "a", "b", "c"]
+
+So, this will take the input iterator, duplicates into 2 versions, pipes them into the 2
+clis you specified and return both of them. You can do this with as much clis as you want::
+
+   arr | toRange() &  shape() & grep("a")  | deref() # returns [[0, 1, 2], [3, 1], ["a"]]
+   arr | toRange() & (shape() & grep("a")) | deref() # also returns [[0, 1, 2], [3, 1], ["a"]], demonstrating a strange edge case that parentheses won't stop all clis adjacent to each other joined by "&" from combining together
+
+Hopefully it now makes sense why it's called "oneToMany", as we're making 1 iterator available
+for many clis. Also, if the exact cli operation is only known at run time, then you can
+procedurally do this using :class:`~init.oneToMany`.
+
+"+" composition, or "mtmS"
+**************************
+
+Take a look at this example::
+
+   even = filt(lambda x: x % 2 == 0)
+   odd  = filt(lambda x: x % 2 == 1) # can also just be "~even", but I'm writing it out this way to be clear
+   [range(10, 20), range(30, 40)] | (even + odd) | deref()    # returns [[10, 12, 14, 16, 18], [31, 33, 35, 37, 39]]
+   [range(10, 20) | even, range(30, 40) | odd] | deref() # also returns [[10, 12, 14, 16, 18], [31, 33, 35, 37, 39]], demonstrating that these are equivalent to each other
+
+So, let's say that there're n items inside of the input iterator and that you specified n
+clis. Then, each item will be piped into the corresponding cli, hence the name :class:`~init.mtmS`, or
+"manyToManySpecific". Why not just "mtm"? Well, there used to be a "manyToMany" operator,
+but it's been removed and I'm lazy to change it back.
+
+Vanilla alternatives
+********************
+
+These operations are not actually strictly necessary, they're just convenience functions
+so that writing code is simpler and more straightforward. They can be implemented using
+normal clis like so::
+
+   a = iden()
+   b = apply(lambda x: x**2)
+   c = shape()
+
+   x = [[1, 2], [3, 4], [5, 6]]
+   x | a + b + c | deref()                                  # returns [[1, 2], [9, 16], [2]]
+   x | ~aS(lambda x, y, z: [x | a, y | b, z | c]) | deref() # returns [[1, 2], [9, 16], [2]]
+
+   x = range(5)
+   x | a & b & c | deref()                           # returns [[0, 1, 2, 3, 4], [0, 1, 4, 9, 16], [5]]
+   x | aS(lambda x: [x | a, x | b, x | c]) | deref() # returns [[0, 1, 2, 3, 4], [0, 1, 4, 9, 16], [5]]
+
+So you might want to use these vanilla versions initially if you're having a hard time with this,
+but I wouldn't recommend using vanilla in the long term.
 
 Where to start?
 -------------------------

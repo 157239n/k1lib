@@ -2,6 +2,19 @@
 Changelogs
 ==========
 
+`1.3 </1.3>`_
+---------------
+
+.. currentmodule:: k1lib.cli
+
+Cli:
+
+- Revamped docs a lot
+
+Generic:
+
+- Revamped :mod:`~k1lib.serve` a little, adding a more robust type system
+
 `1.2 </1.2>`_
 ---------------
 

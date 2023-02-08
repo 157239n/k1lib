@@ -74,12 +74,9 @@ all. Instead, do something like this::
 
     # returns ['1', '2', '3']
     "0123145" | grep("1", after=1e9, N=1) | deref()"""
-        if pattern is None:
-            self._tillF = self._f
-        elif isinstance(pattern, str):
-            self._tillF = re.compile(pattern).search
-        else:
-            self._tillF = cli.op.solidify(pattern)
+        if pattern is None: self._tillF = self._f
+        elif isinstance(pattern, str): self._tillF = re.compile(pattern).search
+        else: self._tillF = cli.op.solidify(pattern)
         self.tillAfter = self.after; self.after = inf; return self
     def __ror__(self, it:Iterator[str]) -> Iterator[str]:
         self.sectionIdx = 0; col = self.col; _f = self._f; _tillF = self._tillF
@@ -108,6 +105,13 @@ all. Instead, do something like this::
             elif counter > 0: # yielding "after" section
                 if cRO.done(): yield line
                 counter -= 1
+    def __invert__(self):
+        """Flips the pattern, just like how :class:`~k1lib.cli.filt.filt`
+works. Example::
+
+    # returns ['a', 'b', 'c', 'e', '1', '2', '3', '4']
+    "abcde12d34" | ~grep("d") | deref()"""
+        f = self._f; self._f = lambda s: not f(s); return self
     def _clone(self):
         answer = grep(self._f, self.before, self.after, self.N, self.sep, self.col)
         answer._tillF = self._tillF; answer.tillAfter = self.tillAfter; return answer
