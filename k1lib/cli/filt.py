@@ -9,7 +9,7 @@ from k1lib.cli.typehint import *
 import numpy as np; from collections import deque
 try: import torch; hasTorch = True
 except: hasTorch = False
-__all__ = ["filt", "inSet", "contains", "empty",
+__all__ = ["filt", "filter_", "inSet", "contains", "empty",
            "isNumeric", "instanceOf",
            "head", "tail", "cut", "rows",
            "intersection", "union", "unique", "breakIf", "mask", "tryout"]
@@ -49,12 +49,16 @@ automatically use the C-accelerated versions if possible, like this::
 
 If you need more extensive filtering capabilities involving text, check out :class:`~k1lib.cli.grep.grep`
 
+If "filt" is too hard to remember, this cli also has an alias :class:`filter_`
+that kinda mimics Python's ``filter()``.
+
 :param predicate: function that returns True or False
 :param column: if not specified, then filters elements of the input
     array, else filters the specific column only
 :param catchErrors: whether to catch errors in the function or not (reject
     elements that raise errors). Runs slower if enabled though"""
         fs = [predicate]; super().__init__(fs)
+        if column and column < 0: raise Exception(f"Filtering using a function on a negative-indexed column ({column}) is not supported")
         f = fs[0]; self.column = column
         if catchErrors:
             def g(x):
@@ -62,14 +66,18 @@ If you need more extensive filtering capabilities involving text, check out :cla
                 except: return False
             self.predicate = g
         else: self.predicate = f
+        self._fastP = fastF(self.predicate)
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
-        p = fastF(self.predicate); c = self.column
+        p = self._fastP; c = self.column
         if c is None:
             if isinstance(it, settings.arrayTypes):
                 try: return it[p(it)]
-                except: pass
+                except Exception as e: print(e)
             return (l for l in it if p(l))
         else:
+            if isinstance(it, settings.arrayTypes):
+                try: return it[p(it[:,c])]
+                except: pass
             def gen():
                 for es in it:
                     es = list(es)
@@ -95,6 +103,7 @@ Example::
     # also returns [[0, 2, 4, 6, 8], [1, 3, 5, 7, 9]], exactly like above
     range(10) | filt(lambda x: x%2 == 0) & filt(lambda x: x%2 != 0) | deref()"""
         f = self.predicate; c = self.column; return filt(f, c) & ~filt(f, c)
+filter_ = filt
 def inSet(values:Set[Any], column:int=None) -> filt:
     """Filters out lines that is not in the specified set.
 Example::
@@ -259,6 +268,15 @@ that selects out columns given indicies. When I needed a way to
 do what this cli does, it was in the context of selecting out rows,
 so the name stuck.
 
+If you want to just pick out the nth item from the iterator, instead of doing
+this::
+
+    iter(range(10)) | rows(3) | item() # returns 3
+
+... you can use the shorthand :class:`~k1lib.cli.utils.rItem` instead::
+
+    iter(range(10)) | rItem(3) # returns 3
+
 :param rows: ints for the row indices"""
         if len(rows) == 1 and isinstance(rows[0], slice):
             self.slice = rows[0]; self.idxMode = False
@@ -290,6 +308,7 @@ class cut(BaseCli):
         """Cuts out specific columns, sliceable. Examples::
 
     ["0123456789", "abcdefghij"] | cut(5, 8) | deref() # returns [['5', '8'], ['f', 'i']]
+    ["0123456789", "abcdefghij"] | cut(8, 5) | deref() # returns [['8', '5'], ['i', 'f']], demonstrating permutation-safe
     ["0123456789"] | cut(5, 8) | deref() # returns [['5', '8']]
     ["0123456789"] | cut(8, 5) | deref() # returns [['8', '5']], demonstrating permutation-safe
     ["0123456789", "abcdefghij"] | cut(2) | deref() # returns ['2', 'c'], instead of [['2'], ['c']] as usual
@@ -317,30 +336,55 @@ automatically use the C-accelerated versions, like this::
 
     torch.randn(4, 5, 6) | cut(2, 3)  # returns tensor of shape (4, 2, 6)
     torch.randn(4, 5, 6) | cut(2)     # returns tensor of shape (4, 6)
-    torch.randn(4, 5, 6) | ~cut()[2:] # returns tensor of shape (4, 2, 6)"""
+    torch.randn(4, 5, 6) | ~cut()[2:] # returns tensor of shape (4, 2, 6)
+
+.. warning::
+
+    TD;DR: inverted negative indexes are a bad thing when rows don't have the same number of elements
+
+    Everything works fine when all of your rows have the same number of elements. But things might behave a
+    little strangely if they don't. For example::
+
+        # returns [['2', '3', '4'], ['2', '3', '4', '5', '6', '7']]. Different number of columns, works just fine
+        ["0123456", "0123456789"]    |  cut()[2:-2] | deref()
+        # returns [['0', '1', '8', '9'], ['a', 'b', 'i', 'j']]. Same number of columns, works just fine
+        ["0123456789", "abcdefghij"] | ~cut()[2:-2] | deref()
+        # returns [['0', '1', '5', '6'], ['0', '1', '5', '6', '7', '8', '9']]. Different number of columns, unsupported invert case
+        ["0123456", "0123456789"]    | ~cut()[2:-2] | deref()
+
+    Why does this happen? It peeks at the first row, determines that ~[2:-2] is equivalent
+    to [:2] and [5:] combined and not [:2] and [-2:] combined. When applied to the second row,
+    [-2:] goes from 5->9, hence the result. Another edge case would be::
+    
+        # returns [['0', '1', '2', '3', '5', '6'], ['0', '1', '2', '3', '5', '6', '7', '8', '9']]
+        ["0123456", "0123456789"] | ~cut(-3) | deref()
+
+    Like before, it peeks the first row and translate ~(-3) into ~4, which is equivalent to [:4] and [5:].
+    But when applied to the second row, it now carries the meaning ~4, instead of ~(-3).
+
+    Why don't I just fix these edge cases? Because the run time for it would be completely unacceptable,
+    as we'd have to figure out what's the columns to include in the result for every row. This could
+    easily be O(n^3). Of course, with more time optimizing, this could be solved, but this is the only
+    extreme edge case and I don't feel like putting in the effort to optimize it."""
         super().__init__()
         if len(columns) == 1 and isinstance(columns[0], slice): columns = columns[0]
-        self.columns = columns; self.inverted = False
+        self.columns = columns; self.inverted = False # columns: list[int] | slice
     def __ror__(self, it:Table[T]) -> Table[T]:
         columns = self.columns; inverted = self.inverted
         isArray = isinstance(it, settings.arrayTypes)#; isArray = False
-        if isArray: rs = range(len(it[0]))
-        else:
+        if isArray: nCols = len(it[0]); prs = rs = range(nCols) # range(nColumns). "prs" for padded rs
+        else: # carefully peaking first row and get the number of columns
             it = iter(it); sentinel = object(); row = next(it, sentinel)
             if row is sentinel: return []
-            row = list(row); it = it | cli.insert(row)
-            rs = range(len(row)+1000) # 1000 for longer rows below. Also "rs" is not a great name, deal with it
-        if isinstance(columns, slice): columns = list(set(rs[columns]))
-        if self.inverted: columns = list(set(e for e in rs if e not in columns))
-        if len(columns) == 1:
-            c = list(columns)[0];
-            if isArray: return it[:,c]
-            return (r[c] for r in (list(row) for row in it) if len(r) > c)
-        else:
-            if isArray: return it[:,columns]
-            return ([row[c] for c in columns if c < len(row)] for row in (list(row) for row in it))
-            # old impl, may remove later
-            #return ((e for i, e in enumerate(row) if i in columns) for row in it)
+            row = list(row); it = it | cli.insert(row); nCols = len(row)
+            rs = range(nCols); prs = range(nCols+1000) # 1000 for longer rows below. Also "rs" is not a great name, deal with it
+        if isinstance(columns, slice):
+            if not inverted: return it[:,columns] if isArray else (row[columns] for row in (list(row) for row in it))
+            columns = list(set(rs[columns]))
+        columns = [e if e >= 0 else nCols + e for e in columns] # clear negative indicies
+        if self.inverted: columns = list(set(e for e in prs if e not in columns))
+        if len(columns) == 1: c = columns[0]; return it[:,c] if isArray else (r[c] for r in (list(row) for row in it) if len(r) > c)
+        else: return it[:,columns] if isArray else ([row[c] for c in columns if c < len(row)] for row in (list(row) for row in it))
     def __getitem__(self, idx): answer = cut(idx); answer.inverted = self.inverted; return answer
     def __invert__(self): self.inverted = not self.inverted; return self
 class intersection(BaseCli):
@@ -439,12 +483,12 @@ Example::
 
     # returns [0, 1, 2, 3, 4, 5]
     [*range(10), 2, 3] | breakIf(lambda x: x > 5) | deref()"""
-        fs = [f]; super().__init__(fs); self.f = fs[0]
+        fs = [f]; super().__init__(fs); self.f = fs[0]; self._fC = fastF(self.f)
     def _typehint(self, inp):
         if isinstance(inp, tListIterSet): return tIter(inp.child)
         return tIter(tAny())
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
-        f = self.f
+        f = self._fC
         for line in it:
             if f(line): break
             yield line

@@ -8,9 +8,9 @@ except: hasTorch = False
 __all__ = ["_docsUrl", "isNumeric",
            "patch", "wrapMod", "wraps", "squeeze", "raiseEx",
            "numDigits", "limitLines",
-           "limitChars", "showLog", "cleanDiv", "graph", "digraph",
+           "limitChars", "showLog", "cleanDiv",
            "beep", "beepOnAvailable", "dontWrap",
-           "debounce", "scaleSvg", "now", "pushNotification", "dep", "ticks"]
+           "debounce", "scaleSvg", "now", "pushNotification", "dep", "ticks", "digraph", "graph"]
 _docsUrl = "https://k1lib.com"
 def isNumeric(x) -> bool:
     """Returns whether object is actually a number"""
@@ -139,22 +139,6 @@ everything is an ``int``"""
     _list = (_list*total/_list.sum()).astype(int)
     _list[-1] = total - _list[:-1].sum()
     return _list
-try:
-    import graphviz
-    def digraph():
-        """Convenience method for creating a new graphviz Digraph.
-Example::
-
-    g = k1lib.graph()
-    g("a", "b", "c")
-    g # displays arrows from "a" to "b" and "a" to "c"
-"""
-        return graphviz.Digraph(graph_attr={"rankdir":"TB"})
-    def graph():
-        """Convenience method for creating a new graphviz Graph. See also: :meth:`digraph`"""
-        return graphviz.Graph(graph_attr={"rankdir":"TB", "overlap": "false"})
-except ImportError:
-    digraph = graph = lambda: print("Module `graphviz` not found! Please install it first, something like `pip install graphviz`")
 def beep(seconds=0.3):
     """Plays a beeping sound, may be useful as notification for long-running tasks"""
     try: import IPython; IPython.core.display.display_html(IPython.display.HTML(f"""<script>(new Audio('data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU'+Array(Math.round(3.3333e3*{seconds})).join(123))).play();</script>"""));
@@ -185,7 +169,7 @@ that by displaying some HTML with css styles so that the notebook doesn't wrap."
     div.output_area pre {white-space: pre;}
     div.CodeMirror > div.highlight {overflow-y: auto;}
 </style>"""))
-    except: print("Can't run dontWrap()")
+    except: pass#print("Can't run dontWrap()")
 import asyncio, functools
 from threading import Timer as ThreadingTimer
 class AsyncTimer: # rename if want to use
@@ -304,3 +288,19 @@ situations, so this function comes in handy
     f2 = cli.applySerial(cli.op()+interval) | cli.breakIf(cli.op()>y+interval)
     # finally, use the seed to expand in both directions to get all the ticks
     return seed | f1 & f2 | cli.joinStreams() | cli.aS(set) | cli.sort(None) | cli.apply(round, ndigits=rounding) | cli.deref() | cli.aS(np.array)
+try:
+    import graphviz
+    def digraph():
+        """Convenience method for creating a new graphviz Digraph.
+Example::
+
+    g = k1lib.graph()
+    g("a", "b", "c")
+    g # displays arrows from "a" to "b" and "a" to "c"
+"""
+        return graphviz.Digraph(graph_attr={"rankdir":"TB"})
+    def graph():
+        """Convenience method for creating a new graphviz Graph. See also: :meth:`digraph`"""
+        return graphviz.Graph(graph_attr={"rankdir":"TB"})
+except ImportError:
+    digraph = graph = lambda: print("Module `graphviz` not found! Please install it first, something like `pip install graphviz`")

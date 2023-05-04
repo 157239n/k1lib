@@ -10,7 +10,7 @@ try:
     import torch.nn.functional as F, torch.utils.data as data
 except: pass
 import matplotlib.pyplot as plt, matplotlib as mpl
-import numpy as np, dill as pickle, multiprocessing as mp, concurrent.futures as futures
+import numpy as np, dill as pickle, multiprocessing as mp, concurrent.futures as futures, threading
 import math, os, time, sys, random, logging, traceback, re, typing, glob, warnings, asyncio
 import dill, json, inspect, xml, base64, io
 import functools; from functools import partial, lru_cache
@@ -33,7 +33,11 @@ if settings.startup.or_patch.dict: cli.init.patchDict()
 try:
     import pandas as pd
     if settings.startup.or_patch.pandas: cli.init.patchPandas()
-except ImportError as e: pass
+except ImportError as _: pass
+try:
+    import ray
+    if settings.startup.init_ray: ray.init()
+except: pass
 def dummy():
     """Does nothing. Only here so that you can read source code of this file
 and see what's up."""
@@ -60,4 +64,6 @@ except: pass
 try: import requests
 except: pass
 try: import seaborn as sns
+except: pass
+try: import pyarrow; import pyarrow.feather as feather
 except: pass

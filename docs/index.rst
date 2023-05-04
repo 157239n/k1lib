@@ -3,22 +3,81 @@
 k1lib library
 =============
 
-PyTorch is awesome, and it provides a very effective way to execute ML code fast. What
-it lacks is surrounding infrastructure to make general debugging and discovery process
-better. Other more official wrapper frameworks sort of don't make sense to me, so this
-is an attempt at recreating a robust suite of tools that makes sense.
+This library enables piping in Python, and has a lot of prebuilt functionalities
+to support this workflow.
 
-This is more than just an ML library though. A prominent feature is the set of "cli tools"
-originally intended to replace the bash/awk/perl bioinformatics workflow. It essentially
-allows you to pipe inputs into functions, which returns an output which can be piped into
-other functions. Using these tools, you can literally perform complex operations in multiple
-dimensions in 2-3 lines of code that would normally take >100 lines. It's also super
-flexible, operates on multiple dimensions and not locked in, as you can change the
-dataflow in quite a fundamental level in ~5 minutes. Check over the basics of it
-here: :mod:`k1lib.cli`.
+Installation
+------------
+
+.. code::
+
+   pip install k1lib[all]
+
+This will install lots of heavy dependencies like PyTorch. If you want to install
+the leanest version of the library, do this instead::
+
+   pip install k1lib
+
+To use it in a notebook, do this::
+
+   from k1lib.imports import *
+
+Check out the source code for "k1lib.imports" if you're curious what it's
+importing. If you hate * imports for whatever reason, you can import cli
+tools individually, like this::
+
+   from k1lib.cli import ls, cat, grep, apply, batched, display
+
+Examples
+--------
+
+.. code::
+
+   # returns [0, 1, 4, 9, 16], kinda like map
+   range(5) | apply(lambda x: x**2) | deref()
+
+   # plotting the function y = x^2
+   x = np.linspace(-2, 2); y = x**2
+   plt.plot(x, y)         # normal way
+   [x, y] | ~aS(plt.plot) # pipe way
+
+   # plotting the functions y = x**2, y = x**3, y = x**4
+   x = np.linspace(-2, 2)
+   [2, 3, 4] | apply(lambda exp: [x, x**exp]) | ~apply(plt.plot) | deref()
+
+   # loading csv file and displaying first 10 rows in a nice table
+   cat("abc.csv") | apply(lambda x: x.split(",")) | display()
+
+   # searching for "gene_name: ..." lines in a file and display a nice overview of just the gene names alone
+   cat("abc.txt") | grep("gene_name: ") | apply(lambda x: x.split(": ")[1]) | batched(4) | display()
+
+   # manipulate numpy arrays and pytorch tensors
+   a = np.random.randn(3, 4, 5)
+   a | transpose()     | shape() # returns (4, 3, 5)
+   a | transpose(0, 2) | shape() # returns (5, 4, 3)
+
+   # loading images from categories and splitting them into train and valid sets. Image url: dataset/categoryA/image1.jpg
+   train, valid = ls("dataset") | apply(ls() | splitW()) | transpose() | deref()
+   # shape of output is (train/valid, category, image url). It was (category, train/valid, image url) before going through transpose()
+
+   # executing task in multiple processes
+   range(10_000_000) | batched(1_000_000) | applyMp(toSum()) | toSum()
+   # this splits numbers from 0 to 10M into 10 batches, and then sum each batch in parallel, and then sum the results of each batch
+
+   # executing task in multiple processes on multiple computers
+   range(10_000_000) | batched(1_000_000) | applyCl(toSum()) | toSum()
+
+You can combine these "cli tools" together in really complex ways to do really complex
+manipulation really fast and with little code. Hell, you can even create a full blown
+PyTorch dataloader from scratch where you're in control of every detail, operating in 7
+dimensions, in multiple processes on multiple nodes, in just 6 lines of code. Check over
+the basics of it here: :mod:`k1lib.cli`.
 
 After doing that, you can check out the tutorials to get a large overview of how everything
 integrates together nicely.
+
+Repo is at https://github.com/157239n/k1lib/. Also, if you have any function that
+looks strange, use the search bar on the top left to quickly lookup stuff.
 
 .. toctree::
    :maxdepth: 1
@@ -53,35 +112,6 @@ Submodules
    selector
    serve
    viz
-
-Installation
-------------
-
-Just do this::
-
-   pip install k1lib[all]
-
-If you can't install the optional extra dependencies for some reason then do this::
-
-   pip install k1lib
-
-Then in a notebook, do this::
-
-   from k1lib.imports import *
-
-I've found importing all symbols work best for my day-to-day use, and it makes
-cli tools more pleasant to use. However, if you're those diehard programmers
-who sworn to never import all, then you can just do `import k1lib` instead.
-Still, look over the `k1lib.imports` module to know what you should import.
-
-This library has very few dependencies, and all of them are very commonly used.
-The library has a soft dependency on PyTorch. It will run fine without PyTorch, but
-a lot of functionalities related to deep learning will not work. While tests are
-rigorously run in an environment where PyTorch is installed, they're not run for
-environments that don't, so strange bugs may appear.
-
-Repo is at https://github.com/157239n/k1lib/ btw. Also, if you have anything that
-looks strange, use the search bar on the top left to quickly lookup stuff.
 
 .. toctree::
    :hidden:

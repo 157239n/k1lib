@@ -218,7 +218,7 @@ Cli composition
 One of the very powerful things about this workflow is that you can easily combine cli tools together,
 to reach unfathomable levels of complexity while using very little code and still remain relatively readable.
 For example, this is an `image dataloader <https://mlexps.com/imagenet/8-vit/>`_ built pretty much from
-scratch, but will full functionality comparable to PyTorch's dataloaders::
+scratch, but with full functionality comparable to PyTorch's dataloaders::
 
    base = "~/ssd/data/imagenet/set1/192px"
    idxToCat = base | ls() | head(80) | op().split("/")[-1].all() | insertIdColumn() | toDict()
@@ -428,6 +428,29 @@ you can implement optimization passes to speed up everything by a lot:
    :maxdepth: 1
 
    llvm
+
+Creating your own cli
+-------------------------
+
+It's fairly simple to create your new cli. If it's composed of other clis, you can do
+something like this::
+
+   newCli = filt(lambda x: x%2==0) | head(4) | deref()
+   range(10) | newCli # returns [0, 2, 4, 6]
+
+If it's more complicated that needs to have access to some state, like a sum of numbers,
+then you can extend from :class:`~k1lib.cli.init.BaseCli` like so::
+
+   class NewCli(BaseCli):
+       def __init__(self, bias=0):
+           self.bias = bias # don't necessarily have to call super.__init__()
+       def __ror__(self, it):
+           s = self.bias
+           for elem in it:
+               s += elem
+            return s
+
+   [range(12, 30), range(8)] | NewCli(4).all() | deref() # returns [373, 32]
 
 Biology-related clis
 ***********************

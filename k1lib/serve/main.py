@@ -6,7 +6,7 @@ from collections import defaultdict
 try: import PIL.Image, PIL; hasPIL = True
 except: PIL = k1.dep("PIL"); hasPIL = False
 __all__ = ["FromNotebook", "FromPythonFile", "BuildPythonFile", "StartServer", "GenerateHtml", "commonCbs", "serve",
-           "text", "slider", "analyze", "webToPy", "pyToWeb"]
+           "text", "slider", "html", "analyze", "webToPy", "pyToWeb"]
 basePath = os.path.dirname(inspect.getabsfile(k1lib)) + os.sep + "serve" + os.sep
 class FromNotebook(k1.Callback):
     def __init__(self, fileName, tagName="serve"):
@@ -88,10 +88,15 @@ class baseType:
         pass
     def getConfig(self): return NotImplemented
 class text(baseType):
-    def __init__(self, multiline:bool=True):
-        """Represents text, either on single or multiple lines."""
-        super().__init__(); self.multiline = multiline
+    def __init__(self, multiline:bool=True, password:bool=False):
+        """Represents text, either on single or multiple lines.
+If `password` is true, then will set multiline to false automatically,
+and creates a text box that blurs out the contents"""
+        super().__init__(); self.multiline = multiline if not password else False; self.password = password
     def __repr__(self): return f"<text multiline={self.multiline}>"
+class html(baseType):
+    def __init__(self): super().__init__()
+    def __repr__(self): return f"<html>"
 class slider(baseType):
     def __init__(self, start:float, stop:float, intervals:int=100):
         """Represents a slider from `start` to `stop` with a bunch of
@@ -105,13 +110,14 @@ def refine(param:str, anno:baseType, default): # anno is not necessarily baseTyp
     multiline = lambda s: len(s.split("\n")) > 1 or len(s) > 100
     if anno == bool: return [param, "checkbox", default]
     if anno == str: return [param, "text", [default, multiline(default or "")]]
-    if isinstance(anno, text): return [param, "text", [default, anno.multiline]]
+    if isinstance(anno, text): return [param, "text", [default, anno.multiline, anno.password]]
     if isinstance(anno, slider): return [param, "slider", [default, anno.start, anno.stop, anno.dt]]
     if isinstance(anno, range): return [param, "slider", [default, anno.start, anno.stop, anno.step]]
     byte2Str = aS(base64.b64encode) | op().decode("ascii")
     if hasPIL and anno == PIL.Image.Image: return [param, "image", (default | toBytes() | byte2Str) if default is not None else None]
-    if anno == bytes: return [param, "bytes", default | byte2Str]
+    if anno == bytes: return [param, "bytes", (default | byte2Str) if default is not None else None]
     if isinstance(anno, list): anno | apply(str) | deref(); return [param, "dropdown", [anno.index(default), anno]]
+    if isinstance(anno, html): return [param, "html", [default]]
     raise Exception(f"Unknown type {anno}")
 def analyze(f):
     spec = inspect.getfullargspec(f); args = spec.args; n = len(args)
@@ -144,7 +150,8 @@ def webToPy(o:str, klass:baseType):
 def pyToWeb(o, klass:baseType) -> str:
     if klass in ("int", "float", "text", "checkbox"): return f"{o}"
     if klass == "slider": return NotImplemented
-    if klass == "bytes": o | aS(base64.b64encode)
+    if klass == "bytes": return o | aS(base64.b64encode) | op().decode()
     if klass == "image": return o | toBytes() | aS(base64.b64encode)
     if klass == "dropdown": return o;
+    if klass == "html": return o.encode() | aS(base64.b64encode) | op().decode()
     return NotImplemented

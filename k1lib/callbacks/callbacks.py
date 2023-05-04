@@ -135,9 +135,7 @@ for more."""
     def restore(self):
         """Checkpoint, called when the Callback is back from suspension. Overridable"""
         pass
-    def __getstate__(self):
-        state = dict(self.__dict__)
-        del state["l"]; del state["cbs"]; return state
+    def __getstate__(self): state = dict(self.__dict__); state.pop("l", None); state.pop("cbs", None); return state
     def __setstate__(self, state): self.__dict__.update(state)
     def __repr__(self): return f"{self._reprHead}, can...\n{self._reprCan}"
     @property
@@ -289,7 +287,7 @@ Returns True if any of the checkpoints return anything at all"""
         if attr in self.cbsDict: return self.cbsDict[attr]
         else: raise AttributeError(attr)
     def __getstate__(self):
-        state = dict(self.__dict__); del state["_l"]; return state
+        state = dict(self.__dict__); state.pop("_l", None); return state
     def __setstate__(self, state):
         self.__dict__.update(state)
         for cb in self.cbs: cb.cbs = self

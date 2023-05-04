@@ -3,45 +3,51 @@
 +==========================================+==============================+===========================+========================================+===============================+
 | :class:`~structural.transpose`           | :class:`~utils.size`         | :class:`~conv.toTensor`   | :class:`~typehint.tBase`               | :class:`~filt.filt`           |
 +------------------------------------------+------------------------------+---------------------------+----------------------------------------+-------------------------------+
-| :class:`~structural.reshape`             | :class:`~utils.shape`        | :class:`~conv.toRange`    | :class:`~typehint.tAny`                | :meth:`~filt.inSet`           |
+| :class:`~structural.reshape`             | :class:`~utils.shape`        | :class:`~conv.toRange`    | :class:`~typehint.tAny`                | :class:`~filt.filter_`        |
 +------------------------------------------+------------------------------+---------------------------+----------------------------------------+-------------------------------+
-| :class:`~structural.insert`              | :class:`~utils.item`         | :class:`~conv.toList`     | :class:`~typehint.tList`               | :meth:`~filt.contains`        |
+| :class:`~structural.insert`              | :class:`~utils.item`         | :class:`~conv.toList`     | :class:`~typehint.tList`               | :meth:`~filt.inSet`           |
 +------------------------------------------+------------------------------+---------------------------+----------------------------------------+-------------------------------+
-| :class:`~structural.splitW`              | :class:`~utils.iden`         | :class:`~conv.toSum`      | :class:`~typehint.tIter`               | :class:`~filt.empty`          |
+| :class:`~structural.splitW`              | :meth:`~utils.rItem`         | :class:`~conv.toSum`      | :class:`~typehint.tIter`               | :meth:`~filt.contains`        |
 +------------------------------------------+------------------------------+---------------------------+----------------------------------------+-------------------------------+
-| :class:`~structural.splitC`              | :class:`~utils.join`         | :class:`~conv.toProd`     | :class:`~typehint.tSet`                | :meth:`~filt.isNumeric`       |
+| :class:`~structural.splitC`              | :class:`~utils.iden`         | :class:`~conv.toProd`     | :class:`~typehint.tSet`                | :class:`~filt.empty`          |
 +------------------------------------------+------------------------------+---------------------------+----------------------------------------+-------------------------------+
-| :class:`~structural.joinStreams`         | :class:`~utils.wrapList`     | :class:`~conv.toAvg`      | :class:`~typehint.tCollection`         | :meth:`~filt.instanceOf`      |
+| :class:`~structural.joinStreams`         | :class:`~utils.join`         | :class:`~conv.toAvg`      | :class:`~typehint.tCollection`         | :meth:`~filt.isNumeric`       |
 +------------------------------------------+------------------------------+---------------------------+----------------------------------------+-------------------------------+
-| :class:`~structural.joinStreamsRandom`   | :class:`~utils.equals`       | :class:`~conv.toMean`     | :class:`~typehint.tExpand`             | :class:`~filt.head`           |
+| :class:`~structural.flatten`             | :class:`~utils.wrapList`     | :class:`~conv.toMean`     | :class:`~typehint.tExpand`             | :meth:`~filt.instanceOf`      |
 +------------------------------------------+------------------------------+---------------------------+----------------------------------------+-------------------------------+
-| :class:`~structural.activeSamples`       | :class:`~utils.reverse`      | :class:`~conv.toMax`      | :class:`~typehint.tNpArray`            | :meth:`~filt.tail`            |
+| :class:`~structural.joinStreamsRandom`   | :class:`~utils.equals`       | :class:`~conv.toMax`      | :class:`~typehint.tNpArray`            | :class:`~filt.head`           |
 +------------------------------------------+------------------------------+---------------------------+----------------------------------------+-------------------------------+
-| :meth:`~structural.table`                | :class:`~utils.ignore`       | :class:`~conv.toMin`      | :class:`~typehint.tTensor`             | :class:`~filt.cut`            |
+| :class:`~structural.activeSamples`       | :class:`~utils.reverse`      | :class:`~conv.toMin`      | :class:`~typehint.tTensor`             | :meth:`~filt.tail`            |
 +------------------------------------------+------------------------------+---------------------------+----------------------------------------+-------------------------------+
-| :class:`~structural.batched`             | :class:`~utils.rateLimit`    | :class:`~conv.toPIL`      | :meth:`~typehint.tListIterSet`         | :class:`~filt.rows`           |
+| :meth:`~structural.table`                | :class:`~utils.ignore`       | :class:`~conv.toPIL`      | :meth:`~typehint.tListIterSet`         | :class:`~filt.cut`            |
 +------------------------------------------+------------------------------+---------------------------+----------------------------------------+-------------------------------+
-| :class:`~structural.window`              | :class:`~utils.timeLimit`    | :class:`~conv.toImg`      | :meth:`~typehint.tListSet`             | :class:`~filt.intersection`   |
+| :class:`~structural.batched`             | :class:`~utils.rateLimit`    | :class:`~conv.toImg`      | :meth:`~typehint.tListSet`             | :class:`~filt.rows`           |
 +------------------------------------------+------------------------------+---------------------------+----------------------------------------+-------------------------------+
-| :class:`~structural.groupBy`             | :meth:`~utils.tab`           | :class:`~conv.toRgb`      | :meth:`~typehint.tListIter`            | :class:`~filt.union`          |
+| :class:`~structural.window`              | :class:`~utils.timeLimit`    | :class:`~conv.toRgb`      | :meth:`~typehint.tListIter`            | :class:`~filt.intersection`   |
 +------------------------------------------+------------------------------+---------------------------+----------------------------------------+-------------------------------+
-| :class:`~structural.insertColumn`        | :meth:`~utils.indent`        | :class:`~conv.toRgba`     | :meth:`~typehint.tArrayTypes`          | :class:`~filt.unique`         |
+| :class:`~structural.groupBy`             | :meth:`~utils.tab`           | :class:`~conv.toRgba`     | :meth:`~typehint.tArrayTypes`          | :class:`~filt.union`          |
 +------------------------------------------+------------------------------+---------------------------+----------------------------------------+-------------------------------+
-| :meth:`~structural.insertIdColumn`       | :class:`~utils.clipboard`    | :class:`~conv.toGray`     | :meth:`~typehint.inferType`            | :class:`~filt.breakIf`        |
+| :class:`~structural.ungroup`             | :meth:`~utils.indent`        | :class:`~conv.toGray`     | :meth:`~typehint.inferType`            | :class:`~filt.unique`         |
 +------------------------------------------+------------------------------+---------------------------+----------------------------------------+-------------------------------+
-| :class:`~structural.expandE`             | :class:`~utils.deref`        | :class:`~conv.toDict`     | :class:`~typehint.TypeHintException`   | :class:`~filt.mask`           |
+| :class:`~structural.insertColumn`        | :class:`~utils.clipboard`    | :class:`~conv.toDict`     | :class:`~typehint.TypeHintException`   | :class:`~filt.breakIf`        |
 +------------------------------------------+------------------------------+---------------------------+----------------------------------------+-------------------------------+
-| :meth:`~structural.unsqueeze`            | :class:`~utils.bindec`       | :class:`~conv.toFloat`    | :meth:`~typehint.tLowest`              | :class:`~filt.tryout`         |
+| :meth:`~structural.insertIdColumn`       | :class:`~utils.deref`        | :class:`~conv.toFloat`    | :meth:`~typehint.tLowest`              | :class:`~filt.mask`           |
 +------------------------------------------+------------------------------+---------------------------+----------------------------------------+-------------------------------+
-| :class:`~structural.count`               | :class:`~utils.smooth`       | :class:`~conv.toInt`      | :class:`~typehint.tCheck`              |                               |
+| :class:`~structural.expandE`             | :class:`~utils.bindec`       | :class:`~conv.toInt`      | :class:`~typehint.tCheck`              | :class:`~filt.tryout`         |
 +------------------------------------------+------------------------------+---------------------------+----------------------------------------+-------------------------------+
-| :class:`~structural.permute`             | :meth:`~utils.disassemble`   | :class:`~conv.toBytes`    | :class:`~typehint.tOpt`                |                               |
+| :meth:`~structural.unsqueeze`            | :class:`~utils.smooth`       | :class:`~conv.toBytes`    | :class:`~typehint.tOpt`                |                               |
 +------------------------------------------+------------------------------+---------------------------+----------------------------------------+-------------------------------+
-| :class:`~structural.accumulate`          | :meth:`~utils.tree`          |                           |                                        |                               |
+| :class:`~structural.count`               | :meth:`~utils.disassemble`   | :class:`~conv.toHtml`     |                                        |                               |
 +------------------------------------------+------------------------------+---------------------------+----------------------------------------+-------------------------------+
-| :class:`~structural.AA_`                 | :class:`~utils.lookup`       |                           |                                        |                               |
+| :class:`~structural.hist`                | :meth:`~utils.tree`          |                           |                                        |                               |
 +------------------------------------------+------------------------------+---------------------------+----------------------------------------+-------------------------------+
-| :class:`~structural.peek`                | :class:`~utils.dictFields`   |                           |                                        |                               |
+| :class:`~structural.permute`             | :class:`~utils.lookup`       |                           |                                        |                               |
++------------------------------------------+------------------------------+---------------------------+----------------------------------------+-------------------------------+
+| :class:`~structural.accumulate`          | :class:`~utils.dictFields`   |                           |                                        |                               |
++------------------------------------------+------------------------------+---------------------------+----------------------------------------+-------------------------------+
+| :class:`~structural.AA_`                 |                              |                           |                                        |                               |
++------------------------------------------+------------------------------+---------------------------+----------------------------------------+-------------------------------+
+| :class:`~structural.peek`                |                              |                           |                                        |                               |
 +------------------------------------------+------------------------------+---------------------------+----------------------------------------+-------------------------------+
 | :class:`~structural.peekF`               |                              |                           |                                        |                               |
 +------------------------------------------+------------------------------+---------------------------+----------------------------------------+-------------------------------+
@@ -65,15 +71,19 @@
 +----------------------------------+----------------------------+---------------------------+------------------------------+---------------------------+
 | :class:`~modifier.apply`         | :meth:`~init.T`            | :meth:`~inp.curl`         | :class:`~output.file`        | :class:`~kxml.tags`       |
 +----------------------------------+----------------------------+---------------------------+------------------------------+---------------------------+
-| :class:`~modifier.applyMp`       | :meth:`~init.fastF`        | :meth:`~inp.wget`         | :class:`~output.pretty`      | :class:`~kxml.pretty`     |
+| :class:`~modifier.map_`          | :meth:`~init.fastF`        | :meth:`~inp.wget`         | :class:`~output.pretty`      | :class:`~kxml.pretty`     |
 +----------------------------------+----------------------------+---------------------------+------------------------------+---------------------------+
-| :class:`~modifier.parallel`      | :meth:`~init.yieldT`       | :meth:`~inp.ls`           | :meth:`~output.display`      | :class:`~kxml.display`    |
+| :class:`~modifier.applyMp`       | :meth:`~init.yieldT`       | :meth:`~inp.ls`           | :meth:`~output.display`      | :class:`~kxml.display`    |
 +----------------------------------+----------------------------+---------------------------+------------------------------+---------------------------+
-| :class:`~modifier.applyTh`       | :class:`~init.serial`      | :class:`~inp.cmd`         | :meth:`~output.headOut`      |                           |
+| :class:`~modifier.parallel`      | :class:`~init.serial`      | :class:`~inp.cmd`         | :meth:`~output.headOut`      |                           |
 +----------------------------------+----------------------------+---------------------------+------------------------------+---------------------------+
-| :class:`~modifier.applySerial`   | :class:`~init.oneToMany`   | :class:`~inp.walk`        | :class:`~output.intercept`   |                           |
+| :class:`~modifier.applyCl`       | :class:`~init.oneToMany`   | :class:`~inp.walk`        | :class:`~output.intercept`   |                           |
 +----------------------------------+----------------------------+---------------------------+------------------------------+---------------------------+
-| :class:`~modifier.sort`          | :class:`~init.mtmS`        | :meth:`~inp.requireCli`   | :class:`~output.plotImgs`    |                           |
+| :class:`~modifier.applyTh`       | :class:`~init.mtmS`        | :meth:`~inp.requireCli`   | :class:`~output.plotImgs`    |                           |
++----------------------------------+----------------------------+---------------------------+------------------------------+---------------------------+
+| :class:`~modifier.applySerial`   |                            |                           |                              |                           |
++----------------------------------+----------------------------+---------------------------+------------------------------+---------------------------+
+| :class:`~modifier.sort`          |                            |                           |                              |                           |
 +----------------------------------+----------------------------+---------------------------+------------------------------+---------------------------+
 | :class:`~modifier.sortF`         |                            |                           |                              |                           |
 +----------------------------------+----------------------------+---------------------------+------------------------------+---------------------------+

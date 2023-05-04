@@ -5,6 +5,8 @@ from typing import List, Tuple, ContextManager
 from contextlib import contextmanager
 try: import torch; from torch import nn; hasTorch = True
 except: hasTorch = False
+try: import matplotlib.animation
+except: pass
 __all__ = ["dummy"]
 def dummy():
     """Does nothing. Only here so that you can read source code of this file and
@@ -304,20 +306,7 @@ Example::
     g # displays arrows from "a" to "b" and "a" to "c"
 """
         for to in tos: self.edge(_from, to, **kwargs)
-    def digraph():
-        """Convenience method for creating a new graphviz Digraph.
-Example::
-
-    g = k1lib.graph()
-    g("a", "b", "c")
-    g # displays arrows from "a" to "b" and "a" to "c"
-"""
-        return graphviz.Digraph(graph_attr={"rankdir":"TB"})
-    def graph():
-        """Convenience method for creating a new graphviz Graph. See also: :meth:`digraph`"""
-        return graphviz.Graph(graph_attr={"rankdir":"TB"})
-except ImportError:
-    digraph = graph = lambda: print("Module `graphviz` not found! Please install it first, something like `pip install graphviz`")
+except: pass
 try:
     import matplotlib.pyplot as plt
     from mpl_toolkits.mplot3d import Axes3D, art3d
@@ -399,7 +388,7 @@ But I usually plot things as a part of the cli pipeline, and it's very
 annoying that I can't quite chain ``plt.gcf()`` operation, so I created
 this"""
         def inner(_): return plt.gcf()
-        return inner
+        return cli.aS(inner)
 except: pass
 try:
     @k1lib.patch(Axes3D)

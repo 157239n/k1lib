@@ -15,7 +15,7 @@ an iterator and output a single object (like getting max, min, std, mean values)
 __all__ = ["toTensor", "toRange", "toList",
            "toSum", "toProd", "toAvg", "toMean", "toMax", "toMin", "toPIL", "toImg",
            "toRgb", "toRgba", "toGray", "toDict",
-           "toFloat", "toInt", "toBytes"]
+           "toFloat", "toInt", "toBytes", "toHtml"]
 import re, k1lib, math, os, numpy as np, io, base64
 from k1lib.cli.init import BaseCli, Table, Row, T, yieldT; import k1lib.cli as cli
 from k1lib.cli.typehint import *; import matplotlib as mpl; import matplotlib.pyplot as plt
@@ -29,6 +29,8 @@ try: import rdkit; hasRdkit = True
 except: hasRdkit = False
 try: import graphviz; hasGraphviz = True
 except: hasGraphviz = False
+try: import plotly; import plotly.express as px; hasPlotly = True
+except: hasPlotly = False
 class toTensor(BaseCli):
     def __init__(self, dtype=torch.float32):
         """Converts generator to :class:`torch.Tensor`. Essentially
@@ -171,7 +173,7 @@ def cropToContentPIL(im, pad=0):
     im = im | toTensor(int) | cli.op().numpy() | cli.aS(cropToContentNp, pad)
     return torch.from_numpy(im).permute(1, 2, 0) | toImg() if len(im.shape) > 2 else im | toImg()
 class toPIL(BaseCli):
-    def __init__(self, closeFig=True):
+    def __init__(self, closeFig=True, crop=True):
         """Converts multiple data types into a PIL image.
 Example::
 
@@ -202,8 +204,9 @@ You can also save a matplotlib figure by piping in a :class:`matplotlib.figure.F
     your tensor image ranges from 0-255, and not 0-1. Make sure you
     renormalize it
 
-:param closeFig: if input is a matplotlib figure, then closes the figure after generating the image"""
-        import PIL; self.PIL = PIL; self.closeFig = closeFig
+:param closeFig: if input is a matplotlib figure, then closes the figure after generating the image
+:param crop: whether to crop white spaces around an image or not"""
+        import PIL; self.PIL = PIL; self.closeFig = closeFig; self.crop = crop
     def _typehint(self, inp):
         return PIL.Image.Image
     def __ror__(self, path) -> "PIL.Image.Image":
@@ -219,7 +222,7 @@ You can also save a matplotlib figure by piping in a :class:`matplotlib.figure.F
             img = self.PIL.Image.frombytes('RGB', canvas.get_width_height(), canvas.tostring_rgb())
             if self.closeFig: plt.close(path)
             return img | cli.aS(cropToContentPIL)
-        if isinstance(path, graphviz.dot.Digraph):
+        if isinstance(path, graphviz.Digraph):
             import tempfile; a = tempfile.NamedTemporaryFile()
             path.render(a.name, format="jpeg");
             fn = f"{a.name}.jpeg"; im = fn | toImg()
@@ -228,7 +231,7 @@ You can also save a matplotlib figure by piping in a :class:`matplotlib.figure.F
             return im
         if hasRdkit and isinstance(path, rdkit.Chem.rdchem.Mol):
             sz = settings.chem.imgSize
-            return self.__ror__(rdkit.Chem.Draw.MolsToGridImage([path], subImgSize=[sz, sz]).data) | cli.aS(cropToContentPIL)
+            return self.__ror__(rdkit.Chem.Draw.MolsToGridImage([path], subImgSize=[sz, sz]).data) | (cli.aS(cropToContentPIL) if self.crop else cli.iden())
         path = path | cli.deref()
         if len(path) > 0 and isinstance(path[0], str):
             from PIL import ImageDraw
@@ -236,7 +239,7 @@ You can also save a matplotlib figure by piping in a :class:`matplotlib.figure.F
             image = self.PIL.Image.new("L", ((w+1)*20, (h+1)*60), 255)
             font = PIL.ImageFont.truetype(settings.font, 18) if settings.font else None
             ImageDraw.Draw(image).text((20, 20), path | cli.join("\n"), 0, font=font)
-            return image | cli.toTensor(int) | cli.op().numpy()[0]/255 | cli.aS(cropToContentNp) | cli.op()*255 | toImg()
+            return np.array(image)/255 | (cli.aS(cropToContentNp) if self.crop else iden()) | cli.op()*255 | toImg()
         return NotImplemented
 toImg = toPIL
 class toRgb(BaseCli):
@@ -287,12 +290,43 @@ Example::
     # returns {1: 3, 2: 4}
     [[1, 2], [3, 4]] | toDict(False)
 
+If ``rows`` is a string, then it will build a dictionary from key-value
+pairs delimited by this character. For example::
+
+    ['gene_id "ENSG00000290825.1"',
+     'transcript_id "ENST00000456328.2"',
+     'gene_type "lncRNA"',
+     'gene_name "DDX11L2"',
+     'transcript_type "lncRNA"',
+     'transcript_name "DDX11L2-202"',
+     'level 2',
+     'transcript_support_level "1"',
+     'tag "basic"',
+     'tag "Ensembl_canonical"',
+     'havana_transcript "OTTHUMT00000362751.1"'] | toDict(" ")
+
+That returns::
+
+    {'gene_id': '"ENSG00000290825.1"',
+     'transcript_id': '"ENST00000456328.2"',
+     'gene_type': '"lncRNA"',
+     'gene_name': '"DDX11L2"',
+     'transcript_type': '"lncRNA"',
+     'transcript_name': '"DDX11L2-202"',
+     'level': '2',
+     'transcript_support_level': '"1"',
+     'tag': '"Ensembl_canonical"',
+     'havana_transcript': '"OTTHUMT00000362751.1"'}
+
 :params rows: if True, reads input in row by row, else reads
     in list of columns"""
         self.rows = rows
     def __ror__(self, it:Tuple[Iterator[T], Iterator[T]]) -> dict:
-        if self.rows: return {_k:_v for _k, _v in it}
-        else: return {_k:_v for _k, _v in zip(*it)}
+        r = self.rows
+        if r:
+            if isinstance(r, str): return it | cli.apply(cli.aS(lambda x: x.split(" ")) | cli.head(1).split() | cli.item() + cli.join(" ")) | toDict()
+            return {_k:_v for _k, _v in it}
+        return {_k:_v for _k, _v in zip(*it)}
 def _toop(toOp, c, force, defaultValue):
     return cli.apply(toOp, c) | (cli.apply(lambda x: x or defaultValue, c) if force else cli.filt(cli.op() != None, c))
 def _toFloat(e) -> Union[float, None]:
@@ -383,6 +417,24 @@ Example::
                 buffered = io.BytesIO()
                 it.save(buffered, format=self.imgType)
                 return buffered.getvalue()
+        return NotImplemented
+class toHtml(BaseCli):
+    def __init__(self):
+        """Converts several object types to bytes.
+Example::
+
+    # converts PIL image to html <img> tag
+    torch.randn(200, 100) | toImg() | toHtml()
+"""
+        pass
+    def __ror__(self, it):
+        if hasPIL:
+            if isinstance(it, PIL.Image.Image):
+                it = it | toBytes(imgType="PNG") | cli.aS(base64.b64encode) | cli.op().decode()
+                return f"<img src=\"data:image/png;base64, {it}\" />"
+        if hasPlotly:
+            if isinstance(it, plotly.graph_objs._figure.Figure):
+                out = io.StringIO(); it.write_html(out); out.seek(0); return out.read()
         return NotImplemented
 try:
     from rdkit import Chem

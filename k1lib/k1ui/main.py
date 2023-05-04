@@ -5,10 +5,13 @@ that project on its own is clunky, and this module is the Python interface to
 ease its use.
 
 Not quite developed yet tho, because I'm lazy."""
-import k1lib, numpy as np, asyncio, time, inspect, json, threading, dill, math, base64, requests, os, random, warnings
+import k1lib, numpy as np, asyncio, time, inspect, json, threading, dill, math, base64, os, random, warnings
 k1 = k1lib; cli = k1.cli; from k1lib.cli import *; knn = k1.knn; Cbs = k1.Cbs; viz = k1.viz; websockets = k1.dep("websockets")
-torch = k1.dep("torch"); nn = k1.dep("torch.nn"); optim = k1.dep("torch.optim"); tf = k1.dep("torchvision.transforms")
-PIL = k1.dep("PIL"); k1.dep("graphviz")
+nn = k1.dep("torch.nn"); optim = k1.dep("torch.optim"); tf = k1.dep("torchvision.transforms")
+PIL = k1.dep("PIL"); k1.dep("graphviz"); requests = k1.dep("requests")
+try: import torch; hasTorch = True
+except: torch = k1.dep("torch"); hasTorch = False
+
 from typing import Callable, List, Iterator, Tuple, Union, Dict; from collections import defaultdict, deque; from functools import lru_cache
 import matplotlib as mpl; import matplotlib.pyplot as plt
 __all__ = ["get", "WsSession", "selectArea", "record", "execute", "Recording",
@@ -60,7 +63,7 @@ Complete, minimum example::
 
 What this code does is that it will communicate with the server continuously for 12
 seconds, capturing all events in the mean time and save them into ``events`` list.
-It will start up a UDP stream to capture screenshots continuously, and after 6 seconds,
+It will start up a UDP stream to capture screenshots continuously, and after 2 seconds,
 it sends 2 events to the server, trying to type the letter "A". Finally, it waits for
 another 10 seconds and then terminates the connection.
 
@@ -762,26 +765,27 @@ This currently includes:
     return self
 def convBlock(inC, outC, kernel=3, stride=2, padding=1):
     return torch.nn.Sequential(torch.nn.Conv2d(inC, outC, kernel, stride, padding), torch.nn.ReLU(), torch.nn.BatchNorm2d(outC))
-class skipBlock(torch.nn.Module):
-    def __init__(self, inC):
-        super().__init__(); self.conv1 = convBlock(inC, inC, stride=1)
-        self.conv2 = convBlock(inC, inC*2)
-    def forward(self, x): return ((x | self.conv1) + x) | self.conv2
-class Net(torch.nn.Module):
-    def __init__(self, skips:int=5):
-        super().__init__()
-        self.skips = torch.nn.Sequential(convBlock(3, 8), *[skipBlock(8*2**i) for i in range(skips)])
-        self.avgPool = torch.nn.AdaptiveAvgPool2d([1, 1]); self.lin1 = knn.LinBlock(8 * 2**skips, 50)
-        self.lin2 = torch.nn.Linear(50, 10); self.softmax = torch.nn.Softmax(dim=1)
-        self.distThreshold = torch.nn.Parameter(torch.tensor(-0.5)); self.sigmoid = torch.nn.Sigmoid()
-        self.headOnly = True
-    def forward(self, x):
-        x = x | self.skips | self.avgPool | op().squeeze() | self.lin1
-        return x if self.headOnly else x | self.lin2
-        x = ((x[None] - x[:,None])**2).sum(dim=-1)
-        x = (x + 1e-7)**0.5 + self.distThreshold | self.sigmoid
-        return x
-def distNet() -> torch.nn.Module:
+if hasTorch:
+    class skipBlock(torch.nn.Module):
+        def __init__(self, inC):
+            super().__init__(); self.conv1 = convBlock(inC, inC, stride=1)
+            self.conv2 = convBlock(inC, inC*2)
+        def forward(self, x): return ((x | self.conv1) + x) | self.conv2
+    class Net(torch.nn.Module):
+        def __init__(self, skips:int=5):
+            super().__init__()
+            self.skips = torch.nn.Sequential(convBlock(3, 8), *[skipBlock(8*2**i) for i in range(skips)])
+            self.avgPool = torch.nn.AdaptiveAvgPool2d([1, 1]); self.lin1 = knn.LinBlock(8 * 2**skips, 50)
+            self.lin2 = torch.nn.Linear(50, 10); self.softmax = torch.nn.Softmax(dim=1)
+            self.distThreshold = torch.nn.Parameter(torch.tensor(-0.5)); self.sigmoid = torch.nn.Sigmoid()
+            self.headOnly = True
+        def forward(self, x):
+            x = x | self.skips | self.avgPool | op().squeeze() | self.lin1
+            return x if self.headOnly else x | self.lin2
+            x = ((x[None] - x[:,None])**2).sum(dim=-1)
+            x = (x + 1e-7)**0.5 + self.distThreshold | self.sigmoid
+            return x
+def distNet() -> "torch.nn.Module":
     """Grabs a pretrained network that might be useful in distinguishing
 between screens. Example::
 
@@ -802,11 +806,12 @@ class Buffer:
     def __init__(self): self.l = deque()
     def append(self, x): self.l.append(x)
     def __next__(self): return self.l.popleft()
-np2Tensor = toImg() | aS(tf.Resize([192, 192])) | toTensor()
-class MLP(nn.Module):
-    def __init__(self, nClasses, **kwargs):
-        super().__init__(); self.l1 = knn.LinBlock(50, nClasses); self.l2 = nn.Linear(nClasses, nClasses)
-    def forward(self, xb): return xb | self.l1 | self.l2
+if hasTorch:
+    np2Tensor = toImg() | aS(tf.Resize([192, 192])) | toTensor()
+    class MLP(nn.Module):
+        def __init__(self, nClasses, **kwargs):
+            super().__init__(); self.l1 = knn.LinBlock(50, nClasses); self.l2 = nn.Linear(nClasses, nClasses)
+        def forward(self, xb): return xb | self.l1 | self.l2
 whatever = object()
 class TrainScreen:
     data: List[Tuple[int, str]]

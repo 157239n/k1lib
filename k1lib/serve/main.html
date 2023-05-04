@@ -270,6 +270,12 @@
         border-radius: 10px;
       }
 
+      input[type="password"] {
+        padding: 5px 10px;
+        font-size: 1em;
+        border-radius: 10px;
+      }
+
       input[type="range"] {
         width: 200px;
       }
@@ -445,9 +451,18 @@
       nRequests--;
       const text = await res.text();
       const anno = meta.annos.return;
-      if (["int", "float", "text", "checkbox"].includes(anno)) result.innerHTML = `<pre>${text}</pre>`;
-      else if (anno === "bytes") {
-        result.innerHTML = `<div onclick="saveByteArray(base64ToArrayBuffer('${text}'))"></div>`
+      if (["int", "float", "text", "checkbox"].includes(anno)) {
+        const a = `${text}`.replace("&", "&quot;").replace("<", "&lt;").replace(">", "&gt;");
+        result.innerHTML = `<pre>${a}</pre>`;
+      } else if (anno === "bytes") {
+        const _byte = base64ToArrayBuffer(text)
+        const href = window.URL.createObjectURL(new Blob([_byte], {type: "application/octet-stream"}))
+        result.innerHTML = `<a href="${href}" download="data.bin">Download data (size: ${_byte.length/1000} kB)</a>`
+      } else if (anno === "html") {
+        const scriptEl = document.createRange().createContextualFragment(atob(text));
+        result.innerHTML = "";
+        result.append(scriptEl);
+        //result.innerHTML = atob(text);
       } else if (anno === "image") result.innerHTML = `<div style="overflow: auto;"><img style="width: 100%; object-fit: cover;" src="data:image/jpg;base64, ${text}" alt="Result image" /></div>`
       else throw new Error("Return value not recognized");
     }
@@ -461,6 +476,11 @@
         <div class="block">
           <div>${arg} (${anno}): ${doc || "(no docs)"}</div>
           <textarea id="textBox_${i}" rows="7" oninput="cb_textBox(${i})">${def[0]}</textarea>
+        </div>`;
+      if (def[2]) return `
+        <div class="block">
+          <div>${arg} (${anno}): ${doc || "(no docs)"}</div>
+          <input id="textBox_${i}" type="password" value="${def[0]}" oninput="cb_textBox(${i})" />
         </div>`;
       return `
         <div class="block">
@@ -600,7 +620,7 @@
     setTimeout(() => {
       let reqBody = "";
       for (let arg of meta.args) {
-        const anno = meta.annos[arg]; let s = `${values[arg]}`;
+        const anno = meta.annos[arg]; let s = `${values[arg]}`.split("\n")[0];
         s = (s.length > 23) ? s.slice(0, 20) + "..." : s; reqBody += `    "${arg}": "${s}",\n`;
       }
       document.querySelector("#apiRequest").innerHTML = `

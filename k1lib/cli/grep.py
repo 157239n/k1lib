@@ -46,6 +46,10 @@ See also: :class:`~k1lib.cli.structural.groupBy`
 
 Also, there's a `whole tutorial <../tutorials/cli.html>`_ devoted to just this cli
 
+Also also, if each element in the input iterator is not a string/bytes, and
+you're searching using regex, then it will get its representation and searches
+in it.
+
 :param pattern: regex pattern to search for in a line
 :param before: lines before the hit. Outputs independent lines
 :param after: lines after the hit. Outputs independent lines
@@ -54,8 +58,8 @@ Also, there's a `whole tutorial <../tutorials/cli.html>`_ devoted to just this c
 :param col: searches for pattern in a specific column"""
         super().__init__()
         if isinstance(pattern, str):
-            self._f = re.compile(pattern).search # make func quickly accessible
-        else: self._f = cli.op.solidify(pattern)
+            self._f = re.compile(pattern).search; self.mode = 0 # make func quickly accessible
+        else: self._f = cli.op.solidify(pattern); self.mode = 1 # mode for either regex or normal funcs
         self.before = before; self.after = after; self.col = col; self.N = N; self.sep = sep
         self.tillPattern = None; self.tillAfter = None; self._tillF = lambda x: False
     def till(self, pattern:Union[str, Callable[[Any], bool]]=None):
@@ -94,6 +98,7 @@ all. Instead, do something like this::
         for line in it:
             if col != None: line = list(line); elem = line[col]
             else: elem = line
+            if self.mode == 0 and not isinstance(elem, (str, bytes)): elem = f"{elem}"
             if _f(elem): # new section
                 self.sectionIdx += 1; counter = self.after+1; cRO.revert()
                 if self.sectionIdx > self.N: return

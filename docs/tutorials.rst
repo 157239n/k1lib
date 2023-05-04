@@ -6,6 +6,10 @@ Tutorials
 
 Cli related:
 
+Please take a look at  `this link <cli/index.html>`_ first. The links
+below are only for example use cases and does not actually
+explain how things work in detail.
+
 - `cli <tutorials/cli.html>`_: Go over the :mod:`k1lib.cli` module
 - `covid <tutorials/covid.html>`_: Analyze covid's genome
 - `osic <tutorials/osic.html>`_: Analyze dicom images

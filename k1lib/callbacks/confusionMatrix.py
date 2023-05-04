@@ -36,7 +36,7 @@ variables in :class:`~k1lib.Learner`:
             matrix = torch.zeros(m, m)
             matrix[:self.n, :self.n] = self.matrix
             self.matrix = matrix; self.n = len(self.matrix)
-        return idxs
+        self.matrix = self.matrix.to(idxs.device); return idxs
     def startEpoch(self): self.wipeOnAdd = True
     def endLoss(self):
         if self.condF(self):

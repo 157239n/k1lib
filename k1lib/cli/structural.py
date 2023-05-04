@@ -7,15 +7,15 @@ from typing import List, Union, Iterator, Callable, Any, Tuple, Dict
 from collections import defaultdict, Counter, deque
 from k1lib.cli.init import patchDefaultDelim, BaseCli, oneToMany, T, Table, fastF, yieldT
 import k1lib.cli as cli; from k1lib.cli.typehint import *
-import itertools, numpy as np, k1lib; import matplotlib.pyplot as plt
+import itertools, numpy as np, k1lib, math; import matplotlib.pyplot as plt
 try: import torch; hasTorch = True
 except: torch = k1lib.Object().withAutoDeclare(lambda: type("RandomClass", (object, ), {})); hasTorch = True
 __all__ = ["transpose", "reshape", "insert", "splitW", "splitC",
-           "joinStreams", "joinStreamsRandom", "activeSamples",
-           "table", "batched", "window", "groupBy",
+           "joinStreams", "flatten", "joinStreamsRandom", "activeSamples",
+           "table", "batched", "window", "groupBy", "ungroup",
            "insertColumn", "insertIdColumn",
            "expandE", "unsqueeze",
-           "count", "permute", "accumulate", "AA_", "peek", "peekF",
+           "count", "hist", "permute", "accumulate", "AA_", "peek", "peekF",
            "repeat", "repeatF", "repeatFrom", "oneHot", "indexTable"]
 settings = k1lib.settings.cli
 class transpose(BaseCli):
@@ -245,7 +245,12 @@ automatically use the C-accelerated version, like this::
     np.random.randn(2, 3, 4) | joinStreams()
 
 Sometimes, you may want to impose some dimensional structure after joining all streams
-together, which :class:`reshape` does."""
+together, which :class:`reshape` does.
+
+If "joinStreams" is too unintuitive to remember, there's also an alias called
+:class:`flatten`.
+
+:param dims: how many ``joinStreams()`` do you want to do consecutively?"""
         if dims < 1: raise AttributeError(f"`dims` ({dims}) can't be less than 1, as it doesn't make any sense!")
         self.multi = cli.serial(*(joinStreams() for d in range(dims))) if dims > 1 else None
     def __ror__(self, streams:Iterator[Iterator[T]]) -> Iterator[T]:
@@ -259,6 +264,7 @@ together, which :class:`reshape` does."""
                 def gen():
                     for stream in streams: yield from stream
                 return gen()
+flatten = joinStreams
 def probScale(ps, t): # t from 0 -> 1, for typical usage
     l = np.log(ps); avg = l.mean()
     a = (l-avg)*t+avg; a -= a.max()
@@ -466,52 +472,139 @@ allocation, which will be slower::
     robust but slower
 :param pad: whether to pad the output stream on the end, so that it
     has the same number of elements as the input stream or not"""
-        self.n = n; self.listF = (lambda x: list(x)) if newList else (lambda x: iter(x)); self.pad = pad
+        self.n = n; self.listF = (lambda x: list(x)) if newList else (lambda x: iter(x))
+        self.pad = pad; self.padBool = pad is not nothing # why do this? Cause in applyMp, "nothing" takes on multiple identities
     def __ror__(self, it):
         n = self.n; pad = self.pad; q = deque([], n); listF = self.listF
         for e in it:
             q.append(e)
             if len(q) == n: yield listF(q); q.popleft()
-        if pad is not nothing:
+        if self.padBool:
             for i in range(n-1):
                 q.append(pad)
                 yield listF(q); q.popleft()
 class groupBy(BaseCli):
-    def __init__(self, column:int):
+    def __init__(self, column:int, separate:bool=False, removeCol:bool=None):
         """Groups table by some column.
 Example::
 
-    [[2.3, 5],
-     [3.4, 2],
-     [4.5, 2],
-     [5.6, 5],
-     [6.7, 1]] | groupBy(1) | deref()
+    a = [[2.3, 5],
+         [3.4, 2],
+         [4.5, 2],
+         [5.6, 5],
+         [6.7, 1]]
+    a | groupBy(1) | deref()
 
 This returns::
 
-    [[[2.3, 5],
-      [5.6, 5]],
-     [[3.4, 2],
-      [4.5, 2]],
-     [[6.7, 1]]]
+    [[[6.7, 1]],
+     [[3.4, 2], [4.5, 2]],
+     [[2.3, 5], [5.6, 5]]]
 
-Should have O(n log(n)) time complexity
+Should have O(n log(n)) time complexity. What if ``separate`` is True::
 
-See also: :class:`~k1lib.cli.grep.grep`
+    a | groupBy(1, True) | deref()
 
-:param column: which column to group by"""
-        self.column = column
+This returns::
+
+    [[1, [[6.7]]],
+     [2, [[3.4], [4.5]]],
+     [5, [[2.3], [5.6]]]]
+
+What if ``removeCol`` is False::
+
+    a | groupBy(1, True, False) | deref()
+
+This returns::
+
+    [[1, [[6.7, 1]]],
+     [2, [[3.4, 2], [4.5, 2]]],
+     [5, [[2.3, 5], [5.6, 5]]]]
+
+There's another perspective and way to think about this operation. A lot of
+libraries (like pandas) expect the uncompressed, "flat" version (the variable
+``a`` in the examples above). But throughout my time using cli, the grouped
+version (separate=True) is usually much more useful and amenable to
+transformations. It also occupies less memory too, as the columns with duplicated
+elements are deleted.
+
+So, you can sort of think :class:`groupBy` is converting pandas dataframes
+into a more easily digestible form. But because the prevalence of those libraries,
+after doing all the transformations you want, sometimes it's necessary to flatten
+it again, which :class:`ungroup` does.
+
+If you want to group text lines by some pattern im them, :class:`~k1lib.cli.grep.grep`
+might be better for you.
+
+:param column: which column to group by
+:param separate: whether to separate out the column to sort of form a dict or not. See example
+:param removeCol: whether to remove the grouped-by column. Defaults to True if
+    ``separate=True``, and False if ``separate=False``"""
+        self.column = column; self.separate = separate
+        if removeCol is None: removeCol = separate # if separate, then remove cols, else don't do it
+        self.removeCol = removeCol
     def __ror__(self, it):
-        it = it | cli.deref(2); c = self.column
-        it = it | cli.sort(c, False)
-        it = iter(it); a = [next(it)]; v = a[0][c]
+        it = it | cli.deref(2); c = self.column; separate = self.separate; removeCol = self.removeCol
+        it = it | cli.sort(c, False); sentinel = object()
+        it = iter(it); a = [next(it, sentinel)]
+        if a[0] is sentinel: return
+        v = a[0][c]
         try:
             while True:
                 e = next(it)
                 if e[c] == v: a.append(e)
-                else: yield a; a = [e]; v = a[0][c]
+                else:
+                    if removeCol: a = a | ~cli.cut(c)
+                    if separate: yield [v, a]
+                    else: yield a
+                    a = [e]; v = a[0][c]
         except StopIteration:
-            if len(a) > 0: yield a
+            if len(a) > 0:
+                if removeCol: a = a | ~cli.cut(c)
+                if separate: yield [v, a]
+                else: yield a
+class ungroup(BaseCli):
+    def __init__(self, insertCol:bool=True, single=False, begin=False):
+        """Ungroups things that were grouped using a specific mode of
+:class:`groupBy`. Particularly useful to transform some complex data
+structure into a flat dataframe so that you can plug into pandas. Example::
+
+    a = [[2.3, 5], [3.4, 2], [4.5, 2], [5.6, 5], [6.7, 1]]
+    # returns [[6.7, 1], [3.4, 2], [4.5, 2], [2.3, 5], [5.6, 5]]
+    a | groupBy(1, True) | ungroup() | deref()
+    # returns [[6.7], [3.4], [4.5], [2.3], [5.6]]
+    a | groupBy(1, True) | ungroup(False) | deref()
+
+Just as a reminder, this is the output of :class:`groupBy` after executing ``a | groupBy(1, True)``::
+
+    [[1, [[6.7]]],
+     [2, [[3.4], [4.5]]],
+     [5, [[2.3], [5.6]]]]
+
+A lot of times, your data is a little bit different, like this perhaps::
+
+    [[1, [6.7]],
+     [2, [3.4, 4.5]],
+     [5, [2.3, 5.6]]]
+
+A way to fix this would be to add ``apply(wrapList().all(), 1)`` before :class:`ungroup`.
+But because this is so common, I've added in the parameter ``single`` for that. Just set
+it to True::
+
+    # returns [[6.7, 1], [3.4, 2], [4.5, 2], [2.3, 5], [5.6, 5]]
+    [[1, [6.7]],
+     [2, [3.4, 4.5]],
+     [5, [2.3, 5.6]]] | ungroup(single=True)
+
+:param insertCol: whether to insert the column into the table or not
+:param single: whether the table in each group has a single column or not
+:param begin: whether to insert the column at the beginning or at the end.
+    Only works if ``insertCol`` is True"""
+        self.insertCol = insertCol; self.single = single; self.begin = begin
+    def __ror__(self, it):
+        preprocess = cli.apply(cli.wrapList().all(), 1) if self.single else cli.iden(); begin = self.begin
+        if self.insertCol: return it | preprocess | ~cli.apply(lambda x, arr: arr | cli.insert(x, begin).all()) | cli.joinStreams()
+        else: return it | preprocess | cli.cut(1) | cli.joinStreams()
 class insertColumn(BaseCli):
     def __init__(self, column:List[T], begin=True, fill=""):
         """Inserts a column at beginning or end.
@@ -625,6 +718,122 @@ This is useful when you want to get the count of a really long list/iterator usi
             s = values.values() | cli.toSum()
             for k, v in values.items(): yield [v, k, f"{round(100*v/s)}%"]
         return cli.applyS(inner)
+class hist(BaseCli):
+    def __init__(self, bins:int=30):
+        """Bins a long 1d array. Effectively creating a historgram, without
+actually plotting it. Example::
+
+    np.random.randn(1000) | hist(5)
+
+That returns something like::
+
+    (array([-2.31449761, -1.17406889, -0.03364017,  1.10678854,  2.24721726]),
+     array([ 41, 207, 432, 265,  55]),
+     1.1404287156493986)
+
+This format goes with :meth:`~matplotlib.pyplot.bar` directly like this::
+
+    np.random.randn(1000) | hist(10) | ~aS(plt.bar)
+
+If you have tons of data that's handled in multiple processes, but you want to
+get an overall histogram, you can do something like this::
+
+    # bad solution, runs slow, accurate
+    fileNames | applyMp(cat() | toFloat() | aS(list)) | joinStreams() | hist() | ~aS(plt.bar)
+    # good solution, runs fast, slightly inaccurate
+    fileNames | applyMp(cat() | toFloat() | hist(300)) | hist.join() | ~aS(plt.bar)
+
+Let's say in each process, you have 10M records, and that you have 1000 processes in total.
+In the first solution, you transfer all records (10B records total) to a single process,
+then calculate the histogram of them. The transfer overhead is going to be absolutely
+enourmous, as well as the computation. This really defeats the purpose of doing
+multiprocessing.
+
+In the second solution, you "convert" 10M records into 600 numbers for each process,
+which scales up to 600k numbers for all processes. Although big, but certainly
+manageable with current hardware. So the data transfer cost is not a lot at all. The
+histogram merging part also executes relatively fast, as it only creates an internal
+array of 3M length. See over :meth:`hist.join` for param details
+
+:params bins: how many bins should the histogram has?"""
+        self.bins = bins
+    def __ror__(self, it):
+        if not isinstance(it, settings.arrayTypes): it = list(it)
+        y, x = np.histogram(it, bins=self.bins)
+        delta = x[1] - x[0]; x = (x[1:] + x[:-1])/2
+        return x, y, delta
+    @staticmethod
+    def join(scale:float=1e4, bins:int=None, log:bool=True):
+        """Joins multiple histograms together.
+Example::
+
+    a = np.random.randn(1000); b = np.random.randn(1000)+3
+    [a, b] | joinStreams() | hist() | head(2) | ~aS(plt.plot) # ---------------------------------- Ground truth
+    [a, b] | hist(300).all() | hist.join(scale=1e4) | head(2) | ~aS(plt.plot) # ------------------ Log joining
+    [a, b] | hist(300).all() | hist.join(scale=1e4, log=False) | head(2) | ~aS(plt.plot, ".") # -- Linear joining
+    plt.legend(["Ground truth", "Log", "Linear"]); plt.grid(True); plt.ylabel("Frequency"); plt.xlabel("Value");
+
+This results in this:
+
+.. image:: ../images/hist1.png
+
+As you can see, this process is only approximate, but is accurate enough in everyday
+use. If you are a normal user, then this is probably enough. However, if you're a
+mathematician and really care about the accuracy of this, read on.
+
+.. admonition:: Performance vs accuracy
+
+    As mentioned in :class:`hist`, joining histograms from across processes can really speed
+    things up big time. But the joining process is complicated, with multiple parameters
+    and different tradeoffs for each config. In this example, scale = 1e4, bins = 30,
+    OG bins = 300, log = True. "OG bins" is the number of bins coming into :meth:`hist.join`
+
+    To get the best accuracy possible, you should set scale and OG bins high. If better
+    performance is desired, you should first lower scale, then lower OG bins, then finally lower
+    bins.
+
+.. admonition:: Log scale
+
+    Take a look at this piece of code::
+    
+        a, b = np.random.randn(1000)*1, np.random.randn(3000000)*0.3+3
+        [a, b] | joinStreams() | hist() | head(2) | ~aS(plt.plot)
+        [a, b] | hist(300).all() | hist.join(scale=1e4) | head(2) | ~aS(plt.plot)
+        [a, b] | hist(300).all() | hist.join(scale=1e4, log=False) | head(2) | ~aS(plt.plot, ".")
+        plt.yscale("log"); plt.legend(["Ground truth", "Log", "Linear"]); plt.grid(True); plt.ylabel("Frequency"); plt.xlabel("Value");
+
+    This results in:
+
+    .. image:: ../images/hist2.png
+
+    This shows how log mode is generally better than linear mode when the frequencies span
+    across multiple orders of magnitude. So why not delete linear mode directly? Well, I have
+    not formally proved that log scale case fully covers the linear case, although in practice
+    it seems so. So just to be cautious, let's leave it in
+
+.. admonition:: Scale
+
+    The setup is just like in the "Log scale" section, but with scale = 1e3 instead of the default 1e4:
+
+    .. image:: ../images/hist3.png
+    
+    Remember that the higher the scale, the more accurate, but also the longer it runs. If
+    the difference in high and low frequencies are bigger than scale, then the low
+    frequency values are dropped.
+
+:param scale: how big a range of frequencies do we want to capture?
+:param bins: output bins. If not specified automatically defaults to 1/10 the
+    original number of bins
+:param log: whether to transform everything to log scale internally"""
+        def inner(it):
+            it = it | cli.deref()
+            _bins = bins if bins is not None else it | cli.cut(0) | cli.shape(0).all() | cli.toMean() | cli.op()/10 | cli.aS(int)
+            maxY = max(it | cli.cut(1) | cli.toMax().all() | cli.toMax() | cli.op()/scale, 1e-9)
+            if log: it = it | cli.apply(lambda x: np.log(x+1e-9)-math.log(maxY) | cli.aS(np.exp) | cli.aS(np.round) | cli.op().astype(int), 1) | cli.deref()
+            else: it = it | cli.apply(lambda y: (y/maxY).astype(int), 1) | cli.deref()
+            x, y, delta = it | cli.cut(0, 1) | cli.transpose().all() | cli.joinStreams() | ~cli.apply(lambda a,b: [a]*b) | cli.joinStreams() | cli.aS(list) | cli.aS(np.array) | hist(_bins)
+            return x, y*maxY, delta
+        return cli.aS(inner)
 def _permuteGen(row, pers):
     row = list(row); return (row[i] for i in pers)
 class permute(BaseCli):

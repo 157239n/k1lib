@@ -24,7 +24,7 @@ setup(
                 ('k1lib/k1ui', ['k1lib/k1ui/mouseKey.pth', 'k1lib/k1ui/256.model.state_dict.pth'])],
     version="1.3",
     python_requires='>=3.7',
-    install_requires=["numpy>=1.14", "matplotlib>=2.0", "dill", "forbiddenfruit"],
+    install_requires=["numpy>=1.14", "matplotlib>=2.0", "dill", "forbiddenfruit", "wurlitzer"],
     extras_require={"all": deps},
     description="Some nice ML overhaul",
     url="https://k1lib.com",

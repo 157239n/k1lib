@@ -4,6 +4,8 @@ from typing import Iterator, Union, Any
 import k1lib, urllib, subprocess, warnings, os, k1lib, threading, time, warnings, math, io, dill
 from k1lib.cli import BaseCli; import k1lib.cli as cli
 from k1lib.cli.typehint import *
+try: import minio; hasMinio = True
+except: hasMinio = False
 __all__ = ["cat", "splitSeek", "curl", "wget", "ls", "cmd", "walk", "requireCli"]
 settings = k1lib.settings.cli
 catSettings = k1lib.Settings().add("chunkSize", 100000, "file reading chunk size for binary+chunk mode. Decrease it to avoid wasting memory and increase it to avoid disk latency")
@@ -137,7 +139,7 @@ Example::
     return cli.aS(gen) if fileName is None else fileName | cli.aS(gen)
 cat.pickle = _catPickle
 class splitSeek(BaseCli):
-    def __init__(self, n, c=b'\n'):
+    def __init__(self, n, c=b'\n', weights=None):
         """Splits a file up into n fragments aligned to the closest character and return the seek points.
 Example::
 
@@ -196,7 +198,7 @@ using :meth:`splitSeek.forward` and :meth:`splitSeek.backward`.
 
 :param n: how many splits do you want?
 :param c: block-boundary character, usually just the new line character"""
-        self.n = n; self.c = c
+        self.n = n; self.c = c; self.weights = weights
     @staticmethod
     def forward(f, i:int, c=b'\n') -> int:
         """Returns char location after the search char, going forward.
@@ -246,11 +248,29 @@ Example::
             with open(os.path.expanduser(f), "rb") as _f: return inner(_f)
         else: return inner(f)
     def __ror__(self, fn):
-        n = self.n; c = self.c
-        def func(f): f.seek(0, os.SEEK_END); end = f.tell(); return [*range(n) | cli.apply(lambda x: int(x*end/n)) | cli.apply(lambda x: splitSeek.backward(f, x, c)), end]
+        n = self.n; c = self.c; weights = self.weights
+        def func(f):
+            f.seek(0, os.SEEK_END); end = f.tell()
+            if weights is None: begins = range(n) | cli.apply(lambda x: int(x*end/n))
+            else: begins = range(end) | cli.splitW(*weights) | cli.apply(lambda x: x.start)
+            return [*begins | cli.apply(lambda x: splitSeek.backward(f, x, c)), end]
         if isinstance(fn, str):
             with open(os.path.expanduser(fn), 'rb') as f: return func(f)
         else: return func(fn)
+    @staticmethod
+    def window():
+        """Converts input boundaries into segment windows.
+Example::
+
+    # returns [[0, 4], [5, 9], [10, 20]]
+    [0, 5, 10, 20] | splitSeek.window()
+    # example use case
+    "abc.txt" | splitSeek(10) | splitSeek.window()
+"""
+        def inner(it):
+            it = it | cli.aS(list); ranges = it | cli.window(2) | cli.apply(lambda x: x-1, 1) | cli.deref()
+            ranges[-1][1] += 1; return ranges
+        return cli.aS(inner)
 def curl(url:str) -> Iterator[str]:
     """Gets file from url. File can't be a binary blob.
 Example::
@@ -284,9 +304,9 @@ Example::
     else: return folder | _ls()
 class _ls(BaseCli):
     def _typehint(self, ignored=None): return tList(str)
-    def __ror__(self, folder:str):
-        folder = os.path.expanduser(folder.rstrip(os.sep))
-        return [f"{folder}{os.sep}{e}" for e in os.listdir(folder)]
+    def __ror__(self, path:str):
+        path = os.path.expanduser(path.rstrip(os.sep))
+        return [f"{path}{os.sep}{e}" for e in os.listdir(path)]
 k1lib.settings.cli.add("quiet", False, "whether to mute extra outputs from clis or not")
 newline = b'\n'[0]
 class lazySt:

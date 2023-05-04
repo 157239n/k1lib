@@ -14,8 +14,8 @@ try: import torch; import torch.nn as nn; hasTorch = True
 except:
     torch = k1lib.Object().withAutoDeclare(lambda: type("RandomClass", (object, ), {}))
     nn = k1lib.Object().withAutoDeclare(lambda: type("RandomClass", (object, ), {})); hasTorch = False
-__all__ = ["SliceablePlot", "plotSegments", "Carousel", "HtmlImage", "ToggleImage",
-           "confusionMatrix", "FAnim", "mask"]
+__all__ = ["SliceablePlot", "plotSegments", "Carousel", "Toggle", "ToggleImage",
+           "Scroll", "confusionMatrix", "FAnim", "mask"]
 class _PlotDecorator:
     """The idea with decorators is that you can do something like this::
 
@@ -180,6 +180,7 @@ Will even work even when you export the notebook as html. Example::
     c = viz.Carousel()
     x = np.linspace(-2, 2); plt.plot(x, x ** 2); plt.gcf() | toImg() | c
     x = np.linspace(-1, 3); plt.plot(x, x ** 2); plt.gcf() | toImg() | c
+    "<h1>abc</h1><div>Some content</div>" | c # can add html
     c # displays in notebook cell
 
 :param imgs: List of initial images. Can add more images later on by using :meth:`__ror__`
@@ -189,19 +190,17 @@ Will even work even when you export the notebook as html. Example::
         self.imgs:List[Tuple[str, str]] = [] # Tuple[format, base64 img]
         self.defaultFormat = "jpeg"
         for im in imgs: im | self
-    def __ror__(self, it):
-        """Adds an image to the collection"""
-        self.imgs.append(["png", base64.b64encode(it | cli.toBytes()).decode()])
-    def saveGraphviz(self, g):
-        """Saves a graphviz graph"""
-        import tempfile; a = tempfile.NamedTemporaryFile()
-        g.render(a.name, format="jpeg"); self.saveFile(f"{a.name}.jpeg")
+    def __ror__(self, d):
+        """Adds an image/html content to the collection"""
+        if isinstance(d, str): self.imgs.append(f"{d}")
+        else: self.imgs.append(f"<img alt='' style='max-width: 100%' src='data:image/png;base64, {base64.b64encode(d | cli.toBytes()).decode()}' />")
     def pop(self):
         """Pops last image"""
         return self.imgs.pop()
     def __getitem__(self, idx): return self.imgs[idx]
     def _repr_html_(self):
-        imgs = [f"\"<img alt='' src='data:image/{fmt};base64, {img}' />\"" for fmt, img in self.imgs]
+        imgs = self.imgs | cli.op().replace("`", "\`").all() | cli.apply(lambda x: f"`{x}`") | cli.deref()
+        #imgs = [f"\"<img alt='' src='data:image/{fmt};base64, {img}' />\"" for fmt, img in self.imgs]
         idx = Carousel._idx()
         pre = f"k1c_{idx}"
         html = f"""<!-- k1lib.Carousel -->
@@ -215,7 +214,9 @@ Will even work even when you export the notebook as html. Example::
         color: #000;
         box-shadow: 0 3px 5px rgb(0,0,0,0.3);
         border-radius: 18px;
-        user-select: none
+        user-select: none;
+        -webkit-user-select: none; /* Safari */
+        -ms-user-select: none; /* IE 10+ */
     }}
     .{pre}_btn:hover {{
         box-shadow: box-shadow: 0 3px 10px rgb(0,0,0,0.6);
@@ -251,31 +252,21 @@ Will even work even when you export the notebook as html. Example::
     {pre}_display();
 </script>"""
         return html
-class HtmlImage:
-    def __init__(self, im, style=""):
-        """Creates a html image from a PIL image
-
-:param im: PIL image
-:param style: extra styles"""
-        self.imB64 = base64.b64encode(im | cli.toBytes()).decode(); self.style = style
-    def _repr_html_(self): return f"""<img alt='' src='data:image/jpg;base64,{self.imB64}' style='{self.style}' />"""
-class ToggleImage:
+class Toggle(cli.BaseCli):
     _idx = k1lib.AutoIncrement.random()
     def __init__(self):
-        """Creates a new toggle image, which is just an image that
-is hidden by default, but can be shown with a button. Will even work
-even when you export the notebook as html. Example::
+        """Button to toggle whether the content is displayed or
+not. Useful if the html content is very big in size. Example::
 
     x = np.linspace(-2, 2); plt.plot(x, x ** 2)
-    plt.gcf() | cli.toImg() | viz.ToggleImage()
+    plt.gcf() | toImg() | toHtml() | viz.Toggle()
 
 This will plot a graph, then create a button where you can toggle the image's visibility"""
-        self.imgs:List[Tuple[str, str]] = [] # Tuple[format, base64 img]
-        self.img = None
-    def __ror__(self, it): self.img = base64.b64encode(it | cli.toBytes()).decode(); return self
+        self.content:str = "" # html string
+    def __ror__(self, it): self.content = it; return self
     def _repr_html_(self):
-        pre = f"k1ti_{ToggleImage._idx()}"
-        html = f"""<!-- k1lib.ToggleImage -->
+        pre = f"k1t_{Toggle._idx()}"
+        html = f"""<!-- k1lib.Toggle -->
 <style>
     #{pre}_btn {{
         cursor: pointer;
@@ -284,6 +275,8 @@ This will plot a graph, then create a button where you can toggle the image's vi
         margin-right: 5px;
         color: #000;
         user-select: none;
+        -webkit-user-select: none; /* Safari */
+        -ms-user-select: none; /* IE 10+ */
         box-shadow: 0 3px 5px rgb(0,0,0,0.3);
         border-radius: 18px;
     }}
@@ -295,23 +288,46 @@ This will plot a graph, then create a button where you can toggle the image's vi
 </style>
 <div>
     <div style="display: flex; flex-direction: row; padding: 4px">
-        <div id="{pre}_btn">Show image</div>
+        <div id="{pre}_btn">Show content</div>
         <div style="flex: 1"></div>
     </div>
-    <img id="{pre}_img" src='data:image/jpg;base64,{self.img}' style="display: none; margin-top: 12px" />
+    <div id="{pre}_content" style="display: none; margin-top: 12px">{self.content}</div>
 </div>
 <script>
     console.log("setup script ran for {pre}");
     {pre}_btn = document.querySelector("#{pre}_btn");
-    {pre}_img = document.querySelector("#{pre}_img");
+    {pre}_content = document.querySelector("#{pre}_content");
     
     {pre}_displayed = false;
     {pre}_btn.onclick = () => {{
         {pre}_displayed = !{pre}_displayed;
-        {pre}_btn.innerHTML = {pre}_displayed ? "Hide image" : "Show image";
-        {pre}_img.style.display = {pre}_displayed ? "block" : "none";
+        {pre}_btn.innerHTML = {pre}_displayed ? "Hide content" : "Show content";
+        {pre}_content.style.display = {pre}_displayed ? "block" : "none";
     }};
 </script>"""
+        return html
+def ToggleImage():
+    """This function is sort of legacy. It's just ``img | toHtml() | viz.Toggle()`` really"""
+    return cli.toHtml() | Toggle()
+class Scroll(cli.BaseCli):
+    _idx = k1lib.AutoIncrement.random()
+    def __init__(self, height=300):
+        """Creates a new preview html component. If content
+is too long, then it will only show the first 500px, then
+have a button to expand and view the rest. Example::
+
+    x = np.linspace(-2, 2); plt.plot(x, x ** 2)
+    plt.gcf() | toImg() | toHtml() | viz.Scroll()
+
+This will plot a preview of a graph
+:param height: height of the parent container"""
+        self.content:str = "" # html string
+        self.height = height
+    def __ror__(self, it): self.content = it; return self
+    def _repr_html_(self):
+        pre = f"k1scr_{Scroll._idx()}"
+        html = f"""<!-- k1lib.Scroll -->
+<div style="max-height: {self.height}px">{self.content}</div>"""
         return html
 def confusionMatrix(matrix:torch.Tensor, categories:List[str]=None, **kwargs):
     """Plots a confusion matrix. Example::

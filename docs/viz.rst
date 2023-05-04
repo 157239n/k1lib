@@ -11,9 +11,11 @@ k1lib.viz module
 
    .. autoclass:: Carousel
       :members:
-   .. autoclass:: HtmlImage
+   .. autoclass:: Toggle
       :members:
    .. autoclass:: ToggleImage
+      :members:
+   .. autoclass:: Scroll
       :members:
 
    .. autofunction:: confusionMatrix

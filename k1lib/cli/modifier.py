@@ -2,19 +2,20 @@
 """
 This is for quick modifiers, think of them as changing formats
 """
-__all__ = ["applyS", "aS", "apply", "applyMp", "parallel",
+__all__ = ["applyS", "aS", "apply", "map_", "applyMp", "parallel", "applyCl",
            "applyTh", "applySerial",
            "sort", "sortF", "consume", "randomize", "stagger", "op",
            "integrate"]
 from typing import Callable, Iterator, Any, Union, List
 from k1lib.cli.init import patchDefaultDelim, BaseCli, T, fastF
-import k1lib.cli as cli, numpy as np, threading, gc
+import k1lib.cli as cli, numpy as np, threading, gc; import k1lib
 from collections import deque
 from functools import partial, update_wrapper, lru_cache
 from k1lib.cli.typehint import *
 import dill, pickle, k1lib, warnings, atexit, signal, time, os, random
 try: import torch; import torch.multiprocessing as mp; hasTorch = True
 except: import multiprocessing as mp; hasTorch = False
+ray = k1lib.dep("ray")
 settings = k1lib.settings.cli
 class applyS(BaseCli):
     def __init__(self, f:Callable[[T], T], *args, **kwargs):
@@ -36,16 +37,36 @@ Like :class:`apply`, you can also use this as a decorator like this::
 This also decorates the returned object so that it has same qualname, docstring
 and whatnot.
 
+(Advanced) Writing out "lambda x:" all the time is annoying, and there are ways
+to quickly say ``lambda x: x+2`` like so::
+
+    3 | op()+2 # returns 5
+    3 | aS("x+2") # returns 5. Behind the scenes, it compiles and execute `lambda x: x+2`
+
+The first way is to use :class:`op`, that will absorb all operations done on it,
+like "+", and returns a function that essentially replays all the operations.
+
+In the second way, you only have to pass in the string containing code that you want
+done on the variable "x". Then internally, it will compile to regular Python code.
+
+In fact, you can pass in ``op()`` or just a string to any cli that accepts any kind
+of function, like :class:`~k1lib.cli.filt.filt` or :class:`apply`::
+
+    range(4) | apply("x-2") | deref()
+    range(4) | apply(op()-2) | deref()
+    range(4) | filt("x%2") | deref()
+    range(4) | filt(op()%2) | deref()
+
 :param f: the function to be executed
 :param kwargs: other keyword arguments to pass to the function, together with ``args``"""
         super().__init__(fs=[f]); self.args = args; self.kwargs = kwargs
-        self.f = f; update_wrapper(self, f, updated=())
+        self.f = f; self._fC = fastF(f); update_wrapper(self, f, updated=())
     def _typehint(self, inp):
         if self.hasHint: return self._hint
         try: return self.f._typehint(inp)
         except: return tAny()
     def __ror__(self, it:T) -> T:
-        return self.f(it, *self.args, **self.kwargs)
+        return self._fC(it, *self.args, **self.kwargs)
     def __invert__(self):
         """Configures it so that it expand the arguments out.
 Example::
@@ -94,10 +115,14 @@ You can add custom keyword arguments into the function::
     # returns [15, 17, 19, 21, 23]
     [range(5), range(10, 15)] | transpose() | ~apply(f, z=5) | deref()
 
+If "apply" is too hard to remember, this cli also has an alias :class:`map_`
+that kinda mimics Python's ``map()``.
+
 :param column: if not None, then applies the function to that column only
 :param cache: if specified, then caches this much number of values
 :param kwargs: extra keyword arguments to pass in the function"""
         super().__init__(fs=[f]); self.f = f; self.kwargs = kwargs
+        if column and column < 0: raise Exception(f"Applying a function on a negative-indexed column ({column}) is not supported")
         self.column = column; self.cache = cache; self._fC = fastF(f)
         if cache > 0: self._fC = lru_cache(cache)(self._fC)
         self.normal = self.column is None and self.cache == 0 # cached value to say that this apply is just being used as a wrapper, nothing out of the ordinary
@@ -119,10 +144,12 @@ arguments out. Just for convenience really. Example::
     # returns [10, 12, 14, 16, 18]
     [range(5), range(10, 15)] | transpose() | ~apply(lambda x, y: x+y) | deref()"""
         return apply(lambda x: self.f(*x, **self.kwargs), self.column, self.cache)
+map_ = apply
 def executeFunc(common, line):
-    import dill
+    import dill, time
     f, kwargs = dill.loads(common)
-    return f(dill.loads(line), **kwargs)
+    res = f(dill.loads(line), **kwargs)
+    time.sleep(0.1); return res # suggestion by https://stackoverflow.com/questions/36359528/broken-pipe-error-with-multiprocessing-queue
 def terminateGraceful(): signal.signal(signal.SIGINT, signal.SIG_IGN)
 class applyMp(BaseCli):
     _pools = set()
@@ -214,9 +241,10 @@ ones. So, you can potentially do something like this::
     fed. 0 for not refreshing any pools at all. Turn this on in case your process consumes
     lots of memory and you have to kill them eventually to free up some memory"""
         super().__init__(fs=[f]); self.f = fastF(f)
-        self.prefetch = prefetch or 1_000_000
+        self.prefetch = prefetch or int(1e9)
         self.timeout = timeout; self.utilization = utilization
-        self.bs = bs; self.kwargs = kwargs; self.p = None; self.newPoolEvery = newPoolEvery; self.ps = []
+        self.bs = bs; self.kwargs = kwargs; self.p = None
+        self.newPoolEvery = newPoolEvery; self.ps = []
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
         timeout = self.timeout; it = iter(it) # really make sure it's an iterator, for prefetch
         if self.bs > 1: return it | cli.batched(self.bs, True) | applyMp(apply(self.f) | cli.toList(), self.prefetch, timeout, **self.kwargs) | cli.joinStreams()
@@ -235,26 +263,27 @@ ones. So, you can potentially do something like this::
                 yield e
         common = dill.dumps([self.f, self.kwargs])
         def gen(it):
-            try:
-                if self.newPoolEvery > 0: it = intercept(it, self.newPoolEvery)
-                else: newPool()
-                fs = deque()
-                for i, line in zip(range(self.prefetch), it):
-                    fs.append(self.p.apply_async(executeFunc, [common, dill.dumps(line)]))
-                for line in it:
-                    yield fs.popleft().get(timeout)
-                    fs.append(self.p.apply_async(executeFunc, [common, dill.dumps(line)]))
-                for f in fs: yield f.get(timeout)
-            except KeyboardInterrupt as e:
-                print("applyMp interrupted. Terminating pool now")
-                for p in self.ps: p.terminate();
-                raise e
-            except Exception as e:
-                print("applyMp encounter errors. Terminating pool now")
-                for p in self.ps: p.terminate();
-                raise e
-            else:
-                for p in self.ps: p.terminate();
+            with k1lib.captureStdout(False, True) as out:
+                try:
+                    if self.newPoolEvery > 0: it = intercept(it, self.newPoolEvery)
+                    else: newPool()
+                    fs = deque()
+                    for i, line in zip(range(self.prefetch), it):
+                        fs.append(self.p.apply_async(executeFunc, [common, dill.dumps(line)]))
+                    for line in it:
+                        yield fs.popleft().get(timeout)
+                        fs.append(self.p.apply_async(executeFunc, [common, dill.dumps(line)]))
+                    for f in fs: yield f.get(timeout)
+                except KeyboardInterrupt as e:
+                    print("applyMp interrupted. Terminating pool now")
+                    for p in self.ps: p.terminate();
+                    raise e
+                except Exception as e:
+                    print("applyMp encounter errors. Terminating pool now")
+                    for p in self.ps: p.terminate();
+                    raise e
+                else:
+                    for p in self.ps: p.terminate();
         return gen(it)
     def _copy(self): return applyMp(self.f, self.prefetch, self.timeout, self.utilization, self.bs, self.newPoolEvery, **self.kwargs)
     def __invert__(self):
@@ -286,9 +315,265 @@ if you run into problems, try doing this."""
 # apparently, this doesn't do anything, at least in jupyter environment
 atexit.register(lambda: applyMp.clearPools())
 parallel = applyMp
+def specificNode(obj, nodeId:str):
+    return obj.options(scheduling_strategy=ray.util.scheduling_strategies.NodeAffinitySchedulingStrategy(node_id=nodeId, soft=False))
+class applyCl(BaseCli):
+    def __init__(self, f, prefetch=None, timeout=8, bs=1, rss:Union[dict, str]={}, pre:bool=False, orPatch=True, num_cpus=1, **kwargs):
+        """Like :class:`apply`, but execute a function over the input iterator
+in multiple processes on multiple nodes inside of a cluster (hence "cl"). So, just a more
+powerful version of :class:`applyMp`, assuming you have a cluster to run it on.
+Example::
+
+    # returns [3, 2]
+    ["abc", "de"] | applyCl(len) | deref()
+    # returns [5, 6, 9]
+    range(3) | applyCl(lambda x, bias: x**2+bias, bias=5) | deref()
+    
+    # returns [[1, 2, 3], [1, 2, 3]], demonstrating outside vars work
+    someList = [1, 2, 3]
+    ["abc", "de"] | applyCl(lambda s: someList) | deref()
+
+Internally, this uses the library Ray (https://www.ray.io) to do the heavy
+lifting. So, :class:`applyCl` can be thought of as a thin wrapper around that
+library, but still has the same consistent interface as :class:`apply` and
+:class:`applyMp`. From all of my tests so far, it seems that :class:`applyCl`
+works quite well and is quite robust, so if you have access to a cluster, use
+it over :class:`applyMp`.
+
+The library will connect to a Ray cluster automatically when you import
+everything using ``from k1lib.imports import *``. It will execute
+``import ray; ray.init()``, which is quite simple. If you have ray installed,
+but does not want this default behavior, you can do this::
+
+    import k1lib
+    k1lib.settings.startup.init_ray = False
+    from k1lib.imports import *
+
+As with :class:`applyMp`, there are pitfalls and weird quirks to multiprocessing,
+on 1 or multiple nodes, so check out the docs over there to be aware of them,
+as those translates well to here.
+
+.. admonition:: Advanced use case
+
+    Not really advanced, but just a bit difficult to understand/follow. Let's say
+    that you want to scan through the home directory of all nodes, grab all files,
+    read them, and get the number of bytes they have. You can do something like this::
+    
+        a = None | applyCl.aS(lambda: None | cmd("ls ~") | filt(os.path.isfile) | deref()) | deref()
+        b = a | ungroup(single=True, begin=True) | deref()
+        c = b | applyCl(cat(text=False) | shape(0), pre=True) | deref()
+        d = c | groupBy(0, True) | apply(item().all() | toSum(), 1) | deref()
+    
+    Noted, this is relatively complex. Let's see what A, B, C and D looks like::
+    
+        # A
+        [['7bb387b2920694abe9f7d2a2ed939b6d31843faf91d174d0221e871d', ['Miniconda3-latest-Linux-x86_64.sh', 'mintupgrade-2023-04-01T232950.log']],
+         ['1051dafd2b0dac13561c46fe052f561400592f0723df2cd746a41068', ['5a', 'abc.jpg', 'a.txt']]]
+        # B
+        [['7bb387b2920694abe9f7d2a2ed939b6d31843faf91d174d0221e871d', 'Miniconda3-latest-Linux-x86_64.sh'],
+         ['7bb387b2920694abe9f7d2a2ed939b6d31843faf91d174d0221e871d', 'mintupgrade-2023-04-01T232950.log'],
+         ['1051dafd2b0dac13561c46fe052f561400592f0723df2cd746a41068', '5a'],
+         ['1051dafd2b0dac13561c46fe052f561400592f0723df2cd746a41068', 'abc.jpg'],
+         ['1051dafd2b0dac13561c46fe052f561400592f0723df2cd746a41068', 'a.txt']]
+        # C
+        [['7bb387b2920694abe9f7d2a2ed939b6d31843faf91d174d0221e871d', 74403966],
+         ['7bb387b2920694abe9f7d2a2ed939b6d31843faf91d174d0221e871d', 1065252],
+         ['1051dafd2b0dac13561c46fe052f561400592f0723df2cd746a41068', 2601],
+         ['1051dafd2b0dac13561c46fe052f561400592f0723df2cd746a41068', 16341],
+         ['1051dafd2b0dac13561c46fe052f561400592f0723df2cd746a41068', 10177]]
+        # D
+        [['1051dafd2b0dac13561c46fe052f561400592f0723df2cd746a41068', 92185432],
+         ['7bb387b2920694abe9f7d2a2ed939b6d31843faf91d174d0221e871d', 75469218]]
+
+    The steps we're concerned with is A and C. In step A, we're running 2 processes, 1 for each
+    node, to get all the file names in the home directory. In step C, we're running 5 processes
+    total, 2 on the first node and 3 on the second node. For each process, it's going to read as
+    bytes and count up those bytes. Finally in step D, the results are grouped together and the
+    sizes summed.
+
+    So yeah, it's pretty nice that we did all of that in a relatively short amount of code.
+    The data is distributed too (reading multiple files from multiple nodes), so we're truly
+    not bottlenecked by anything.
+
+:param prefetch: if not specified, schedules all jobs at the same time. If
+    specified, schedules jobs so that there'll only be a specified amount of
+    jobs, and will only schedule more if results are actually being used.
+:param timeout: seconds to wait for job before raising an error
+:param bs: if specified, groups ``bs`` number of transforms into 1 job to be more
+    efficient.
+:param rss: resources required for the task. Can be {"CPU": 2} or "CPU" as a shortcut
+:param pre: "preserve", same convention as :meth:`applyCl.aS`. If True, then allow passing
+    through node ids as the first column to shedule jobs on those specific nodes only
+:param orPatch: whether to automatically patch __or__ function so that cli tools can
+    work with numpy arrays on that remote worker
+:param num_cpus: how many cpu does each task take?
+:param kwargs: extra arguments to be passed to the function. ``args`` not
+    included as there're a couple of options you can pass for this cli."""
+        super().__init__(fs=[f]); _fC = fastF(f); self.pre = pre
+        if isinstance(rss, str): rss = {rss: 1}
+        def ogF(e):
+            if orPatch:
+                import k1lib; k1lib.cli.init.patchNumpy()
+                k1lib.cli.init.patchDict(); k1lib.cli.init.patchPandas()
+            return _fC(e, **kwargs)
+        self.ogF = ogF; self.f = ray.remote(resources=rss, num_cpus=num_cpus)(ogF)
+        self.prefetch = prefetch or int(1e9)
+        self.timeout = timeout; self.bs = bs
+        def preprocessF(f, e): # return future (if pre=False), or [nodeId, future] (if pre=True)
+            if pre: nodeId, e = e; return [nodeId, specificNode(f, nodeId).remote(e)]
+            else: return f.remote(e)
+        def resolveF(e):
+            if pre: return [e[0], ray.get(e[1], timeout=timeout)]
+            else: return ray.get(e, timeout=timeout)
+        self.preprocessF = preprocessF; self.resolveF = resolveF
+    def __ror__(self, it):
+        f = self.f; timeout = self.timeout; bs = self.bs; ogF = self.ogF; preprocessF = self.preprocessF; resolveF = self.resolveF
+        if bs > 1: return it | cli.batched(bs, True) | applyCl(lambda x: x | apply(ogF) | cli.aS(list), self.prefetch, timeout) | cli.joinStreams()
+        def gen(it):
+            futures = deque(); it = iter(it)
+            for i, e in zip(range(self.prefetch), it): futures.append(preprocessF(f, e))
+            for e in it: yield resolveF(futures.popleft()); futures.append(preprocessF(f, e))
+            for e in futures: yield resolveF(e)
+        return gen(it)
+    @staticmethod
+    def nodeIds(includeSelf=True) -> List[str]:
+        """Returns a list of all node ids in the current cluster.
+Example::
+
+    applyCl.nodeIds() # returns something like ['7bb387b2920694abe9f7d2a2ed939b6d31843faf91d174d0221e871d', '1051dafd2b0dac13561c46fe052f561400592f0723df2cd746a41068']
+
+If you want to get nodes' metadata, then just use ray's builtin function ``ray.nodes()``
+
+:param includeSelf: whether to include node id of the current process or not"""
+        res = ray.nodes() | cli.filt(lambda x: x["Alive"]) | apply(lambda x: x["NodeID"]) | aS(list)
+        if includeSelf: return res
+        res.remove(applyCl.nodeId()); return res
+    @staticmethod
+    def nodeId() -> str:
+        """Returns current node id"""
+        return ray.runtime_context.get_runtime_context().get_node_id()
+    @staticmethod
+    def meta() -> object:
+        """Grabs the metadata object for the current node"""
+        return ray.nodes() | cli.filt(lambda x: x["NodeID"] == applyCl.nodeId()) | cli.item()
+    @staticmethod
+    def cpu() -> int:
+        """Grabs the number of cpus available on this node"""
+        return int(applyCl.meta()["Resources"]["CPU"])
+    @staticmethod
+    def aS(f, timeout:float=8):
+        """Executes function f once for all node ids that are piped in.
+Example::
+
+    # returns [['1051da...', ['Desktop', 'Downloads']], ['7bb387...', ['Pictures', 'Music']]]
+    applyCl.nodeIds() | applyCl.aS(lambda: None | cmd("ls ~") | deref()) | deref()
+    # also returns [['1051da...', ['Desktop', 'Downloads']], ['7bb387...', ['Pictures', 'Music']]]
+    None | applyCl.aS(lambda: None | cmd("ls ~") | deref()) | deref()
+
+If you want to execute f for all nodes, you can pass in None instead.
+
+As a reminder, this kinda follows the same logic as the popular cli :class:`aS`, where
+f is executed once, hence the name "apply Single". Here, the meaning of "single" is
+different. It just means execute once for each node ids.
+
+:param f: main function to execute in each node. Not supposed to accept any arguments
+:param timeout: seconds to wait for job before raising an error"""
+        f = fastF(f); g = lambda nodeId: specificNode(ray.remote(f), nodeId).remote()
+        final = cli.iden() & (apply(g) | aS(list) | apply(ray.get, timeout=timeout)) | cli.transpose()
+        return aS(lambda it: (applyCl.nodeIds() if it is None else it) | final)
+    @staticmethod
+    def replicateFile(fn:str, nodeIds=None):
+        """Replicates a specific file in the current node to all the other nodes.
+Example::
+
+    applyCl.replicate("~/cron.log")
+
+Internally, this will read chunks of 100kB of the specified file and dump it
+incrementally to all other nodes, which has implications on performance. To
+increase or decrease it, check out :class:`~k1lib.cli.inp.cat`. This also means
+you can replicate arbitrarily large files around as long as you have the disk
+space for it, while ram size doesn't really matter
+
+:param fn: file name"""
+        fn = os.path.expanduser(fn); dirname = os.path.dirname(fn)
+        if nodeIds is None: nodeIds = applyCl.nodeIds(False)
+        nodeIds = nodeIds | cli.wrapList().all() | cli.deref()
+        nodeIds | cli.insert(None, False).all() | applyCl(lambda _: None | cli.cmd(f"mkdir -p {dirname}; rm {fn}") | cli.deref(), pre=True) | cli.deref()
+        for chunk in cli.cat(fn, text=False, chunks=True):
+            nodeIds | cli.insert(chunk, False).all() | applyCl(lambda chunk: chunk >> cli.file(fn) | cli.deref(), pre=True) | cli.deref()
+    @staticmethod
+    def splitFile(fn:str, nodeIds=None):
+        """Splits a specified file in the current node and dumps other parts
+to other nodes. Example::
+
+    applyCl.splitFile("~/cron.log")
+
+This will split the big file up into multiple segments (1 for each node). Then
+for each segment, it will read through it chunk by chunk into memory, and then
+deposits it into the respective nodes. Finally, it truncates the original file
+down to its segment boundary.
+
+The exact split rule depends on the number of CPUs of each node. Say there're
+2 nodes: A and B. A has 16 cpus and B has 8 cpus. Then, a 48MB file will be split
+into 2 parts. A will have the first 32MB, and B will have the last 16MB. This is
+to optimize for distributed reading and processing using :meth:`applyCl.cat`.
+This makes sense right? If you don't have as many cores, you should process less
+data, so you should have less data to work with from the beginning.
+
+Again, this means that you can split arbitrarily large files as long as you have
+the disk space for it, ram size is not a concern. How does this perform? Not
+the best in the world if you don't have a lot of nodes. With sata 3 ssds, 750MB/s
+ethernet, I got transfer speeds of roughly 100MB/s. This should increase as you
+have more nodes based on the code structure, but I haven't tested it yet. Can
+it be faster? Definitely. Am I willing to spend time optimizing it? No."""
+        fn = os.path.expanduser(fn); dirname = os.path.dirname(fn)
+        if nodeIds is None: nodeIds = applyCl.nodeIds(False)
+        nodeIds | cli.wrapList().all() | cli.insert(None, False).all() | applyCl(lambda _: None | cli.cmd(f"mkdir -p {dirname}; rm {fn}") | cli.deref(), pre=True) | cli.deref()
+        nodeId2Cpu = ray.nodes() | cli.filt(lambda x: x["Alive"]) | cli.apply(lambda x: [x["NodeID"], int(x["Resources"]["CPU"])]) | cli.toDict()
+        n = len(nodeIds)+1; ranges = fn | cli.splitSeek(n, weights=[nodeId2Cpu[applyCl.nodeId()], *nodeIds | cli.lookup(nodeId2Cpu)]) | cli.splitSeek.window()
+        for chunks in ranges[1:] | ~cli.apply(lambda a,b: [cli.cat(fn, False, True, sB=a, eB=b), b'' | cli.repeat()] | cli.joinStreams()) | cli.transpose():
+            if chunks | cli.apply(len) | cli.toSum() == 0: break
+            [nodeIds, chunks] | cli.transpose() | applyCl(lambda chunk: chunk >> cli.file(fn) | cli.deref(), pre=True) | cli.deref()
+        with open(fn, 'a') as f: f.truncate(ranges[0][1])
+    @staticmethod
+    def cat(fn:str, f:Callable, timeout:float=30, keepNodeIds:bool=False, multiplier:int=1):
+        """Reads a file distributedly, does some operation on them, collects and
+returns all of the data together. Example::
+
+    fn = "~/repos/labs/k1lib/k1lib/cli/test/applyCl.cat.data"
+    ("0123456789"*5 + "\n") * 1000 | file(fn)
+    applyCl.splitFile(fn)
+    applyCl.cat(fn, shape(0), keepNodeIds=True) | deref()
+
+That returns something like this (for a 2-node cluster, with 2 (node A) and 4 (node B) cpus respectively)::
+
+    [['7bb387b2920694abe9f7d2a2ed939b6d31843faf91d174d0221e871d', 167],
+     ['7bb387b2920694abe9f7d2a2ed939b6d31843faf91d174d0221e871d', 167],
+     ['1051dafd2b0dac13561c46fe052f561400592f0723df2cd746a41068', 166],
+     ['1051dafd2b0dac13561c46fe052f561400592f0723df2cd746a41068', 167],
+     ['1051dafd2b0dac13561c46fe052f561400592f0723df2cd746a41068', 166],
+     ['1051dafd2b0dac13561c46fe052f561400592f0723df2cd746a41068', 167]]
+
+Here, we're creating an initial file with 1000 lines. Then we'll split it up into
+2 fragments: 334 lines and 667 lines and store them on the respective nodes. Then,
+on node A, we'll split the file up into 2 parts, each with 167 lines. On node B,
+we'll split the file up into 4 parts, each with around 166 lines. Then we'll
+schedule 6 processes total, each dealing with 166 lines. After all of that, results
+are collected together and returned.
+
+:param fn: file name
+:param f: function to execute in every process
+:param timeout: kills the processes if it takes longer than this amount of seconds
+:param keepNodeIds: whether to keep the node id column or not
+:param multiplier: by default, each node will spawn as many process as there
+    are cpus. Sometimes you want to spawn more process, change this to a higher number
+"""
+        checkpoints = None | applyCl.aS(lambda: fn | cli.splitSeek(int(applyCl.meta()["Resources"]["CPU"]*multiplier)) | cli.splitSeek.window() | cli.deref()) | cli.ungroup(single=True, begin=True) | cli.deref()
+        postprocess = cli.iden() if keepNodeIds else cli.cut(1)
+        return checkpoints | applyCl(~aS(lambda x,y: cli.cat(fn, sB=x, eB=y) | f), pre=True, timeout=timeout, num_cpus=1) | postprocess
 thEmptySentinel = object()
 class applyTh(BaseCli):
-    def __init__(self, f, prefetch:int=2, timeout:float=5, bs:int=1):
+    def __init__(self, f, prefetch:int=None, timeout:float=5, bs:int=1):
         """Kinda like the same as :class:`applyMp`, but executes ``f`` on multiple
 threads, instead of on multiple processes. Advantages:
 
@@ -304,7 +589,7 @@ Disadvantages:
 
 All examples from :class:`applyMp` should work perfectly here."""
         fs = [f]; super().__init__(fs=fs); self.f = fs[0]; self.bs = bs
-        self.prefetch = prefetch; self.timeout = timeout
+        self.prefetch = prefetch or int(1e9); self.timeout = timeout
     def __ror__(self, it):
         if self.bs > 1:
             yield from (it | cli.batched(self.bs, True) | applyTh(apply(self.f), self.prefetch, self.timeout) | cli.joinStreams()); return

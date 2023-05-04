@@ -11,7 +11,7 @@ try: import torch; hasTorch = True
 except: torch = k1lib.Object().withAutoDeclare(lambda: type("RandomClass", (object, ), {})); hasTorch = False
 try: import PIL; hasPIL = True
 except: hasPIL = False
-__all__ = ["size", "shape", "item", "iden", "join", "wrapList",
+__all__ = ["size", "shape", "item", "rItem", "iden", "join", "wrapList",
            "equals", "reverse", "ignore", "rateLimit", "timeLimit", "tab", "indent",
            "clipboard", "deref", "bindec", "smooth", "disassemble",
            "tree", "lookup", "dictFields"]
@@ -113,6 +113,13 @@ Example::
     def __ror__(self, it:Iterator[str]):
         if self.amt != 1: return it | self._f
         return next(iter(it), *self.fillP)
+def rItem(idx: int):
+    """Combines ``rows(idx) | item()``, as this is a pretty common pattern.
+Example::
+
+    iter(range(10)) | rItem(4) # returns 4
+"""
+    return cli.rows(idx) | item()
 class iden(BaseCli):
     def __init__(self):
         """Yields whatever the input is. Useful for multiple streams.

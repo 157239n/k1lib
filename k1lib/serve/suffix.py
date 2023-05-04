@@ -2,7 +2,7 @@ import inspect, io, base64
 from flask import Flask, request
 from flask_cors import CORS
 
-d = serve.analyze(endpoint); args = d["args"]; annos = d["annos"]
+d = k1lib.serve.analyze(endpoint); args = d["args"]; annos = d["annos"]
 d | aS(dill.dumps) | file("META_FILE")
 app = Flask(__name__); CORS(app)
 
@@ -12,7 +12,7 @@ def healthCheck(): return "ok"
 @app.route("/", methods=["POST"])
 def main():
     js = request.json
-    return serve.pyToWeb(endpoint(*[serve.webToPy(js[arg], annos[arg]) for arg in args]), annos["return"])
+    return k1lib.serve.pyToWeb(endpoint(*[k1lib.serve.webToPy(js[arg], annos[arg]) for arg in args]), annos["return"])
 
 try:
     import waitress

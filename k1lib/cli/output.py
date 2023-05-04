@@ -205,23 +205,17 @@ def headOut(lines:int=10):
 def tab(text, pad="    "):
     return "\n".join([pad + line for line in text.split("\n")])
 class intercept(BaseCli):
-    def __init__(self, raiseError:bool=True):
+    def __init__(self, f=None, raiseError:bool=True):
         """Intercept flow at a particular point, analyze the object piped in, and
 raises error to stop flow. Example::
 
     3 | intercept()
 
+:param f: prints out the object transformed by this function
 :param raiseError: whether to raise error when executed or not."""
-        self.raiseError = raiseError
+        self.f = f or cli.shape(); self.raiseError = raiseError
     def __ror__(self, s):
-        print(type(s))
-        if isinstance(s, (numbers.Number, str, bool)): print(tab(f"{s}"))
-        elif isinstance(s, (tuple, list)):
-            print(tab(f"Length: {len(s)}"))
-            for e in s: print(tab(f"- {type(e)}"))
-        elif isinstance(s, settings.arrayTypes):
-            print(tab(f"Shape: {s.shape}"))
-            if s.numel() < 1000: print(tab(f"{s}"))
+        print(type(s)); print(self.f(s))
         if self.raiseError: raise RuntimeError("intercepted")
         return s
 class plotImgs(BaseCli):

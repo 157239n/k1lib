@@ -882,7 +882,7 @@ or_patch = Settings()\
     .add("numpy", True, "whether to patch numpy arrays")\
     .add("dict", True, "whether to patch Python dict keys and items")\
     .add("pandas", True, "whether to patch pandas series")
-startup = Settings().add("or_patch", or_patch, "whether to patch __or__() method for several C-extension datatypes (numpy array, pandas data frame/series, etc). This would make cli operations with them a lot more pleasant, but might cause strange bugs. Haven't met them myself though")
+startup = Settings().add("init_ray", True, "whether to connect to ray's cluster accessible locally automatically").add("or_patch", or_patch, "whether to patch __or__() method for several C-extension datatypes (numpy array, pandas data frame/series, etc). This would make cli operations with them a lot more pleasant, but might cause strange bugs. Haven't met them myself though")
 settings.add("startup", startup, "these settings have to be applied like this: `import k1lib; k1lib.settings.startup.or_patch = False; from k1lib.imports import *` to ensure that the values are set")
 settings.add("pushNotificationKey", os.getenv("k1lib_pushNotificationKey", None), "API key for `k1lib.pushNotification()`. See docs of that for more info")
 def sign(v): return 1 if v > 0 else -1

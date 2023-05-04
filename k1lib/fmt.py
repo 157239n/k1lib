@@ -8,8 +8,9 @@ automatically with::
 """
 import k1lib, math; from k1lib import cli
 from typing import Dict, Iterator, Tuple
+pygments = k1lib.dep("pygments")
 __all__ = ["generic", "metricPrefixes", "size", "sizeOf",
-           "comp", "compRate", "time", "item", "throughput", "txt"]
+           "comp", "compRate", "time", "item", "throughput", "txt", "code", "h", "pre", "row", "col"]
 k1lib.settings.add("fmt", k1lib.Settings().add("separator", True, "whether to have a space between the number and the unit"), "from k1lib.fmt module");
 settings = k1lib.settings.fmt
 metricPrefixes = {-8:"y",-7:"z",-6:"a",-5:"f",-4:"p",-3:"n",-2:"u",-1:"m",0:"",1:"k",2:"M",3:"G",4:"T",5:"P",6:"E",7:"Z",8:"Y"}
@@ -145,3 +146,45 @@ Example::
     def underline(s:str): return f"{_esc}4m{s}{_end}"
     @staticmethod
     def identity(s:str):  return f"{s}"
+class code:
+    def python(code:str):
+        """Formats Python code.
+Example::
+
+    fmt.code.python(\"\"\"
+    def f(x:int):
+        return x + 3
+    \"\"\") | aS(IPython.display.HTML)
+"""
+        a = "<style>" + pygments.formatters.HtmlFormatter().get_style_defs(".highlight") + "</style>"
+        b = pygments.highlight(code, pygments.lexers.PythonLexer(), pygments.formatters.HtmlFormatter())
+        return a + b
+def h(code:str, level:int=1) -> str:
+    """Wraps content inside a 'h' html tag.
+Example::
+
+    fmt.h("abc", 2) # returns "<h2>abc</h2>"
+
+:param level: what's the header level?"""
+    return f"<h{level}>{code}</h{level}>"
+def pre(code:str) -> str:
+    """Wraps content inside a 'pre' html tag.
+Example::
+
+    fmt.pre("abc")
+"""
+    return f"<pre style='font-family: courier'>{code}</pre>"
+def col(*args):
+    """Creates a html col of all the elements.
+Example::
+
+    fmt.col("abc", "def") | aS(IPython.display.HTML)
+"""
+    return args | cli.apply(lambda x: f"<div style='margin: 10px'>{x}</div>") | cli.join("") | cli.aS(lambda x: f"<div style='display: flex; flex-direction: column'>{x}</div>")
+def row(*args):
+    """Creates a html row of all the elements.
+Example::
+
+    fmt.row("abc", "def") | aS(IPython.display.HTML)
+"""
+    return args | cli.apply(lambda x: f"<div style='margin: 10px'>{x}</div>") | cli.join("") | cli.aS(lambda x: f"<div style='display: flex; flex-direction: row'>{x}</div>")
