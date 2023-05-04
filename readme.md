@@ -1,6 +1,6 @@
 # k1lib
 
-This library enables piping in Python, and has a lot of prebuilt functionalities
+This library enables piping in Python, and has a lot of prebuilt piping tools
 to support this workflow.
 
 ## Installation
@@ -10,13 +10,13 @@ to support this workflow.
 ```
 
 This will install lots of heavy dependencies like PyTorch. If you want to install
-the leanest version of the library, do this instead::
+the leanest version of the library, do this instead:
 
 ```bash
   pip install k1lib
 ```
 
-To use it in a notebook, do this::
+To use it in a notebook, do this:
 
 ```python
   from k1lib.imports import *
@@ -72,7 +72,7 @@ You can combine these "cli tools" together in really complex ways to do really c
 manipulation really fast and with little code. Hell, you can even create a full blown
 PyTorch dataloader from scratch where you're in control of every detail, operating in 7
 dimensions, in multiple processes on multiple nodes, in just 6 lines of code. Check over
-the basics of it here: :mod:`k1lib.cli`.
+the basics of it here: [k1lib.cli](https://k1lib.com/latest/cli/index.html).
 
 After doing that, you can check out the tutorials to get a large overview of how everything
 integrates together nicely.
