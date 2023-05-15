@@ -5,7 +5,7 @@ import k1lib.cli as cli; from k1lib.cli import *
 from collections import defaultdict
 try: import PIL.Image, PIL; hasPIL = True
 except: PIL = k1.dep("PIL"); hasPIL = False
-__all__ = ["FromNotebook", "FromPythonFile", "BuildPythonFile", "StartServer", "GenerateHtml", "commonCbs", "serve",
+__all__ = ["FromNotebook", "FromPythonFile", "BuildPythonFile", "BuildDashFile", "StartServer", "GenerateHtml", "commonCbs", "serve",
            "text", "slider", "html", "analyze", "webToPy", "pyToWeb"]
 basePath = os.path.dirname(inspect.getabsfile(k1lib)) + os.sep + "serve" + os.sep
 class FromNotebook(k1.Callback):
@@ -27,7 +27,7 @@ class BuildPythonFile(k1.Callback):
 
 :param port: which port to run on localhost. If not given, then a port will
     be picked at random, and will be available at ``cbs.l['port']``"""
-        super().__init__(); self.port = port
+        super().__init__(); self.port = port; self.suffix = "suffix.py"
     def buildPythonFile(self):
         # simple prefix
         self.l["pythonFile"] = ["from k1lib.imports import *", *self.l["sourceCode"]] | cli.file()
@@ -37,7 +37,12 @@ class BuildPythonFile(k1.Callback):
         # grabs temp meta file for communication
         self.l["metaFile"] = metaFile = "" | cli.file(); os.remove(metaFile)
         # actually has enough info to build the server
-        (cli.cat(f"{basePath}suffix.py") | cli.op().replace("SOCKET_PORT", f"{port}").replace("META_FILE", metaFile).all()) >> cli.file(self.l["pythonFile"])
+        (cli.cat(f"{basePath}{self.suffix}") | cli.op().replace("SOCKET_PORT", f"{port}").replace("META_FILE", metaFile).all()) >> cli.file(self.l["pythonFile"])
+class BuildDashFile(BuildPythonFile):
+    def __init__(self):
+        """Builds the output Python file for a Dash app, ready to be served on localhost"""
+        super().__init__()
+        self.suffix = "suffix-dash.py"
 class StartServer(k1.Callback):
     def __init__(self, initTime=10):
         """Starts the server, verify that it starts okay and dumps meta information (including

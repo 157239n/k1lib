@@ -251,7 +251,7 @@ list. Used in the "a & b" joining operator. See also: :meth:`BaseCli.__and__`"""
             except: ts.append(cli.typehint.tAny())
         return cli.typehint.tCollection(*ts).reduce()
     def __ror__(self, it:Iterator[Any]) -> Iterator[Iterator[Any]]:
-        if isinstance(it, atomic.baseAnd) or not _iterable(it):
+        if isinstance(it, atomic.baseAnd) or isinstance(it, k1lib.cli.splitSeek) or not _iterable(it):
             for cli in self._cliCs: yield cli(it)
         else:
             its = itertools.tee(it, len(self.clis))

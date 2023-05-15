@@ -15,8 +15,8 @@ an iterator and output a single object (like getting max, min, std, mean values)
 __all__ = ["toTensor", "toRange", "toList",
            "toSum", "toProd", "toAvg", "toMean", "toMax", "toMin", "toPIL", "toImg",
            "toRgb", "toRgba", "toGray", "toDict",
-           "toFloat", "toInt", "toBytes", "toHtml"]
-import re, k1lib, math, os, numpy as np, io, base64
+           "toFloat", "toInt", "toBytes", "toHtml", "toAscii"]
+import re, k1lib, math, os, numpy as np, io, base64, unicodedata
 from k1lib.cli.init import BaseCli, Table, Row, T, yieldT; import k1lib.cli as cli
 from k1lib.cli.typehint import *; import matplotlib as mpl; import matplotlib.pyplot as plt
 from collections import deque; from typing import Iterator, Any, List, Set, Tuple, Dict, Callable, Union
@@ -435,7 +435,8 @@ Example::
         if hasPlotly:
             if isinstance(it, plotly.graph_objs._figure.Figure):
                 out = io.StringIO(); it.write_html(out); out.seek(0); return out.read()
-        return NotImplemented
+        return it._repr_html_()
+        # return NotImplemented
 try:
     from rdkit import Chem
     from rdkit.Chem import Draw
@@ -456,3 +457,12 @@ Example::
     "c1ccc(C)cc1" | toMol() | toSmiles()"""
         return cli.aS(Chem.MolToSmiles)
 except: pass
+import unicodedata
+def toAscii():
+    """Converts complex unicode text to its base ascii form.
+Example::
+
+    "hà nội" | toAscii() # returns "ha noi"
+
+Taken from https://stackoverflow.com/questions/2365411/convert-unicode-to-ascii-without-errors-in-python"""
+    return cli.aS(lambda word: unicodedata.normalize('NFKD', word).encode('ascii', 'ignore'))

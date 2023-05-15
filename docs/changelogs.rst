@@ -20,12 +20,17 @@ Cli:
 - Fixed ``cut()[2:-2]`` edge case
 - Added :class:`~utils.rItem` for quality of life
 - Added demiliter-splitting mode to :class:`~conv.toDict`
+- Added :meth:`nb.execute.rightAway`, :meth:`conv.toAscii`
+- Added :meth:`modifier.applyMp.shared` to easily share memory between processes
 
 Generic:
 
 - Revamped :mod:`~k1lib.serve` a little, adding a more robust type system
 - Added more default imports like ray and pyarrow
 - Added :class:`~k1lib.viz.Scroll` and :class:`~k1lib.viz.Toggle`
+- Added :meth:`~k1lib.viz.row`, :meth:`~k1lib.viz.col`, :meth:`~k1lib.viz.pre` and
+  :meth:`~k1lib.viz.h` to quickly build html strings
+- Added :meth:`~k1lib.capturePlt` to capture matplotlib plots
 
 `1.2 </1.2>`_
 ---------------

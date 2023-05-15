@@ -82,3 +82,15 @@ everything is nice and clean
                 except Exception as e:
                     print("Problematic cell:\n")
                     print(source); traceback.print_exc(); raise e
+    @staticmethod
+    def rightAway(fileName:str, _globals:dict=None, tag:str=None):
+        """Convenience function to execute a notebook right away.
+Example::
+
+    fn = "some/file.ipynb"
+    nb.cells(fn) | nb.pretty(whitelist=[tag]) | nb.execute(nb, globals())
+    nb.execute.rightAway(fn, globals(), tag)
+
+Last 2 lines are pretty much the same."""
+        if tag: tag = pretty(whitelist=[tag]) if tag else cli.iden()
+        return cells(fileName) | tag | execute(fileName, _globals)

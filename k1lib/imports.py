@@ -67,3 +67,9 @@ try: import seaborn as sns
 except: pass
 try: import pyarrow; import pyarrow.feather as feather
 except: pass
+try: import plotly; import plotly.express as px
+except: pass
+try: import graphviz
+except: pass
+try: import line_profiler; line_profiler.load_ipython_extension(IPython.get_ipython())
+except: pass

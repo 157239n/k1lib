@@ -192,17 +192,19 @@ Will even work even when you export the notebook as html. Example::
         for im in imgs: im | self
     def __ror__(self, d):
         """Adds an image/html content to the collection"""
-        if isinstance(d, str): self.imgs.append(f"{d}")
-        else: self.imgs.append(f"<img alt='' style='max-width: 100%' src='data:image/png;base64, {base64.b64encode(d | cli.toBytes()).decode()}' />")
+        if isinstance(d, str): self.imgs.append(k1lib.encode(f"{d}"))
+        else: self.imgs.append(k1lib.encode(f"<img alt='' style='max-width: 100%' src='data:image/png;base64, {base64.b64encode(d | cli.toBytes()).decode()}' />"))
     def pop(self):
         """Pops last image"""
         return self.imgs.pop()
     def __getitem__(self, idx): return self.imgs[idx]
     def _repr_html_(self):
-        imgs = self.imgs | cli.op().replace("`", "\`").all() | cli.apply(lambda x: f"`{x}`") | cli.deref()
-        #imgs = [f"\"<img alt='' src='data:image/{fmt};base64, {img}' />\"" for fmt, img in self.imgs]
         idx = Carousel._idx()
         pre = f"k1c_{idx}"
+        imgs = self.imgs | cli.op().replace("`", "\`").all() | cli.apply(lambda x: f"`{x}`") | cli.deref()
+        n = len(imgs)
+        contents = imgs | cli.apply(k1lib.decode) | cli.insertIdColumn() | ~cli.apply(lambda idx, html: f"<div id='{pre}_content{idx}'>{html}</div>") | cli.deref() | cli.join('\n')
+        #imgs = [f"\"<img alt='' src='data:image/{fmt};base64, {img}' />\"" for fmt, img in self.imgs]
         html = f"""<!-- k1lib.Carousel -->
 <style>
     .{pre}_btn {{
@@ -231,13 +233,19 @@ Will even work even when you export the notebook as html. Example::
     </div>
     <div id="{pre}_status" style="padding: 10px"></div>
 </div>
-<div id="{pre}_imgContainer"></div>
+<div id="{pre}_imgContainer">
+    {contents}
+</div>
 <script>
     {pre}_imgs = [{','.join(imgs)}];
     {pre}_imgIdx = 0;
     function {pre}_display() {{
-        document.querySelector("#{pre}_imgContainer").innerHTML = {pre}_imgs[{pre}_imgIdx];
-        document.querySelector("#{pre}_status").innerHTML = "Image: " + ({pre}_imgIdx + 1) + "/" + {pre}_imgs.length;
+        //document.querySelector("#{pre}_imgContainer").innerHTML = window.atob({pre}_imgs[{pre}_imgIdx]);
+        for (let i = 0; i < {n}; i++) {{
+            document.querySelector(`#{pre}_content${{i}}`).style.display = "none";
+        }}
+        document.querySelector(`#{pre}_content${{{pre}_imgIdx}}`).style.display = "block";
+        document.querySelector("#{pre}_status").innerHTML = "Page: " + ({pre}_imgIdx + 1) + "/" + {pre}_imgs.length;
     }};
     document.querySelector("#{pre}_prevBtn").onclick = () => {{
         {pre}_imgIdx -= 1;

@@ -6,28 +6,30 @@ from k1lib.cli import BaseCli; import k1lib.cli as cli
 from k1lib.cli.typehint import *
 try: import minio; hasMinio = True
 except: hasMinio = False
-__all__ = ["cat", "splitSeek", "curl", "wget", "ls", "cmd", "walk", "requireCli"]
+__all__ = ["cat", "splitSeek", "refineSeek", "curl", "wget", "ls", "cmd", "walk", "requireCli"]
 settings = k1lib.settings.cli
 catSettings = k1lib.Settings().add("chunkSize", 100000, "file reading chunk size for binary+chunk mode. Decrease it to avoid wasting memory and increase it to avoid disk latency")
 catSettings.add("every", k1lib.Settings().add("text", 1000, "for text mode, will print every n lines").add("binary", 10, "for binary mode, will print every n 100000-byte blocks"), "profiler print frequency")
 settings.add("cat", catSettings, "inp.cat() settings")
 def _catGenText(fn, sB, eB): # fn for "file name"
-    if sB == 0 and eB == -1: # fast path without bounds (90-160 MB/s expected)
-        with open(fn) as f:
-            while True:
-                line = f.readline()
-                if line == "": return
-                yield line[:-1] if line[-1] == "\n" else line
-    else: # slow path with bounds (15 MB/s expected)
-        sB = wrap(fn, sB); eB = wrap(fn, eB)
-        with open(fn) as f:
-            f.seek(sB); b = sB # current byte
-            while True:
-                line = f.readline()
-                if line == "": return
-                if f.tell() > eB: yield line[:len(line)-(f.tell()-eB)]; return
-                if line[-1] == "\n": yield line[:-1]
-                else: yield line
+    try:
+        if sB == 0 and eB == -1: # fast path without bounds (90-160 MB/s expected)
+            with open(fn) as f:
+                while True:
+                    line = f.readline()
+                    if line == "": return
+                    yield line[:-1] if line[-1] == "\n" else line
+        else: # slow path with bounds (15 MB/s expected)
+            sB = wrap(fn, sB); eB = wrap(fn, eB)
+            with open(fn) as f:
+                f.seek(sB); b = sB # current byte
+                while True:
+                    line = f.readline()
+                    if line == "": return
+                    if f.tell() > eB: yield line[:len(line)-(f.tell()-eB)]; return
+                    if line[-1] == "\n": yield line[:-1]
+                    else: yield line
+    except FileNotFoundError: pass
 def _catGenBin(fn, sB, eB):
     chunkSize = settings.cat.chunkSize; sB = wrap(fn, sB); eB = wrap(fn, eB); nB = eB - sB # number of bytes to read total
     with open(fn, "rb") as f:
@@ -111,7 +113,7 @@ This cli has lots of settings at :data:`~k1lib.settings`.cli.cat
 :param profile: whether to profile the file reading rate or not. Can adjust
     printing frequency using `settings.cli.cat.every`
 :param sB: "start byte". Specify this if you want to start reading from this byte
-:param eB: "end byte", inclusive. Default -1 means end of file"""
+:param eB: "end byte", exclusive. Default -1 means end of file"""
     if chunks is None: chunks = True if text else False
     if profile and not chunks: warnings.warn(f"Can't profile reading rate when you're trying to read everything at once"); profile = False
     f = _cat(text, chunks, sB, eB)
@@ -139,7 +141,7 @@ Example::
     return cli.aS(gen) if fileName is None else fileName | cli.aS(gen)
 cat.pickle = _catPickle
 class splitSeek(BaseCli):
-    def __init__(self, n, c=b'\n', weights=None):
+    def __init__(self, n=None, c=b'\n', ws=None):
         """Splits a file up into n fragments aligned to the closest character and return the seek points.
 Example::
 
@@ -153,6 +155,8 @@ Example::
     open("test/largeFile.txt") | splitSeek(31) | shape(0)
     # returns [0, 0, 10, 10, 20, 30, 30, 40, 40, 50], notice some segments have zero length
     "test/largeFile.txt" | splitSeek(200) | head()
+    # returns [0, 400, 1200], demonstrating that you can split a file up unevenly by weights
+    "test/largeFile.txt" | splitSeek(ws=[1, 2]) | deref()
 
 So, the generated file has 120 lines in total. Each line is 10 bytes (9 for
 the string, and 1 for the new line character). Splitting the file into 31
@@ -161,7 +165,7 @@ can then use these seek points to read the file in multiple threads/processes
 using :meth:`cat`, like this::
 
     # returns [['  0_56789', '  1_56789', '  2_56789'], ['  3_56789', '  4_56789', '  5_56789', '  6_56789']]
-    "test/largeFile.txt" | splitSeek(31) | window(2) | ~apply(lambda sB, eB: cat("test/largeFile.txt", sB=sB, eB=eB-1)) | head(2) | deref()
+    "test/largeFile.txt" | splitSeek(31) | splitSeek.window() | ~apply(lambda sB, eB: cat("test/largeFile.txt", sB=sB, eB=eB)) | head(2) | deref()
 
 Because :math:`120/31\\approx4`, most of cat's reads contain 4 lines, but some
 has 3 lines. Also notice that the lines smoothly transitions between cat's
@@ -197,8 +201,10 @@ if a particular seek point is desirable, and if not, either jump forward or back
 using :meth:`splitSeek.forward` and :meth:`splitSeek.backward`.
 
 :param n: how many splits do you want?
-:param c: block-boundary character, usually just the new line character"""
-        self.n = n; self.c = c; self.weights = weights
+:param c: block-boundary character, usually just the new line character
+:param ws: weights. If given, the splits length ratios will roughly correspond to this"""
+        self.n = n; self.c = c; self.ws = ws; self.fn = None; self.res = None # file name, result
+        if ws is None and n is None: raise Exception("Specify at least n or ws for splitSeek to work")
     @staticmethod
     def forward(f, i:int, c=b'\n') -> int:
         """Returns char location after the search char, going forward.
@@ -247,16 +253,23 @@ Example::
         if isinstance(f, str):
             with open(os.path.expanduser(f), "rb") as _f: return inner(_f)
         else: return inner(f)
-    def __ror__(self, fn):
-        n = self.n; c = self.c; weights = self.weights
+    def __ror__(self, fn): # why return self instead of the seek positions directly? Because we want to pass along dependencies like file name to downstream processes like refineSeek
+        if isinstance(fn, str): fn = os.path.expanduser(fn)
+        n = self.n; c = self.c; ws = self.ws; self.fn = fn
         def func(f):
             f.seek(0, os.SEEK_END); end = f.tell()
-            if weights is None: begins = range(n) | cli.apply(lambda x: int(x*end/n))
-            else: begins = range(end) | cli.splitW(*weights) | cli.apply(lambda x: x.start)
+            if ws is None: begins = range(n) | cli.apply(lambda x: int(x*end/n))
+            else: begins = range(end) | cli.splitW(*ws) | cli.apply(lambda x: x.start)
             return [*begins | cli.apply(lambda x: splitSeek.backward(f, x, c)), end]
         if isinstance(fn, str):
-            with open(os.path.expanduser(fn), 'rb') as f: return func(f)
-        else: return func(fn)
+            with open(os.path.expanduser(fn), 'rb') as f: self.res = func(f); return self
+        else: self.res = func(fn); return self
+    def __or__(self, aft):
+        if self.res is None: return super().__or__(aft)
+        return aft.__ror__(self)
+    def __getitem__(self, idx): return self.res[idx]
+    def __len__(self): return len(self.res)
+    def __iter__(self): return iter(self.res)
     @staticmethod
     def window():
         """Converts input boundaries into segment windows.
@@ -271,6 +284,51 @@ Example::
             it = it | cli.aS(list); ranges = it | cli.window(2) | cli.apply(lambda x: x-1, 1) | cli.deref()
             ranges[-1][1] += 1; return ranges
         return cli.aS(inner)
+    def __repr__(self): return self.res.__repr__()
+class refineSeek(BaseCli):
+    def __init__(self, f, window=1):
+        """Refines seek positions.
+Example::
+
+    # returns list of integers for seek positions
+    "abc.txt" | splitSeek(30)
+    # returns refined seek positions, such that the line starting at the seek positions starts with "@"
+    "abc.txt" | splitSeek(30) | refineSeek(lambda x: x.startswith(b"@"))
+    # same thing as above
+    "abc.txt" | splitSeek(30) | refineSeek(lambda x: x[0] == b"@"[0])
+    # returns refined seek positions, such that 0th line starts with "@" and 2nd line starts with "+". This demonstrates `window` parameter
+    "abc.txt" | splitSeek(30) | refineSeek(lambda x: x[0][0] == b"@"[0] and x[2][0] == b"+"[0], 3)
+    # same thing as above, demonstrating some builtin refine seek functions
+    "abc.txt" | splitSeek(30) | refineSeek.fastq()
+
+:param f: function that returns True if the current line/lines is a valid block boundary
+:param window: by default (1), will fetch 1 line and check boundary using ``f(line)``.
+    If a value greater than 1 is passed (for example, 3), will fetch 3 lines and check
+    boundary using ``f([line1, line2, line3])``
+"""
+        self.f = cli.fastF(f); self.window = window
+    def __ror__(self, seeks):
+        f = self.f; window = self.window
+        def read(fio, sB:int):
+            fio.seek(sB)
+            if window == 1: return fio.readline()
+            return list(cli.repeatF(lambda: fio.readline(), window))
+        if len(seeks) <= 2: return seeks
+        fn = seeks.fn; newSeeks = [seeks[0]]
+        def process(fio):
+            with open(fn, "rb") as fio:
+                for seek in seeks[1:-1]:
+                    line = read(fio, seek)
+                    while not f(line): seek = splitSeek.forward(fio, seek); line = read(fio, seek)
+                    newSeeks.append(seek)
+            newSeeks.append(seeks[-1]); return newSeeks
+        if isinstance(fn, str):
+            with open(fn, "rb") as fio: return process(fio)
+        else: return process(fn)
+    @classmethod
+    def fastq(cls):
+        """Refine fastq file's seek points"""
+        return cls(lambda x: x[0][0] == b"@"[0] and x[2][0] == b"+"[0], 3)
 def curl(url:str) -> Iterator[str]:
     """Gets file from url. File can't be a binary blob.
 Example::

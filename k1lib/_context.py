@@ -4,7 +4,9 @@ from contextlib import contextmanager
 from functools import partial
 try: import rdkit; hasRdkit = True
 except: hasRdkit = False
-__all__ = ["captureStdout", "ignoreWarnings", "timer", "attrContext"]
+try: import matplotlib.pyplot as plt
+except: pass
+__all__ = ["captureStdout", "capturePlt", "ignoreWarnings", "timer", "attrContext"]
 @contextmanager
 def captureStdout(out=True, c=False) -> k1lib.Wrapper:
     """Captures every print() statement. Taken from https://stackoverflow.com/questions/16571150/how-to-capture-stdout-output-from-a-python-function-call.
@@ -53,6 +55,7 @@ if you want to capture absolutely everything, C or not.
         import wurlitzer; w = k1lib.Wrapper("")
         try:
             with wurlitzer.pipes() as (_out, _err): yield w
+        except BrokenPipeError: pass
         finally: w.value = _out.read().split("\n") if out else _err.read().split("\n")
     else:
         if out: _stdout = sys.stdout; sys.stdout = _stringio = io.StringIO()
@@ -65,6 +68,26 @@ if you want to capture absolutely everything, C or not.
             w.value = [l.split("\r")[-1] for l in _stringio.getvalue().split("\n")]
             if out: sys.stdout = _stdout
             else:   sys.stderr = _stdout
+@contextmanager
+def capturePlt():
+    """Tries to capture matplotlib plot.
+Example::
+
+    x = np.linspace(-2, 2)
+    with k1.capturePlt() as fig:
+        plt.plot(x, x**2)
+        plt.show()
+
+    capturedImage = fig() # reference it here
+
+This is a convenience function to deal with libraries that call ``plt.show()``
+and doesn't let us intercept at the middle to generate an image."""
+    try:
+        ans = k1lib.Wrapper(None)
+        with k1lib._settings.monkey.context(capturePlt=True):
+            yield ans
+        ans.value = plt._k1_capturedImg()
+    finally: pass
 @contextmanager
 def ignoreWarnings():
     """Context manager to ignore every warning.

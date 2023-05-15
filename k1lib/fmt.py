@@ -174,17 +174,17 @@ Example::
     fmt.pre("abc")
 """
     return f"<pre style='font-family: courier'>{code}</pre>"
-def col(*args):
+def col(args):
     """Creates a html col of all the elements.
 Example::
 
-    fmt.col("abc", "def") | aS(IPython.display.HTML)
+    fmt.col(["abc", "def"]) | aS(IPython.display.HTML)
 """
     return args | cli.apply(lambda x: f"<div style='margin: 10px'>{x}</div>") | cli.join("") | cli.aS(lambda x: f"<div style='display: flex; flex-direction: column'>{x}</div>")
-def row(*args):
+def row(args):
     """Creates a html row of all the elements.
 Example::
 
-    fmt.row("abc", "def") | aS(IPython.display.HTML)
+    fmt.row(["abc", "def"]) | aS(IPython.display.HTML)
 """
     return args | cli.apply(lambda x: f"<div style='margin: 10px'>{x}</div>") | cli.join("") | cli.aS(lambda x: f"<div style='display: flex; flex-direction: row'>{x}</div>")

@@ -107,11 +107,17 @@ Context managers
 ------------------
 
 - :class:`k1lib.captureStdout`
+- :class:`k1lib.capturePlt`
 - :class:`k1lib.ignoreWarnings`
 - :class:`k1lib.timer`
 - :class:`k1lib.attrContext`
 
 .. autoclass:: k1lib.captureStdout
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. autoclass:: k1lib.capturePlt
    :members:
    :undoc-members:
    :show-inheritance:

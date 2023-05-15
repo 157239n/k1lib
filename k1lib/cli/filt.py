@@ -377,7 +377,7 @@ automatically use the C-accelerated versions, like this::
             it = iter(it); sentinel = object(); row = next(it, sentinel)
             if row is sentinel: return []
             row = list(row); it = it | cli.insert(row); nCols = len(row)
-            rs = range(nCols); prs = range(nCols+1000) # 1000 for longer rows below. Also "rs" is not a great name, deal with it
+            rs = range(nCols); prs = range(nCols+20) # 20 for longer rows below. Also "rs" is not a great name, deal with it
         if isinstance(columns, slice):
             if not inverted: return it[:,columns] if isArray else (row[columns] for row in (list(row) for row in it))
             columns = list(set(rs[columns]))

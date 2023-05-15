@@ -83,6 +83,7 @@ intersphinx_mapping = {
     'PIL': ('https://pillow.readthedocs.io/en/stable/', None),
     'pandas': ('https://pandas.pydata.org/docs/', None),
     'websockets': ('https://websockets.readthedocs.io/en/stable/', None),
+    'ray': ('https://docs.ray.io/en/latest/', None),
 }
 
 # generating literals

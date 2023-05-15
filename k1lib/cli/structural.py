@@ -149,7 +149,7 @@ iterator with :class:`joinStreams` first, like this::
         else:
             for i in range(self.dims[0]): yield _formStructure(it, self.dims, 1)
 class insert(BaseCli):
-    def __init__(self, elements, begin=True):
+    def __init__(self, element, begin=True):
         """Join element into list.
 Example::
 
@@ -162,11 +162,11 @@ Example::
     [2, 6, 8] | insert([3, 1]) | deref()
 
 :param element: the element to insert"""
-        super().__init__(); self.elements = elements; self.begin = begin; self.expand = False
+        super().__init__(); self.element = element; self.begin = begin; self.expand = False
     def __ror__(self, it:Tuple[T, Iterator[T]]) -> Iterator[T]:
-        elements = self.elements; it = iter(it)
-        if self.begin: yield elements; yield from it
-        else: yield from it; yield elements
+        element = self.element; it = iter(it)
+        if self.begin: yield element; yield from it
+        else: yield from it; yield element
 class splitW(BaseCli):
     def __init__(self, *weights:List[float]):
         """Splits elements into multiple weighted lists. If no weights are provided,
@@ -564,7 +564,7 @@ might be better for you.
                 if separate: yield [v, a]
                 else: yield a
 class ungroup(BaseCli):
-    def __init__(self, insertCol:bool=True, single=False, begin=False):
+    def __init__(self, single=False, begin=False, insertCol:bool=True):
         """Ungroups things that were grouped using a specific mode of
 :class:`groupBy`. Particularly useful to transform some complex data
 structure into a flat dataframe so that you can plug into pandas. Example::
@@ -596,10 +596,10 @@ it to True::
      [2, [3.4, 4.5]],
      [5, [2.3, 5.6]]] | ungroup(single=True)
 
-:param insertCol: whether to insert the column into the table or not
 :param single: whether the table in each group has a single column or not
 :param begin: whether to insert the column at the beginning or at the end.
-    Only works if ``insertCol`` is True"""
+    Only works if ``insertCol`` is True
+:param insertCol: whether to insert the column into the table or not"""
         self.insertCol = insertCol; self.single = single; self.begin = begin
     def __ror__(self, it):
         preprocess = cli.apply(cli.wrapList().all(), 1) if self.single else cli.iden(); begin = self.begin
@@ -699,7 +699,7 @@ columns. Example::
     def __ror__(self, it:Iterator[str]):
         it = it | cli.apply(lambda row: (tuple(row) if isinstance(row, list) else row))
         c = Counter(it); s = sum(c.values())
-        for k, v in c.items(): yield [v, k, f"{round(100*v/s)}%"]
+        return [[v, k, f"{round(100*v/s)}%"] for k, v in c.items()] # has to scan through the entire thing anyway, which is long enough already, so just turn it into a list
     @staticmethod
     def join():
         """Joins multiple counts together.
@@ -716,7 +716,7 @@ This is useful when you want to get the count of a really long list/iterator usi
                 for v, k, *_ in _count:
                     values[k] += v
             s = values.values() | cli.toSum()
-            for k, v in values.items(): yield [v, k, f"{round(100*v/s)}%"]
+            return [[v, k, f"{round(100*v/s)}%"] for k, v in values.items()]
         return cli.applyS(inner)
 class hist(BaseCli):
     def __init__(self, bins:int=30):
@@ -763,7 +763,7 @@ array of 3M length. See over :meth:`hist.join` for param details
         delta = x[1] - x[0]; x = (x[1:] + x[:-1])/2
         return x, y, delta
     @staticmethod
-    def join(scale:float=1e4, bins:int=None, log:bool=True):
+    def join(scale:float=1e4, bins:int=None, log:bool=True, xlog:bool=False):
         """Joins multiple histograms together.
 Example::
 
@@ -824,15 +824,16 @@ mathematician and really care about the accuracy of this, read on.
 :param scale: how big a range of frequencies do we want to capture?
 :param bins: output bins. If not specified automatically defaults to 1/10 the
     original number of bins
-:param log: whether to transform everything to log scale internally"""
+:param log: whether to transform everything to log scale internally on the y axis
+:param xlog: whether to transform everything to log scale internally on the x axis"""
         def inner(it):
-            it = it | cli.deref()
+            it = it | (cli.apply(cli.apply(math.log), 0) if xlog else cli.iden()) | cli.deref()
             _bins = bins if bins is not None else it | cli.cut(0) | cli.shape(0).all() | cli.toMean() | cli.op()/10 | cli.aS(int)
             maxY = max(it | cli.cut(1) | cli.toMax().all() | cli.toMax() | cli.op()/scale, 1e-9)
             if log: it = it | cli.apply(lambda x: np.log(x+1e-9)-math.log(maxY) | cli.aS(np.exp) | cli.aS(np.round) | cli.op().astype(int), 1) | cli.deref()
             else: it = it | cli.apply(lambda y: (y/maxY).astype(int), 1) | cli.deref()
             x, y, delta = it | cli.cut(0, 1) | cli.transpose().all() | cli.joinStreams() | ~cli.apply(lambda a,b: [a]*b) | cli.joinStreams() | cli.aS(list) | cli.aS(np.array) | hist(_bins)
-            return x, y*maxY, delta
+            return x | ((cli.apply(math.exp) | cli.deref()) if xlog else cli.iden()), y*maxY, delta
         return cli.aS(inner)
 def _permuteGen(row, pers):
     row = list(row); return (row[i] for i in pers)
