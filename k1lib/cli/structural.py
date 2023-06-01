@@ -564,37 +564,17 @@ might be better for you.
                 if separate: yield [v, a]
                 else: yield a
 class ungroup(BaseCli):
-    def __init__(self, single=False, begin=False, insertCol:bool=True):
+    def __init__(self, single=True, begin=True, insertCol:bool=True):
         """Ungroups things that were grouped using a specific mode of
 :class:`groupBy`. Particularly useful to transform some complex data
 structure into a flat dataframe so that you can plug into pandas. Example::
 
-    a = [[2.3, 5], [3.4, 2], [4.5, 2], [5.6, 5], [6.7, 1]]
-    # returns [[6.7, 1], [3.4, 2], [4.5, 2], [2.3, 5], [5.6, 5]]
-    a | groupBy(1, True) | ungroup() | deref()
-    # returns [[6.7], [3.4], [4.5], [2.3], [5.6]]
-    a | groupBy(1, True) | ungroup(False) | deref()
-
-Just as a reminder, this is the output of :class:`groupBy` after executing ``a | groupBy(1, True)``::
-
-    [[1, [[6.7]]],
-     [2, [[3.4], [4.5]]],
-     [5, [[2.3], [5.6]]]]
-
-A lot of times, your data is a little bit different, like this perhaps::
-
-    [[1, [6.7]],
-     [2, [3.4, 4.5]],
-     [5, [2.3, 5.6]]]
-
-A way to fix this would be to add ``apply(wrapList().all(), 1)`` before :class:`ungroup`.
-But because this is so common, I've added in the parameter ``single`` for that. Just set
-it to True::
-
-    # returns [[6.7, 1], [3.4, 2], [4.5, 2], [2.3, 5], [5.6, 5]]
-    [[1, [6.7]],
-     [2, [3.4, 4.5]],
-     [5, [2.3, 5.6]]] | ungroup(single=True)
+    # returns [[3, 1.2], [3, 3.4], [5, 6], [5, 8], [5, 11]]
+    [[3, [1.2, 3.4]], [5, [6, 8, 11]]] | ungroup() | deref()
+    # returns [[3, 1.2], [3, 3.4], [5, 6], [5, 8], [5, 11]]
+    [[3, [[1.2], [3.4]]], [5, [[6], [8], [11]]]] | ungroup(False) | deref()
+    # returns [[1.2, 3], [3.4, 3], [6, 5], [8, 5], [11, 5]]
+    [[3, [1.2, 3.4]], [5, [6, 8, 11]]] | ungroup(begin=False) | deref()
 
 :param single: whether the table in each group has a single column or not
 :param begin: whether to insert the column at the beginning or at the end.

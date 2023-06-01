@@ -383,7 +383,7 @@ is :math:`(-\inf, a)`, then starts at the specified integer"""
     def __sub__(self, domain): return self + (-domain)
     def __and__(self, domain): return Domain(*intersect(self.ranges, domain.ranges), dontCheck=True)
     def __eq__(self, domain): return self.ranges == domain.ranges
-    def __str__(self): return f"Domain: {', '.join(r for r in self.ranges)}"
+    def __str__(self): return f"Domain: {', '.join(str(r) for r in self.ranges)}"
     def __contains__(self, x): return any(x in r for r in self.ranges)
     def __repr__(self):
         rs = '\n'.join(f"- {r}" for r in self.ranges)
@@ -434,11 +434,11 @@ it gets incremented by 1 automatically. Example::
 class Wrapper:
     value:Any
     """Internal value of this :class:`Wrapper`"""
-    def __init__(self, value):
+    def __init__(self, value=None):
         """Creates a wrapper for some value and get it by calling it.
 Example::
 
-    a = k1lib.Wrapper(list(range(int(1e7))))
+    a = k1.Wrapper(list(range(int(1e7))))
     # returns [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     a()[:10]
 
@@ -446,13 +446,20 @@ This exists just so that Jupyter Lab's contextual help won't automatically
 display the (possibly humongous) value. Could be useful if you want to pass a
 value by reference everywhere like this::
 
-    o = k1lib.Wrapper(None)
+    o = k1.Wrapper(None)
     def f(obj):
         obj.value = 3
     f(o)
-    o() # returns 3"""
+    o() # returns 3
+
+You can also pipe into it like this:
+
+    o = 3 | k1.Wrapper()
+    o() # returns 3
+"""
         self.value = value
     def __call__(self): return self.value
+    def __ror__(self, it): self.value = it; return self
 class Every:
     def __init__(self, n):
         """Returns True every interval.

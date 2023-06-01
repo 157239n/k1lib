@@ -9,8 +9,8 @@ automatically with::
 import k1lib, math; from k1lib import cli
 from typing import Dict, Iterator, Tuple
 pygments = k1lib.dep("pygments")
-__all__ = ["generic", "metricPrefixes", "size", "sizeOf",
-           "comp", "compRate", "time", "item", "throughput", "txt", "code", "h", "pre", "row", "col"]
+__all__ = ["generic", "metricPrefixes", "size", "fromSize", "sizeOf",
+           "comp", "compRate", "time", "item", "throughput", "txt", "code", "h", "pre", "row", "col", "colors"]
 k1lib.settings.add("fmt", k1lib.Settings().add("separator", True, "whether to have a space between the number and the unit"), "from k1lib.fmt module");
 settings = k1lib.settings.fmt
 metricPrefixes = {-8:"y",-7:"z",-6:"a",-5:"f",-4:"p",-3:"n",-2:"u",-1:"m",0:"",1:"k",2:"M",3:"G",4:"T",5:"P",6:"E",7:"Z",8:"Y"}
@@ -33,6 +33,17 @@ Example::
     fmt.size(1.2e7)
 """
     return generic(_bytes, sizes)
+sizeInv = {"k": 1e3, "m": 1e6, "g": 1e9, "t": 1e12, "p": 1e15, "e": 1e18, "z": 1e21, "y": 1e24}
+def fromSize(s:str) -> int: # this is ugly I know, doesn't fit well into others. But making a generalized version seems hard, and I just need this right now
+    """Grabs size from string representation.
+Example::
+
+    fromSize("31.5k") # returns 31500
+    fromSize("31.5kB") # also returns 31500
+"""
+    s = s.lower().replace(" ", "").rstrip("b"); ch = s[-1]
+    if ch in sizeInv: return int(float(s[:-1])*sizeInv[ch])
+    return int(s)
 def sizeOf(l:Iterator[float]) -> Tuple[str, Iterator[float]]:
     """Figures out appropriate scale, scales back the Iterator, and return both.
 Example::
@@ -188,3 +199,12 @@ Example::
     fmt.row(["abc", "def"]) | aS(IPython.display.HTML)
 """
     return args | cli.apply(lambda x: f"<div style='margin: 10px'>{x}</div>") | cli.join("") | cli.aS(lambda x: f"<div style='display: flex; flex-direction: row'>{x}</div>")
+settings.add("colors", ["#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#80b1d3", "#fdb462", "#b3de69", "#fccde5", "#d9d9d9", "#bc80bd", "#ccebc5", "#ffed6f"], "List of colors to cycle through in fmt.colors()")
+def colors():
+    """Returns an infinite iterator that cycles through 12 colors.
+Example::
+
+    fmt.colors() | head(3) | deref()
+
+Color scheme taken from https://colorbrewer2.org/#type=qualitative&scheme=Set3&n=12"""
+    return settings.colors | cli.repeatFrom()

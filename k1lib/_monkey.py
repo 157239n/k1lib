@@ -506,9 +506,10 @@ try:
         def inner(x):
             if x == 0: return
             print("Starting...\r", end="")
-            for i in range(10000):
+            beginTime = time.time()
+            while True:
                 stop, content = ray.get(rp.content.remote())
-                print(f"{title}: {content}\r", end="")
+                print(f"{title}: {content}, {round(time.time()-beginTime)}s elapsed         \r", end="")
                 if stop: break
                 time.sleep(0.01)
         [0, 1] | cli.applyTh(inner, timeout=1e9, prefetch=10) | cli.item()

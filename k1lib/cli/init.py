@@ -77,7 +77,7 @@ have the same feel without extending from this class, but advanced stream operat
 At the moment, you don't have to call super().__init__() and super().__ror__(),
 as __init__'s only job right now is to solidify any :class:`~k1lib.cli.modifier.op`
 passed to it, and __ror__ does nothing."""
-    def __init__(self, fs:list=[]):
+    def __init__(self, fs:list=[], capture=False):
         """Not expected to be instantiated by the end user.
 
 **fs param**
@@ -94,11 +94,26 @@ example of why this is useful. Currently, it will:
 
 - Replace with last recorded ``4 in op()``, if ``f`` is :data:`True`, because Python does
   not allow returning complex objects from __contains__ method
-- Solidifies every :class:`~k1lib.cli.modifier.op`."""
+- Solidifies every :class:`~k1lib.cli.modifier.op`.
+
+:param capture: whether to capture all clis to the right of it and make it accessible under capturedClis and capturedSerial properties"""
         if isinstance(fs, tuple): raise AttributeError("`fs` should not be a tuple. Use a list instead, so that new functions can be returned")
         _k1_init_l = []
         for _k1_init_f in fs: cli.op.solidify(_k1_init_f); _k1_init_l.append(_k1_init_f)
         fs.clear(); fs.extend(_k1_init_l);
+        self.capture = capture; self._capturedClis = []; self._capturedSerial = None
+    @property
+    def capturedClis(self):
+        if isinstance(self._capturedClis, list):
+            ans = []
+            for e in self._capturedClis: ans.append(cli.op.solidify(e))
+            self._capturedClis = tuple(ans)
+        return self._capturedClis
+    @property
+    def capturedSerial(self):
+        if not self.capture: return None
+        if self._capturedSerial is None: self._capturedSerial = serial(*self.capturedClis)
+        return self._capturedSerial
     def hint(self, _hint:"cli.typehint.tBase"):
         """Specifies output type hint."""
         self._hint = _hint; return self
@@ -141,16 +156,19 @@ Example::
         s = self
         for i in range(n): s = cli.apply(s)
         return s
-    def __or__(self, cli) -> "serial":
+    def __or__(self, cli_) -> "serial": # cli is guaranteed (by typical usage, not law) that it's a BaseCli
         """Joins clis end-to-end.
 Example::
 
     c = apply(op() ** 2) | deref()
     # returns [0, 1, 4, 9, 16]
     range(5) | c"""
-        if isinstance(self, serial): return self._copy()._after(cli)
-        if isinstance(cli, serial): return cli._copy()._before(self)
-        return serial(self, cli)
+        if not isinstance(self, cli.op):
+            if not hasattr(self, "capture"): self.capture = False
+            if self.capture: self._capturedClis.append(cli_); return self
+        if isinstance(self, serial): return self._copy()._after(cli_)
+        if isinstance(cli_, serial): return cli_._copy()._before(self)
+        return serial(self, cli_)
     def __ror__(self, it): return NotImplemented
     def f(self) -> Table[Table[int]]:
         """Creates a normal function :math:`f(x)` which is equivalent to
@@ -211,6 +229,10 @@ version.
         else: return lambda x, *args, **kwargs: f(x, *c.args, **c.kwargs)
     if isinstance(c, BaseCli): return c.__ror__
     return c
+def checkRor(c):
+    if isinstance(c, BaseCli): return c
+    if hasattr(c, "__ror__"): return cli.aS(c.__ror__)
+    raise Exception(f"Trying to add an operator to the pipeline, but the given object is not derived from BaseCli nor does it define a __ror__ method")
 class serial(BaseCli):
     def __init__(self, *clis:List[BaseCli]):
         """Merges clis into 1, feeding end to end. Used in chaining clis
@@ -219,7 +241,7 @@ fails to run::
 
     [1, 2] | a() | b() # runs
     c = a() | b(); [1, 2] | c # doesn't run if this class doesn't exist"""
-        fs = list(clis); super().__init__(fs); self.clis = fs; self._cache()
+        fs = [checkRor(c) for c in clis]; super().__init__(fs); self.clis = fs; self._cache()
     def _cache(self):
         self._hasTrace = any(isinstance(c, cli.trace) for c in self.clis)
         self._cliCs = [fastF(c) for c in self.clis]; return self
@@ -229,11 +251,11 @@ fails to run::
     def __ror__(self, it:Iterator[Any]) -> Iterator[Any]:
         if self._hasTrace: # slower, but tracable
             for cli in self.clis: it = it | cli
-        else: # faster, but not tracable
+        else: # faster, but not tracable 1
             for cli in self._cliCs: it = cli(it)
         return it
-    def _before(self, c): self.clis = [c] + self.clis; return self._cache()
-    def _after(self, c): self.clis = self.clis + [c]; return self._cache()
+    def _before(self, c): self.clis = [checkRor(c)] + self.clis; return self._cache()
+    def _after (self, c): self.clis = self.clis + [checkRor(c)]; return self._cache()
     def _copy(self): return serial(*self.clis)
 atomic.add("baseAnd", (Number, np.number, str, dict, bool, bytes, list, tuple, *([torch.Tensor] if hasTorch else []), np.ndarray, xml.etree.ElementTree.Element), "used by BaseCli.__and__")
 def _iterable(it):
@@ -243,7 +265,7 @@ class oneToMany(BaseCli):
     def __init__(self, *clis:List[BaseCli]):
         """Duplicates 1 stream into multiple streams, each for a cli in the
 list. Used in the "a & b" joining operator. See also: :meth:`BaseCli.__and__`"""
-        fs = list(clis); super().__init__(fs); self.clis = fs; self._cache()
+        fs = [checkRor(c) for c in clis]; super().__init__(fs); self.clis = fs; self._cache()
     def _typehint(self, inp):
         ts = []
         for f in self.clis:
@@ -257,8 +279,8 @@ list. Used in the "a & b" joining operator. See also: :meth:`BaseCli.__and__`"""
             its = itertools.tee(it, len(self.clis))
             for cli, it in zip(self._cliCs, its): yield cli(it)
     def _cache(self): self._cliCs = [fastF(c) for c in self.clis]; return self
-    def _before(self, c): self.clis = [c] + self.clis; return self._cache()
-    def _after(self, c): self.clis = self.clis + [c]; return self._cache()
+    def _before(self, c): self.clis = [checkRor(c)] + self.clis; return self._cache()
+    def _after(self, c): self.clis = self.clis + [checkRor(c)]; return self._cache()
     def _copy(self): return oneToMany(*self.clis)
 class mtmS(BaseCli):
     def __init__(self, *clis:List[BaseCli]):
@@ -266,7 +288,7 @@ class mtmS(BaseCli):
 the "a + b" joining operator. See also: :meth:`BaseCli.__add__`.
 
 Weird name is actually a shorthand for "many to many specific"."""
-        fs = list(clis); super().__init__(fs=fs); self.clis = fs; self._cache()
+        fs = [checkRor(c) for c in clis]; super().__init__(fs=fs); self.clis = fs; self._cache()
     def _inpTypeHintExpand(self, t):
         n = len(self.clis);
         if isinstance(t, (cli.typehint.tCollection, *cli.typehint.tListIterSet, cli.typehint.tArrayTypes)): return t.expand(n)
@@ -278,8 +300,8 @@ Weird name is actually a shorthand for "many to many specific"."""
             except: outTs.append(cli.typehint.tAny())
         return cli.typehint.tCollection(*outTs).reduce()
     def _cache(self): self._cliCs = [fastF(c) for c in self.clis]; return self
-    def _before(self, c): self.clis = [c] + self.clis; return self._cache()
-    def _after(self, c): self.clis = self.clis + [c]; return self._cache()
+    def _before(self, c): self.clis = [checkRor(c)] + self.clis; return self._cache()
+    def _after (self, c): self.clis = self.clis + [checkRor(c)]; return self._cache()
     def __ror__(self, its:Iterator[Any]) -> Iterator[Any]:
         for cli, it in zip(self._cliCs, its): yield cli(it)
     @staticmethod

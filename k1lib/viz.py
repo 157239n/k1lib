@@ -14,6 +14,8 @@ try: import torch; import torch.nn as nn; hasTorch = True
 except:
     torch = k1lib.Object().withAutoDeclare(lambda: type("RandomClass", (object, ), {}))
     nn = k1lib.Object().withAutoDeclare(lambda: type("RandomClass", (object, ), {})); hasTorch = False
+try: import PIL; hasPIL = True
+except: hasPIL = False
 __all__ = ["SliceablePlot", "plotSegments", "Carousel", "Toggle", "ToggleImage",
            "Scroll", "confusionMatrix", "FAnim", "mask"]
 class _PlotDecorator:
@@ -183,9 +185,14 @@ Will even work even when you export the notebook as html. Example::
     "<h1>abc</h1><div>Some content</div>" | c # can add html
     c # displays in notebook cell
 
-:param imgs: List of initial images. Can add more images later on by using :meth:`__ror__`
-
 .. image:: images/carousel.png
+
+You can also pipe the content into it like this::
+
+    ["abc", "def"] | viz.Carousel()
+    ["abc", "def"] | aS(viz.Carousel) # also valid, but kinda outdated and unintuitive
+
+:param imgs: List of initial images. Can add more images later on by using :meth:`__ror__`
 """
         self.imgs:List[Tuple[str, str]] = [] # Tuple[format, base64 img]
         self.defaultFormat = "jpeg"
@@ -193,7 +200,13 @@ Will even work even when you export the notebook as html. Example::
     def __ror__(self, d):
         """Adds an image/html content to the collection"""
         if isinstance(d, str): self.imgs.append(k1lib.encode(f"{d}"))
-        else: self.imgs.append(k1lib.encode(f"<img alt='' style='max-width: 100%' src='data:image/png;base64, {base64.b64encode(d | cli.toBytes()).decode()}' />"))
+        elif hasPIL and isinstance(d, PIL.Image.Image):
+            self.imgs.append(k1lib.encode(f"<img alt='' style='max-width: 100%' src='data:image/png;base64, {base64.b64encode(d | cli.toBytes()).decode()}' />"))
+        else:
+            try:
+                for e in d: e | self
+            except Exception as e: warnings.warn("Tried to add html/image to Carousel but can't due to this error"); raise e
+        return self
     def pop(self):
         """Pops last image"""
         return self.imgs.pop()

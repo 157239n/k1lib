@@ -18,10 +18,17 @@ Cli:
 - Accelerated :class:`~filt.filt` for array types even more
 - Added :class:`~structural.ungroup`, and added more modes to :class:`~structural.groupBy`
 - Fixed ``cut()[2:-2]`` edge case
-- Added :class:`~utils.rItem` for quality of life
+- Added :class:`~utils.rItem` and :class:`~inp.urlPath` for quality of life
 - Added demiliter-splitting mode to :class:`~conv.toDict`
-- Added :meth:`nb.execute.rightAway`, :meth:`conv.toAscii`
+- Added :meth:`nb.execute.rightAway`, :meth:`~conv.toAscii`, :class:`~utils.backup`,
+  :class:`~inp.kzip` and :class:`~inp.kunzip`, :meth:`~filt.resume`
 - Added :meth:`modifier.applyMp.shared` to easily share memory between processes
+- Accelerated :meth:`~inp.cat` using :mod:`k1a` if sB and eB are specified
+- Added multi-column mode to :class:`~modifier.apply`
+- Removed :meth:`inp.curl` because you can do ``cat("http://example.com")`` directly
+- Added array mode and ``retries`` parameter to :class:`~filt.tryout`
+- Allowed building pipelines with normal classes that only define ``__ror__`` but not
+  subclass :class:`~init.BaseCli`
 
 Generic:
 
@@ -31,6 +38,8 @@ Generic:
 - Added :meth:`~k1lib.viz.row`, :meth:`~k1lib.viz.col`, :meth:`~k1lib.viz.pre` and
   :meth:`~k1lib.viz.h` to quickly build html strings
 - Added :meth:`~k1lib.capturePlt` to capture matplotlib plots
+- Added formatting functions :meth:`~k1lib.fmt.fromSize` and :meth:`~k1lib.fmt.colors`
+- Added pipe mode to :class:`~k1lib.viz.Carousel` and :class:`~k1lib.Wrapper`
 
 `1.2 </1.2>`_
 ---------------

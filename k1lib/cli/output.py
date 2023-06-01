@@ -43,6 +43,8 @@ specified stream, while yielding the elements. Example::
 
 See also: :class:`~k1lib.cli.modifier.consume`
 
+This cli is not exactly well-thoughout and is a little janky
+
 :param f: element transform function. Defaults to just adding a new
     line at the end
 :param s: stream to write to. Defaults to :attr:`sys.stdout`
@@ -69,11 +71,16 @@ Example::
         beginTime = time.time()
         f = (lambda x: x) if self.f == _defaultTeeF else self.f
         self.f = lambda s: f"\r{f(s)}, {int(time.time() - beginTime)}s elapsed"; return self
+    def autoInc(self):
+        """Like :meth:`tee.crt`, but instead of printing the object, just print
+the current index and time"""
+        beginTime = time.time(); autoInc = k1lib.AutoIncrement()
+        self.f = lambda s: f"\r{autoInc()}, {int(time.time()-beginTime)}s elapsed"; return self
 try:
     import PIL; hasPIL = True
 except: hasPIL = False
 class file(BaseCli):
-    def __init__(self, fileName:str=None, flush:bool=False):
+    def __init__(self, fileName:str=None, flush:bool=False, mkdir:bool=False):
         """Opens a new file for writing. This will iterate through
 the iterator fed to it and put each element on a separate line. Example::
 
@@ -133,8 +140,9 @@ You can also append to file with the ">>" operator::
 
 :param fileName: if not specified, create new temporary file and returns the url
     when pipes into it
-:param flush: whether to flush to file immediately after every iteration"""
-        super().__init__(); self.fileName = fileName; self.flush = flush
+:param flush: whether to flush to file immediately after every iteration
+:param mkdir: whether to recursively make directories going to the file location or not"""
+        super().__init__(); self.fileName = fileName; self.flush = flush; self.mkdir = mkdir
         self.append = False # whether to append to file rather than erasing it
     def __ror__(self, it:Iterator[str]) -> None:
         super().__ror__(it); fileName = self.fileName; flushF = (lambda f: f.flush()) if self.flush else (lambda _: 0)
@@ -142,6 +150,7 @@ You can also append to file with the ">>" operator::
             f = tempfile.NamedTemporaryFile()
             fileName = f.name; f.close()
         fileName = os.path.expanduser(fileName); firstLine = None
+        if self.mkdir: os.makedirs(os.path.dirname(fileName), exist_ok=True)
         if hasPIL and isinstance(it, PIL.Image.Image): it.save(fileName); return fileName
         if isinstance(it, str): it = [it]; text = True
         elif isinstance(it, bytes): text = False

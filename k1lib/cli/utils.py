@@ -14,7 +14,7 @@ except: hasPIL = False
 __all__ = ["size", "shape", "item", "rItem", "iden", "join", "wrapList",
            "equals", "reverse", "ignore", "rateLimit", "timeLimit", "tab", "indent",
            "clipboard", "deref", "bindec", "smooth", "disassemble",
-           "tree", "lookup", "dictFields"]
+           "tree", "lookup", "dictFields", "backup"]
 settings = k1lib.settings.cli
 def exploreSize(it):
     """Returns first element and length of array. Returns [first item, length]"""
@@ -517,3 +517,25 @@ Example::
         self.fields = fields; self.default = default
     def __ror__(self, d):
         return [d.get(f, self.default) for f in self.fields]
+class backup(BaseCli):
+    def __init__(self):
+        """Backs up a file/folder.
+Example::
+
+    "some/folderOrFile" | backup()
+    "some/folderOrFile" | backup.restore()
+
+Really straightforward. Uses bash internally to copy files recursively, so
+not available on Windows."""
+        pass
+    def __ror__(self, it):
+        it = os.path.expanduser(it)
+        None | cli.cmd(f"rm -rf '{it}.backup'") | cli.ignore()
+        None | cli.cmd(f"cp -r '{it}' '{it}.backup'") | cli.ignore()
+    @staticmethod
+    def restore():
+        def inner(it):
+            it = os.path.expanduser(it)
+            None | cli.cmd(f"rm -rf '{it}'") | cli.ignore()
+            None | cli.cmd(f"cp -r '{it}.backup' '{it}'") | cli.ignore()
+        return cli.aS(inner)

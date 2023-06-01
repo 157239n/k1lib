@@ -417,7 +417,8 @@ Example::
                 buffered = io.BytesIO()
                 it.save(buffered, format=self.imgType)
                 return buffered.getvalue()
-        return NotImplemented
+        import dill
+        return dill.dumps(it)
 class toHtml(BaseCli):
     def __init__(self):
         """Converts several object types to bytes.
@@ -435,8 +436,8 @@ Example::
         if hasPlotly:
             if isinstance(it, plotly.graph_objs._figure.Figure):
                 out = io.StringIO(); it.write_html(out); out.seek(0); return out.read()
-        return it._repr_html_()
-        # return NotImplemented
+        try: return it._repr_html_()
+        except: return it.__repr__()
 try:
     from rdkit import Chem
     from rdkit.Chem import Draw

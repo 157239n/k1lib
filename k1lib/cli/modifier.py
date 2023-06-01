@@ -6,7 +6,7 @@ __all__ = ["applyS", "aS", "apply", "map_", "applyMp", "parallel", "applyCl",
            "applyTh", "applySerial",
            "sort", "sortF", "consume", "randomize", "stagger", "op",
            "integrate"]
-from typing import Callable, Iterator, Any, Union, List
+from typing import Callable, Iterator, Any, Union, List, Tuple
 from k1lib.cli.init import patchDefaultDelim, BaseCli, T, fastF
 import k1lib.cli as cli, numpy as np, threading, gc; import k1lib
 from collections import deque
@@ -85,14 +85,16 @@ Example::
         f = self.f; a = self.args; kw = self.kwargs; return applyS(lambda x: f(*x, *a, **kw));
 aS = applyS
 class apply(BaseCli):
-    def __init__(self, f:Callable[[T], T], column:int=None, cache:int=0, **kwargs):
+    def __init__(self, f:Callable[[T], T], column:Union[int, List[int]]=None, cache:int=0, **kwargs):
         """Applies a function f to every element in the incoming list/iterator.
 Example::
 
     # returns [0, 1, 4, 9, 16]
     range(5) | apply(lambda x: x**2) | deref()
-    # returns [[3.0, 1.0, 1.0], [3.0, 1.0, 1.0]]
+    # returns [[3.0, 1.0, 1.0], [3.0, 1.0, 1.0]], running the function on the 0th column
     torch.ones(2, 3) | apply(lambda x: x+2, 0) | deref()
+    # returns [[0, -1, 2, 3, -4], [2, -3, 4, 5, -6], [0, -1, 4, 9, -16]], running the function on the 1st (0-index btw) and 4th columns
+    [[0, 1, 2, 3, 4], [2, 3, 4, 5, 6], [0, 1, 4, 9, 16]] | apply(lambda x: -x, [1, 4]) | deref()
 
 You can also use this as a decorator, like this::
 
@@ -118,13 +120,20 @@ You can add custom keyword arguments into the function::
     [range(5), range(10, 15)] | transpose() | ~apply(f, z=5) | deref()
 
 If "apply" is too hard to remember, this cli also has an alias :class:`map_`
-that kinda mimics Python's ``map()``.
+that kinda mimics Python's ``map()``. Also slight reminder that you can't pass
+in extra positional args like in :class:`aS`, just extra keyword arguments.
 
-:param column: if not None, then applies the function to that column only
+:param column: if not None, then applies the function to that column or columns only
 :param cache: if specified, then caches this much number of values
 :param kwargs: extra keyword arguments to pass in the function"""
         super().__init__(fs=[f]); self.f = f; self.kwargs = kwargs
-        if column and column < 0: raise Exception(f"Applying a function on a negative-indexed column ({column}) is not supported")
+        if column:
+            ex = Exception(f"Applying a function on a negative-indexed column ({column}) is not supported")
+            if isinstance(column, int):
+                if column < 0: raise ex
+            else:
+                column = list(column)
+                if len([c for c in column if c < 0]): raise ex
         self.column = column; self.cache = cache; self._fC = fastF(f)
         if cache > 0: self._fC = lru_cache(cache)(self._fC)
         self.normal = self.column is None and self.cache == 0 # cached value to say that this apply is just being used as a wrapper, nothing out of the ordinary
@@ -134,11 +143,16 @@ that kinda mimics Python's ``map()``.
                 try: return tIter(self.f._typehint(inp.child))
                 except: return tIter(tAny())
         return super()._typehint(inp)
+    def _copy(self): return apply(self.f, self.column, self.cache, **self.kwargs) # ~apply() case handled automatically
     def __ror__(self, it:Iterator[str]):
         c = self.column; f = self._fC; kwargs = self.kwargs
         if c is None: return (f(line, **kwargs) for line in it)
-        else: return ([(e if i != c else f(e, **kwargs)) 
-                       for i, e in enumerate(row)] for row in it)
+        else:
+            if isinstance(c, int): return ([(e if i != c else f(e, **kwargs)) for i, e in enumerate(row)] for row in it)
+            else:
+                ops = []
+                for c_ in c: a = self._copy(); a.column = c_; ops.append(a)
+                return it | cli.serial(*ops)
     def __invert__(self):
         """Same mechanism as in :class:`applyS`, it expands the
 arguments out. Just for convenience really. Example::
@@ -229,6 +243,9 @@ ones. So, you can potentially do something like this::
     # summing up all items together. No input data transfers (because it's forked instead)
     range(1_000_000_000) | batched(100) | applyMp(lambda r: r | apply(lambda i: bigData[i]) | toSum()) | toSum()
 
+In fact, I use this loophole all the time, and thus has made the function :meth:`shared`,
+so check it out.
+
 :param prefetch: if not specified, schedules all jobs at the same time. If
     specified, schedules jobs so that there'll only be a specified amount of
     jobs, and will only schedule more if results are actually being used.
@@ -288,17 +305,22 @@ ones. So, you can potentially do something like this::
                     for p in self.ps: p.close(); p.terminate();
         return gen(it)
     @staticmethod
-    def cat(fileName: str, f:Callable, n:int=None, **kwargs):
+    def cat(fileName: str, f:Callable, n:int=None, rS=None, **kwargs):
         """Like :meth:`applyCl.cat`, this will split a file up into multiple
 sections, execute ``f`` over all sections and return the results.
 Example::
 
     fn = "~/repos/labs/k1lib/k1lib/cli/test/applyMp.cat"
-    "0123456789\n"*100 | file(fn)
+    "0123456789\\n"*100 | file(fn)
     # returns [6, 6, 6, 7, 6, 6, 6, 7, 6, 6, 6, 7, 6, 6, 6, 8]
     applyMp.cat(fn, shape(0), 16) | deref()
-"""
-        return fileName | cli.splitSeek(n or os.cpu_count()) | cli.splitSeek.window() | ~applyMp(lambda x,y: cli.cat(fileName, sB=x, eB=y) | f, **kwargs)
+
+:param f: function to execute on an iterator of lines
+:param n: how many chunks should it split the file into. Defaulted to the number of cpu cores available
+:param rS: :class:`~k1lib.cli.inp.refineSeek` instance, if you need more fine-grained
+    control over section boundaries so as to not make everything corrupted
+:param kwargs: extra keyword arguments for :class:`applyMp`"""
+        return fileName | cli.splitSeek(n or os.cpu_count()) | (rS or cli.iden()) | cli.window(2) | ~applyMp(lambda x,y: cli.cat(fileName, sB=x, eB=y) | f, **kwargs)
     @staticmethod
     def shared(f, **kwargs):
         """Execution model where the input iterator is dereferenced and shared across
@@ -310,7 +332,7 @@ all processes, bypassing serialization. Example::
 
 In the 2nd line, most of the time is spent on serializing the data and transferring
 it to other processes, while in the 3rd line, most of the time is spent on calculating
-the sum instead."""
+the sum instead, as the giant data structure is forked, and Linux doesn't copy it internally."""
         def inner(it):
             try: n = len(it)
             except: it = list(it); n = len(it)
@@ -350,10 +372,17 @@ if you run into problems, try doing this."""
 # apparently, this doesn't do anything, at least in jupyter environment
 atexit.register(lambda: applyMp.clearPools())
 parallel = applyMp
+s = k1lib.Settings(); settings.add("applyCl", s, "modifier.applyCl() settings")
+s.add("sudoTimeout", 300, "seconds before deleting the stored password for sudo commands")
+_password = k1lib.Wrapper(None)
+def removePw():
+    while True: time.sleep(settings.applyCl.sudoTimeout); _password.value = None
+t = threading.Thread(target=removePw, daemon=True).start()
+_nodeIdsCache = k1lib.Wrapper([])
 def specificNode(obj, nodeId:str):
     return obj.options(scheduling_strategy=ray.util.scheduling_strategies.NodeAffinitySchedulingStrategy(node_id=nodeId, soft=False))
 class applyCl(BaseCli):
-    def __init__(self, f, prefetch=None, timeout=8, bs=1, rss:Union[dict, str]={}, pre:bool=False, orPatch=True, num_cpus=1, **kwargs):
+    def __init__(self, f, prefetch=None, timeout=60, bs=1, rss:Union[dict, str]={}, pre:bool=False, orPatch=True, num_cpus=1, resolve=True, **kwargs):
         """Like :class:`apply`, but execute a function over the input iterator
 in multiple processes on multiple nodes inside of a cluster (hence "cl"). So, just a more
 powerful version of :class:`applyMp`, assuming you have a cluster to run it on.
@@ -388,6 +417,10 @@ As with :class:`applyMp`, there are pitfalls and weird quirks to multiprocessing
 on 1 or multiple nodes, so check out the docs over there to be aware of them,
 as those translates well to here.
 
+There're more extensive documentation on these notebooks: `27-multi-node <https://mlexps.com/other/27-multi-node/>`_,
+`30-applyCl-benchmarks <https://mlexps.com/other/30-applyCl-benchmarks/>`_, if you want to kinda get the feel of this
+tool more.
+
 .. admonition:: Advanced use case
 
     Not really advanced, but just a bit difficult to understand/follow. Let's say
@@ -395,7 +428,7 @@ as those translates well to here.
     read them, and get the number of bytes they have. You can do something like this::
     
         a = None | applyCl.aS(lambda: None | cmd("ls ~") | filt(os.path.isfile) | deref()) | deref()
-        b = a | ungroup(single=True, begin=True) | deref()
+        b = a | ungroup() | deref()
         c = b | applyCl(cat(text=False) | shape(0), pre=True) | deref()
         d = c | groupBy(0, True) | apply(item().all() | toSum(), 1) | deref()
     
@@ -442,6 +475,8 @@ as those translates well to here.
 :param orPatch: whether to automatically patch __or__ function so that cli tools can
     work with numpy arrays on that remote worker
 :param num_cpus: how many cpu does each task take?
+:param resolve: whether to resolve the outputs or not. Set this to False to not move
+    memory to the requesting node and cache the big data structure on the remote node
 :param kwargs: extra arguments to be passed to the function. ``args`` not
     included as there're a couple of options you can pass for this cli."""
         super().__init__(fs=[f]); _fC = fastF(f); self.ogF = f; self.pre = pre
@@ -454,13 +489,19 @@ as those translates well to here.
         self.remoteF = remoteF; self.f = ray.remote(resources=rss, num_cpus=num_cpus)(remoteF)
         self.prefetch = prefetch or int(1e9)
         self.timeout = timeout; self.bs = bs
-        self._copyCtx = lambda: [f, [prefetch, timeout, bs, rss, pre, orPatch, num_cpus], kwargs]
+        self._copyCtx = lambda: [f, [prefetch, timeout, bs, rss, pre, orPatch, num_cpus, resolve], kwargs]
         def preprocessF(f, e): # return future (if pre=False), or [nodeId, future] (if pre=True)
             if pre: nodeId, e = e; return [nodeId, specificNode(f, nodeId).remote(e)]
             else: return f.remote(e)
+        @ray.remote
+        def resolveFRemote(o): return 1
         def resolveF(e):
-            if pre: return [e[0], ray.get(e[1], timeout=timeout)]
-            else: return ray.get(e, timeout=timeout)
+            if resolve:
+                if pre: return [e[0], ray.get(e[1], timeout=timeout)]
+                else: return ray.get(e, timeout=timeout)
+            else: # don't resolve to this node, but still block execution until that object is resolvable
+                f = specificNode(resolveFRemote, e[0]) if pre else resolveFRemote # if node ids are available (pre=True), then resolves to that specific node only, else do generic resolve
+                ray.get(f.remote(e[1] if pre else e), timeout=timeout); return e
         self.preprocessF = preprocessF; self.resolveF = resolveF
     def __ror__(self, it):
         f = self.f; timeout = self.timeout; bs = self.bs; ogF = self.ogF; preprocessF = self.preprocessF; resolveF = self.resolveF
@@ -504,7 +545,7 @@ If you want to get nodes' metadata, then just use ray's builtin function ``ray.n
         """Grabs the number of cpus available on this node"""
         return int(applyCl.meta()["Resources"]["CPU"])
     @staticmethod
-    def aS(f, timeout:float=8):
+    def aS(f, timeout:float=8, resolve:bool=True, num_cpus=1):
         """Executes function f once for all node ids that are piped in.
 Example::
 
@@ -520,26 +561,43 @@ f is executed once, hence the name "apply Single". Here, the meaning of "single"
 different. It just means execute once for each node ids.
 
 :param f: main function to execute in each node. Not supposed to accept any arguments
-:param timeout: seconds to wait for job before raising an error"""
-        f = fastF(f); g = lambda nodeId: specificNode(ray.remote(f), nodeId).remote()
-        final = cli.iden() & (apply(g) | aS(list) | apply(ray.get, timeout=timeout)) | cli.transpose()
-        return aS(lambda it: (applyCl.nodeIds() if it is None else it) | final)
+:param timeout: seconds to wait for job before raising an error
+:param resolve: whether to resolve the result or not. See main docs at :class:`applyCl`"""
+        f = fastF(f); g = lambda nodeId: specificNode(ray.remote(num_cpus=num_cpus)(f), nodeId).remote()
+        final = cli.iden() & (apply(g) | aS(list) | (apply(ray.get, timeout=timeout) if resolve else cli.iden())) | cli.transpose()
+        def inner(it):
+            if it is None: it = applyCl.nodeIds()
+            else:
+                if it | ~cli.inSet(_nodeIdsCache()) | cli.shape(0) > 0:
+                    _nodeIdsCache.value = applyCl.nodeIds(); outliers = it | ~cli.inSet(_nodeIdsCache()) | cli.deref()
+                    if len(outliers) > 0: raise Exception(f"These nodes cannot be found: {outliers}")
+            return it | final
+        return aS(inner)
     @staticmethod
-    def cmd(s:str):
+    def cmd(s:str, timeout:float=8, sudo=False, nodeIds=None):
         """Convenience function to execute shell command on all nodes.
 Example::
 
     applyCl.cmd("mkdir -p /some/folder")
 
 It returns [[nodeid1, output1], [nodeid2, output2]]. If you need more flexibility,
-fall back to :meth:`applyCl.aS`"""
-        return None | applyCl.aS(lambda: None | cli.cmd(s) | cli.deref()) | cli.deref()
+fall back to :meth:`applyCl.aS`
+
+:param s: shell command to execute
+:param sudo: if True, will execute the command with sudo privileges. Will ask for password
+    and then cache it internally for 5 minutes"""
+        global _password; import getpass
+        if sudo:
+            if _password() is None:
+                print("Enter password:"); _password.value = getpass.getpass(prompt="")
+            return   nodeIds | applyCl.aS(lambda: _password() | cli.cmd(f"sudo -S {s}") | cli.deref(), timeout) | cli.deref()
+        else: return nodeIds | applyCl.aS(lambda: None        | cli.cmd(s)              | cli.deref(), timeout) | cli.deref()
     @staticmethod
     def replicateFile(fn:str, nodeIds=None):
         """Replicates a specific file in the current node to all the other nodes.
 Example::
 
-    applyCl.replicate("~/cron.log")
+    applyCl.replicateFile("~/cron.log")
 
 Internally, this will read chunks of 100kB of the specified file and dump it
 incrementally to all other nodes, which has implications on performance. To
@@ -549,47 +607,106 @@ space for it, while ram size doesn't really matter
 
 :param fn: file name"""
         fn = os.path.expanduser(fn); dirname = os.path.dirname(fn)
-        if nodeIds is None: nodeIds = applyCl.nodeIds(False)
+        if nodeIds is None: canSize = os.path.getsize(fn); nodeIds = None | applyCl.aS(lambda: os.path.getsize(fn) if os.path.exists(fn) else 0) | cli.filt(cli.op() != canSize, 1) | cli.cut(0) | cli.deref()
         nodeIds = nodeIds | cli.wrapList().all() | cli.deref()
         nodeIds | cli.insert(None, False).all() | applyCl(lambda _: None | cli.cmd(f"mkdir -p {dirname}; rm {fn}") | cli.deref(), pre=True) | cli.deref()
         for chunk in cli.cat(fn, text=False, chunks=True):
             nodeIds | cli.insert(chunk, False).all() | applyCl(lambda chunk: chunk >> cli.file(fn) | cli.deref(), pre=True) | cli.deref()
     @staticmethod
-    def splitFile(fn:str, nodeIds=None):
-        """Splits a specified file in the current node and dumps other parts
-to other nodes. Example::
+    def balanceFile(fn:str, nAs:List[str]=None, nBs:List[str]=None, rS=None):
+        """Splits a specified file in node nAs and dumps other parts
+to nodes nBs. Example::
 
-    applyCl.splitFile("~/cron.log")
+    applyCl.balanceFile("~/cron.log")
 
-This will split the big file up into multiple segments (1 for each node). Then
+This will split the big files up into multiple segments (1 for each node). Then
 for each segment, it will read through it chunk by chunk into memory, and then
-deposits it into the respective nodes. Finally, it truncates the original file
+deposits it into the respective nodes. Finally, it truncates the original files
 down to its segment boundary.
 
-The exact split rule depends on the number of CPUs of each node. Say there're
-2 nodes: A and B. A has 16 cpus and B has 8 cpus. Then, a 48MB file will be split
-into 2 parts. A will have the first 32MB, and B will have the last 16MB. This is
-to optimize for distributed reading and processing using :meth:`applyCl.cat`.
-This makes sense right? If you don't have as many cores, you should process less
-data, so you should have less data to work with from the beginning.
+The main goal of this is so that you can analyze a single big (say 200GB) file
+quickly. If that file is on a single node, then it will take forever, even with
+:class:`applyMp`. So splitting things up on multiple nodes will make analyzing
+it a lot faster.
+
+There's also the function :meth:`balanceFolder`, which has the opposite problem of
+having lots of small (say 100MB) files. So it will try to move files around (keeping
+them intact in the meantime) to different nodes so that the folder size ratio is
+roughly proportional to the cpu count.
+
+The exact split rule depends on the number of CPUs of each node. Best to see an
+example::
+
+    Command:         applyCl.balanceFile("~/cron.log")
+    Verbose command: applyCl.balanceFile("~/cron.log", ["1"], ["1", "2", "3", "4", "5"])
+    ----------- Before -----------
+    Node:      1  2  3  4 5
+    Cpu:       8  12 16 8 8
+    Size (GB): 52 0  0  0 0
+    ----------- After  -----------
+    Node:      1  2  3  4 5
+    Cpu:       8  12 16 8 8
+    Size (GB): 8  12 16 8 8
+
+This also works if you have files on existing nodes already, and are upgrading the
+cluster::
+
+    Command:         applyCl.balanceFile("~/cron.log")
+    Verbose command: applyCl.balanceFile("~/cron.log", ["1", "5"], ["1", "2", "3", "4", "5"])
+    ----------- Before -----------
+    Node:      1  2  3  4  5
+    Cpu:       8  12 16 8  8
+    Size (GB): 26 0  0  26 0
+    ----------- After  -----------
+    Node:      1  2  3  4  5
+    Cpu:       8  12 16 8  8
+    Size (GB): 8  12 16 8  8
+
+If you want to move files out of a node when decommissioning them, you can do
+something like this::
+
+    Command:         applyCl.decommission("~/cron.log", ["3", "4"])
+    Verbose command: applyCl.balanceFile("~/cron.log", ["1", "2", "3", "4", "5"], ["1", "2", "5"])
+    ----------- Before -----------
+    Node:      1  2  3  4 5
+    Cpu:       8  12 16 8 8
+    Size (GB): 8  12 16 8 8
+    ----------- After  -----------
+    Node:      1  2  3  4 5
+    Cpu:       8  12 16 8 8
+    Size (GB): 15 22 0  0 15
+
+Remember that the node ids "1", etc. is for illustrative purposes only. You should get
+real node ids from :meth:`nodeIds`.
+
+Why is the file size proportional to the number of cores on each node? Well, if
+you have more cores, you should be able to process more, so as to make everything
+balanced, right?
 
 Again, this means that you can split arbitrarily large files as long as you have
 the disk space for it, ram size is not a concern. How does this perform? Not
 the best in the world if you don't have a lot of nodes. With sata 3 ssds, 750MB/s
 ethernet, I got transfer speeds of roughly 100MB/s. This should increase as you
 have more nodes based on the code structure, but I haven't tested it yet. Can
-it be faster? Definitely. Am I willing to spend time optimizing it? No."""
-        fn = os.path.expanduser(fn); dirname = os.path.dirname(fn)
-        if nodeIds is None: nodeIds = applyCl.nodeIds(False)
-        nodeIds | cli.wrapList().all() | cli.insert(None, False).all() | applyCl(lambda _: None | cli.cmd(f"mkdir -p {dirname}; rm {fn}") | cli.deref(), pre=True) | cli.deref()
-        nodeId2Cpu = ray.nodes() | cli.filt(lambda x: x["Alive"]) | cli.apply(lambda x: [x["NodeID"], int(x["Resources"]["CPU"])]) | cli.toDict()
-        n = len(nodeIds)+1; ranges = fn | cli.splitSeek(n, weights=[nodeId2Cpu[applyCl.nodeId()], *nodeIds | cli.lookup(nodeId2Cpu)]) | cli.splitSeek.window()
-        for chunks in ranges[1:] | ~cli.apply(lambda a,b: [cli.cat(fn, False, True, sB=a, eB=b), b'' | cli.repeat()] | cli.joinStreams()) | cli.transpose():
-            if chunks | cli.apply(len) | cli.toSum() == 0: break
-            [nodeIds, chunks] | cli.transpose() | applyCl(lambda chunk: chunk >> cli.file(fn) | cli.deref(), pre=True) | cli.deref()
-        with open(fn, 'a') as f: f.truncate(ranges[0][1])
+it be faster? Definitely. Am I willing to spend time optimizing it? No.
+
+:param fn: file name
+:param nAs: node ids that currently stores the file. If not specified, try to detect
+    what nodes the file exists in
+:param nBs: node ids that will store the file after balancing everything out. If not
+    specified, will take all available nodes
+:param rS: :class:`~k1lib.cli.inp.refineSeek` instance, if you need more fine-grained
+    control over section boundaries so as to not make everything corrupted
+"""
+        from k1lib.cli._applyCl import balanceFile
+        balanceFile(fn, nAs, nBs, rS)
     @staticmethod
-    def cat(fn:str, f:Callable, timeout:float=30, keepNodeIds:bool=False, multiplier:int=1, includeId:bool=False):
+    def decommissionFile(fn, nAs:List[str], rS=None):
+        """Convenience function for :meth:`balanceFile`. See docs over there."""
+        from k1lib.cli._applyCl import balanceFile
+        balanceFile(fn, None, applyCl.nodeIds() | ~cli.inSet(nAs) | cli.deref(), rS)
+    @staticmethod
+    def cat(fn:str=None, f:Callable=None, nodeIds=None, timeout:float=60, pre:bool=False, multiplier:int=1, includeId:bool=False, resolve:bool=True):
         """Reads a file distributedly, does some operation on them, collects and
 returns all of the data together. Example::
 
@@ -624,22 +741,58 @@ want to write results into different files, you can do something like this::
     # do processing on fn distributedly, then dump results into multiple files
     applyCl.cat(fn, ~aS(lambda idx, lines: lines | shape(0) | aS(dill.dumps) | file(f"{dir_}/applyCl/{idx}.pth")), includeId=True) | deref()
     # reading all files and summing them together
-    None | applyCl.aS(lambda: ls(f"{dir_}/applyCl")) | ungroup(single=True, begin=True) | applyCl(cat(text=False) | aS(dill.loads), pre=True) | cut(1) | toSum()
+    None | applyCl.aS(lambda: ls(f"{dir_}/applyCl")) | ungroup() | applyCl(cat(text=False) | aS(dill.loads), pre=True) | cut(1) | toSum()
+
+.. admonition:: Simple mode
+
+    There's also another mode that's activated whenever f is not specified that feels
+    more like vanilla :class:`~inp.cat`. Say you have a file on a specific node::
+    
+        nodeId = "7bb387b2920694abe9f7d2a2ed939b6d31843faf91d174d0221e871d"
+        fn = "~/ssd2/randomFile.txt"
+        
+        # -------------- file is on current node --------------
+        cat(fn) # returns iterator of lines inside the file
+        fn | cat() # same thing as above
+        # -------------- file is on remote node --------------
+        [nodeId, fn] | applyCl.cat() # returns iterator of lines of the file
+        applyCl.cat([nodeId, fn]) # same thing
+        nodeId | applyCl.cat(fn) # also same thing
+    
+    So yeah, there're lots of ways to just simply read a file on a remote node. Is
+    it too much? Probably, but good thing is that you can pick any that's intuitive
+    for you. Note that this mode is just for convenience only, for when you want to do
+    exploratory analysis on a single remote file. To be efficient at bulk processing,
+    use the normal mode instead.
 
 :param fn: file name
 :param f: function to execute in every process
+:param nodeIds: only read file from these nodes
 :param timeout: kills the processes if it takes longer than this amount of seconds
-:param keepNodeIds: whether to keep the node id column or not
+:param pre: "preserve" mode, just like in :class:`applyCl`. Whether to keep the node id column or not
 :param multiplier: by default, each node will spawn as many process as there
     are cpus. Sometimes you want to spawn more process, change this to a higher number
-:param includeId: includes a unique id for this process
+:param includeId: includes a unique id for this process (just normal integers from 0 to n)
+:param resolve: whether to resolve the remote objects or not
 """
+        fn = os.path.expanduser(fn) if fn is not None else None
+        if f is None: # simple case
+            def inner(nodeId_fn:Tuple[str, str]):
+                nodeId, fn = nodeId_fn; seeks = [nodeId] | applyCl.aS(lambda: fn | cli.splitSeek(round(os.path.getsize(fn)/settings.cat.chunkSize+1))) | cli.cut(1) | cli.item() | cli.deref()
+                inter = seeks | cli.window(2) | apply(cli.wrapList() | cli.insert(nodeId)) | cli.deref()
+                return inter | ~applyCl(lambda sB, eB: cli.cat(fn,sB=sB,eB=eB) | cli.deref(), pre=True) | cli.cut(1) | cli.joinStreams()
+                # return [nodeId_fn] | applyCl(cat() | deref(), pre=True) | cut(1) | item() # direct, no chunking method
+            if fn is None: return aS(inner) # [nodeId, fn] | applyCl.cat()
+            if isinstance(fn, str): return aS(lambda nodeId: inner([nodeId, fn])) # nodeId | applyCl.cat()
+            else: return inner(fn) # applyCl.cat([nodeId, fn])
         postprocess = cli.insertIdColumn(True, False) | ~apply(lambda x,y,z: [x,[*y,z]])
-        checkpoints = None | applyCl.aS(lambda: fn | cli.splitSeek(int(applyCl.meta()["Resources"]["CPU"]*multiplier)) | cli.splitSeek.window() | cli.deref()) | cli.ungroup(single=True, begin=True) | postprocess | cli.deref()
-        postprocess = cli.iden() if keepNodeIds else cli.cut(1)
-        return checkpoints | applyCl(~aS(lambda x,y,idx: cli.cat(fn, sB=x, eB=y) | ((cli.wrapList() | cli.insert(idx)) if includeId else cli.iden()) | f), pre=True, timeout=timeout, num_cpus=1) | postprocess
+        nodeIds = nodeIds or (applyCl.nodeIds() | applyCl.aS(lambda: os.path.exists(fn)) | cli.filt(cli.op(), 1) | cli.cut(0) | cli.deref())
+        checkpoints = nodeIds | applyCl.aS(lambda: fn | cli.splitSeek(int(applyCl.meta()["Resources"]["CPU"]*multiplier)) | cli.window(2) | cli.deref()) | cli.ungroup() | postprocess | cli.deref()
+        postprocess = cli.iden() if pre else cli.cut(1)
+        a = checkpoints | applyCl(~aS(lambda x,y,idx: cli.cat(fn, sB=x, eB=y) | ((cli.wrapList() | cli.insert(idx)) if includeId else cli.iden()) | f), pre=True, timeout=timeout, num_cpus=1, resolve=resolve)
+        return a | postprocess
     @staticmethod
-    def balanceFolder(folder:str, audit:bool=False):
+    def balanceFolder(folder:str, maxSteps:int=None, audit:bool=False):
         """Balances all files within a folder across all nodes.
 Example::
 
@@ -667,30 +820,96 @@ more files, just dump it to any node (or download distributed across all nodes),
 then rebalance the folders and do your analysis.
 
 :param folder: folder to rebalance all of the files
+:param maxSteps: what's the maximum number of file transfers? By default has no limit, so that files are transferred until 
 :param audit: if True, don't actually move files around and just return what files are going to be moved where"""
-        from k1lib.cli._applyCl import balance
-        balance(folder)
-    def download(url:str, folder:str, merge:bool=False, timeout=120, chunkTimeout=5):
-        """Downloads a file distributedly to a specified folder.
+        from k1lib.cli._applyCl import balanceFolder
+        return balanceFolder(folder, audit, maxSteps)
+    def decommissionFolder(folder:str, nAs:List[str], maxSteps:int=10000, audit:bool=False, timeout:float=3600):
+        """Like :meth:`decommissionFile`, but works for distributed folders instead.
+
+:param nAs: list of node ids to migrate files away from
+:param maxSteps: limits the total number of optimization steps. Normally don't have to specify,
+    but just here in case it runs for too long trying to optimize the folder structure
+:param audit: if True, just returns the file movements it's planning to do"""
+        from k1lib.cli._applyCl import decommissionFolder
+        return decommissionFolder(folder, nAs, audit=audit, maxSteps=maxSteps, timeout=timeout)
+    @staticmethod
+    def diskScan(folder:str, raw=False):
+        """Scans for files and folders in the specified folder for potential
+distributed files and folders. A distributed file is a file that exists on more
+than 1 node. A distributed folder is a folder that that exists on more than 1
+node and does not have any shared children. Example::
+
+    applyCl.diskScan("~/ssd2")
+    applyCl.diskScan("~/ssd2", True)
+
+The first line does not return anything, but will print out something like this:
+
+.. include:: ../literals/diskScan.rst
+
+While the second line will return a parseable data structure instead::
+
+    [[['/home/kelvin/ssd2/data/genome/RegulationFeatureActivity', [4113489746, 7912834090, 4164314316]],
+      ['/home/kelvin/ssd2/data/genome/go/release_geneontology_org', [2071645117, 4172737915, 2107005131]],
+      ['/home/kelvin/ssd2/data/genome/RegulationFeatureActivity.backup', [568878496, 552888466, 600610083]],
+      ['/home/kelvin/ssd2/data/genome/00-common_all.idx', [341738564, 671136833, 0]],
+      ['/home/kelvin/ssd2/data/genome/genbank/ch1.dat.gz', [25356744, 0, 25356764]],
+      ['/home/kelvin/ssd2/test', [136152, 273530, 136351]],
+      ['/home/kelvin/ssd2/data/genome/genbank/ch1', [0, 0, 0]]],
+     [['/home/kelvin/ssd2/data/genome/dummy.txt', [1101, 1101, 1101]]],
+     [['/home/kelvin/ssd2/data/genome/00-All.vcf', [32737509360, 65475018903, 32737509588]],
+      ['/home/kelvin/ssd2/data/genome/MotifFeatures/homo_sapiens.GRCh38.motif_features.gff', [13963854962, 27927709895, 13963854962]],
+      ['/home/kelvin/ssd2/data/genome/00-common_all.vcf', [2353901811, 4707803470, 2353901831]]]]
+
+Remember that since an operating system usually have lots of shared files
+(like "~/.bashrc", for example), these might be mistaken as a distributed file.
+Make sure to only scan folders that you store data in, or else it'll take a long time to return.
+
+:param folder: the folder to scan through
+:param raw: whether to return raw data or display it out nicely"""
+        from k1lib.cli._applyCl import diskScan4, diskScan5
+        if raw: return diskScan4(folder)
+        else: return diskScan5(folder)
+    @staticmethod
+    def balancedNodeIds():
+        """Returns a stream of node ids that's balanced based on cpu count/performance.
 Example::
 
-    url = "https://vim.kelvinho.org"
-    fn = "~/repos/labs/k1lib/k1lib/cli/test/applyCl.download" # file/folder name
-    applyCl.download(url, fn)       # will download distributedly and dump file fragments into the folder fn
-    applyCl.download(url, fn, True) # same as above, but collects all fragments together, places it in fn in the current node, then deletes the temporary file fragments
+    # returns list of 10 node ids: ["abc...", "def...", "abc...", ...]
+    applyCl.balancedNodeIds() | head() | deref()
+"""
+        from k1lib.cli._applyCl import balancedNodeIds
+        return balancedNodeIds()
+    @staticmethod
+    def loadTest():
+        """Performs a load test on the cluster.
+Example::
 
-This only works if the server allows partial downloads btw.
+    applyCl.loadTest()
 
-:param url: url to download
-:param folder: which folder to download parts into
-:param merge: whether to merge all of the fragments together into a single file in the current node or not
-:param timeout: timeout for each process
-:param chunkTimeout: timeout for each file chunk inside each process"""
-        from k1lib.cli._applyCl import download
-        download(url, folder, merge, timeout, chunkTimeout)
+What is a load test? It basically tries to perform some intensive and
+long-running calculations on all processes on all nodes in the cluster
+to know how good are each individual nodes. This is useful information
+because whenever you try to split a file up to form a distributed file,
+or move files in a folder around to form a distributed folder, the amount
+of data each node gets is going to be proportional to this performance
+information. More powerful nodes will have more data to process, so that
+the total running time across all nodes is going to roughly be the same.
+
+But isn't cpu count good enough for this? No, not actually. The i7 7700
+has 4 cores, 8 threads, and the i9 13900k has 8 performance cores and 16
+efficiency cores, totalling to 32 threads. You would suspect that the
+13900k to be 4x (32/8=4) or 6x (24/4=6) more powerful than the 7700, but
+it's actually 10x more powerful.
+
+The test itself takes around 1-2 minutes, and the test results are going
+to be saved locally in the folder "~/.k1lib/", so that it can use that
+info directly in future runs."""
+        from k1lib.cli._applyCl import loadTest
+        return loadTest()
 thEmptySentinel = object()
 class applyTh(BaseCli):
-    def __init__(self, f, prefetch:int=None, timeout:float=5, bs:int=1):
+    def __init__(self, f, prefetch:int=None, timeout:float=5, bs:int=1, **kwargs):
         """Kinda like the same as :class:`applyMp`, but executes ``f`` on multiple
 threads, instead of on multiple processes. Advantages:
 
@@ -705,14 +924,14 @@ Disadvantages:
 - Is slow if ``f`` has to obtain the GIL to be able to do anything
 
 All examples from :class:`applyMp` should work perfectly here."""
-        fs = [f]; super().__init__(fs=fs); self.f = fs[0]; self.bs = bs
+        fs = [f]; super().__init__(fs=fs); self.f = fs[0]; self.bs = bs; self.kwargs = kwargs
         self.prefetch = prefetch or int(1e9); self.timeout = timeout
     def __ror__(self, it):
         if self.bs > 1:
             yield from (it | cli.batched(self.bs, True) | applyTh(apply(self.f), self.prefetch, self.timeout) | cli.joinStreams()); return
-        datas = deque(); it = iter(it)
+        datas = deque(); it = iter(it); kwargs = self.kwargs
         innerF = fastF(self.f); timeout = self.timeout
-        def f(line, wrapper): wrapper.value = innerF(line)
+        def f(line, wrapper): wrapper.value = innerF(line, **kwargs)
         for _, line in zip(range(self.prefetch), it):
             w = k1lib.Wrapper(thEmptySentinel)
             t = threading.Thread(target=f, args=(line,w))
@@ -731,6 +950,13 @@ All examples from :class:`applyMp` should work perfectly here."""
                 for data in datas: data[0].join(0.01)
                 raise RuntimeError("Thread timed out!")
             yield data[1].value
+    def _copy(self): return applyTh(self.f, self.prefetch, self.timeout, self.bs, **self.kwargs)
+    def __invert__(self):
+        res = self._copy(); f = fastF(res.f)
+        kw = res.kwargs
+        res.f = lambda x: f(*x, **kw)
+        res.kwargs = {}
+        return res
 class applySerial(BaseCli):
     def __init__(self, f, *args, **kwargs):
         """Applies a function repeatedly. First yields input iterator ``x``. Then

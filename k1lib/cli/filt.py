@@ -12,7 +12,7 @@ except: hasTorch = False
 __all__ = ["filt", "filter_", "inSet", "contains", "empty",
            "isNumeric", "instanceOf",
            "head", "tail", "cut", "rows",
-           "intersection", "union", "unique", "breakIf", "mask", "tryout"]
+           "intersection", "union", "unique", "breakIf", "mask", "tryout", "resume"]
 settings = k1lib.settings.cli
 class filt(BaseCli):
     def __init__(self, predicate:Callable[[T], bool], column:int=None, catchErrors:bool=False):
@@ -59,16 +59,15 @@ that kinda mimics Python's ``filter()``.
     elements that raise errors). Runs slower if enabled though"""
         fs = [predicate]; super().__init__(fs)
         if column and column < 0: raise Exception(f"Filtering using a function on a negative-indexed column ({column}) is not supported")
-        f = fs[0]; self.column = column
+        f = fs[0]; _fP = fastF(f); self.column = column
         if catchErrors:
             def g(x):
-                try: return f(x)
+                try: return _fP(x)
                 except: return False
             self.predicate = g
-        else: self.predicate = f
-        self._fastP = fastF(self.predicate)
+        else: self.predicate = _fP
     def __ror__(self, it:Iterator[T]) -> Iterator[T]:
-        p = self._fastP; c = self.column
+        p = self.predicate; c = self.column
         if c is None:
             if isinstance(it, settings.arrayTypes):
                 try: return it[p(it)]
@@ -507,17 +506,16 @@ Example::
             return it[list(self.mask)]
         return (e for e, m in zip(it, self.mask) if m)
 class tryout(BaseCli):
-    end = object()
-    def __init__(self, result=None):
-        """Wraps every cli operation after this in a try-catch block, returning ``result``.
-This can be a little finicky. Example::
+    def __init__(self, result=None, retries=0):
+        """Wraps every cli operation after this in a try-catch block, returning ``result``
+if the operation fails. Example::
 
     # returns 9
     3 | (tryout("failed") | op()**2)
     # returns "failed", instead of raising an exception
     "3" | (tryout("failed") | op()**2)
     # returns "unsupported operand type(s) for ** or pow(): 'str' and 'int'"
-    "3" | (tryout(Exception) | op()**2)
+    "3" | (tryout(str) | op()**2)
 
 By default, this ``tryout()`` object will gobble up all clis behind it and wrap
 them inside a try-catch block. This might be undesirable, so you can stop it early::
@@ -525,20 +523,134 @@ them inside a try-catch block. This might be undesirable, so you can stop it ear
     # returns "failed"
     3 | (tryout("failed") | op()**2 | aS(str) | op()**2)
     # raises an exception, because it does not errors after `tryout.end`
-    3 | (tryout("failed") | op()**2 | tryout.end | aS(str) | op()**2)
+    3 | (tryout("failed") | op()**2) | aS(str) | op()**2
+
+In the first example, :class:`tryout` will catch any errors happening within ``op()``,
+``aS(str)`` or the second ``op()**2``. In the second example, :class:`tryout` will only
+catch errors happening within the first ``op()**2``.
+
+.. admonition:: Array mode
+
+    The above works well for atomic operations and not looping operations. Let's
+    say we have this function::
+
+        counter = 0
+        def f(x):
+            global counter
+            if x > 5:
+                counter += 1
+                if counter < 3: raise Exception(f"random error: {x}")
+            return x**2
+    
+    This code will throw an error if x is greater than 5 for the first and second
+    time (but runs smoothly after that. It's a really nasty function I know).
+    Capturing like this will work::
+    
+        counter = 0 # line below returns [0, 1, 4, 9, 16, 25, 'failed', 'failed', 64, 81]
+        range(10) | apply(tryout("failed") | aS(f)) | deref()
+    
+    But capturing like this won't work::
+    
+        counter = 0 # line below throws an exception
+        range(10) | (tryout("failed") | apply(f)) | deref()
+    
+    The reason being, :class:`tryout` will only capture errors when the data is passed
+    into ``apply(f)``, and won't capture it later on. However, when data is passed to
+    ``apply(f)``, it hasn't executed anything yet (remember these things are lazily
+    executed). So the exception actually happens when you're trying to ``deref()`` it,
+    which lies outside of :class:`tryout`'s reach. You can just put a tilde in front
+    to tell it to capture errors for individual elements in the iterator::
+    
+        counter = 0 # line belows returns [0, 1, 4, 9, 16, 25, 'failed', 'failed', 64, 81]
+        range(10) | (~tryout("failed") | apply(f)) | deref()
+
+    This mode has a weird quirk that requires that there has to be a 1-to-1 correspondence
+    between the input and output for the block of code that it wraps around. Meaning this is okay::
+    
+        def g(x):
+            global counter
+            if 40 > x[0] >= 30:
+                counter += 1
+                if counter < 5: raise Exception("random error")
+            return x
+        counter = 0 # returns 50, corrects errors as if it's not even there!
+        range(50) | (~tryout(None, 6) | batched(10, True) | apply(g) | joinStreams()) | deref() | shape(0)
+    
+    This is okay because going in, there're 50 elements, and it's expected that 50 elements
+    goes out of :class:`tryout`. The input can be of infinite length, but there has to be a
+    1-to-1 relationship between the input and output. While this is not okay::
+
+        counter = 0 # returns 75, data structure corrupted
+        range(50) | (~tryout(None, 6) | batched(10, True) | apply(g) | joinStreams() | batched(2, True)) | joinStreams() | deref() | shape(0)
+
+    It's not okay because it's expected that 25 pairs of elements goes out of :class:`tryout`
+
+.. admonition:: Retrying
+
+    There's also the ``retries`` parameter, which specifies how many times should this
+    class retry the operation until actually returning the predefined result::
+    
+        counter = 0 # line below returns [0, 1, 4, 9, 16, 25, None, None, 64, 81]
+        range(10) | (~tryout(retries=0) | apply(f)) | deref()
+        counter = 0 # line below returns [0, 1, 4, 9, 16, 25, None, 49, 64, 81]
+        range(10) | (~tryout(retries=1) | apply(f)) | deref()
+        counter = 0 # line below returns [0, 1, 4, 9, 16, 25, 36, 49, 64, 81]
+        range(10) | (~tryout(retries=2) | apply(f)) | deref()
 
 :param result: result to return if there is an exception. If passed in the class
-    `Exception`, then will return the exception's string instead"""
-        self.clis = []; self.ser = None; self.result = result; self.absorbing = True
-    def __or__(self, it):
-        if it is tryout.end: self.absorbing = False; return self
-        if isinstance(it, BaseCli):
-            if self.absorbing: self.clis.append(it); self.ser = None; return self
-            else: return super().__or__(it)
-        else: raise Exception("Can't pipe tryout() to a non-cli tool");
+    `str`, then will return the exception's string instead
+:param retries: how many time to retry before giving up?"""
+        super().__init__(capture=True); self.result = result; self.inverted = False; self.retries = retries
     def __ror__(self, it):
-        if self.ser is None:
-            self.ser = cli.serial(*self.clis)
-            if len(self.clis) == 0: raise Exception("tryout() currently does not wrap around any other cli. You may need to change `data | tryout() | cli1() | cli2()` into `data | (tryout() | cli1() | cli2())`")
-        try: return it | self.ser
-        except Exception as e: return str(e) if self.result is Exception else self.result
+        retries = self.retries
+        if len(self.capturedClis) == 0: raise Exception("tryout() currently does not wrap around any other cli. You may need to change `data | tryout() | cli1() | cli2()` into `data | (tryout() | cli1() | cli2())`")
+        if not self.inverted:
+            while True:
+                try: return it | self.capturedSerial
+                except Exception as e:
+                    if retries <= 0: return str(e) if self.result is str else self.result
+                    retries -= 1
+        else:
+            def gen(it):
+                patience = retries; savedInputs = k1lib.Wrapper(deque())
+                def interceptIt(it):
+                    for e in it: savedInputs().append(e); yield e
+                it = iter(it); ogIt = it; it = interceptIt(it); outIt = it | self.capturedSerial
+                while True:
+                    try: e = next(outIt); yield e; savedInputs().popleft(); patience = retries
+                    except StopIteration: break
+                    except Exception as e:
+                        if patience <= 0: savedInputs().popleft(); patience = retries
+                        else: patience -= 1
+                        # restart the loop
+                        it = interceptIt([list(savedInputs()), ogIt] | cli.joinStreams())
+                        savedInputs.value = deque(); outIt = it | self.capturedSerial
+                        if patience == retries: yield str(e) if self.result is str else self.result
+            return gen(it)
+    def __invert__(self): self.inverted = not self.inverted; return self
+def resume(fn):
+    """Resumes a long-running operation. I usually have code that
+looks like this::
+
+    def f(x): pass # long running, expensive calculation
+    ls(".") | applyMp(f) | apply(dill.dumps) | file("somefile.pth") # executing
+    cat.pickle("somefile.pth") | aS(list) # getting all of the saved objects
+
+This will read all the files in the current directory, transforms
+them using the long-running, expensive function, potentially doing
+it in multiple processes. Then the results are serialized (turns into
+bytes) and it will be appended to an output file.
+
+What's frustrating is that I do stupid things all the time, so the
+process usually gets interrupted. But I don't want to redo the
+existing work, so that's where this cli comes into play. Now it looks
+like this instead::
+
+    ls(".") | resume("somefile.pth") | applyMp(f) | apply(dill.dumps) >> file("somefile.pth")
+
+Note that we're inserting a resume() AND changed the file write mode
+to append, so that the file doesn't get overriden. Internally, this is
+just a shorthand for ``~head(fn | (tryout(0) | aS(cat.pickle) | shape(0)))``
+
+:param fn: file name"""
+    return ~cli.head(fn | (cli.tryout(0) | cli.aS(cli.cat.pickle) | cli.shape(0)))

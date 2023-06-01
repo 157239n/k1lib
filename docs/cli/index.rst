@@ -212,6 +212,31 @@ inverting the functionality of some clis::
 
    [3, 5.5, "text"] | ~instanceOf(int) | aS(list) # returns [5.5, "text"]
 
+Capturing operators
+-------------------
+
+Some clis have the ability to "capture" the behavior of other clis and modify them on the fly. For
+example, let's see tryout(), which catches errors in the pipeline and returns a default value if
+an error is raised::
+
+    "a3" | (tryout(4) | aS(int)) | op()*2 # returns 8, because int("a3") will throws an error, which will be caught, and the pipeline reduces down to 4*2
+    "3"  | (tryout(4) | aS(int)) | op()*2 # returns 6, because int("3") will not throw an error, and the pipeline effectively reduces down to int("3")*2
+    "3"  |  tryout(4) | aS(int)  | op()*2 # throws an error, because tryout() doesn't capture anything
+
+Just a side note, op() will record all operations done on it, and it will replay those operations
+on anything that's piped into it.
+
+In the first line, ``tryout() | aS(int)`` will be executed first, which will lead to tryout()
+capturing all of the clis behind it and injecting in a try-catch code block to wrap all of them
+together. In the third line, it doesn't work because ``"3" | tryout(4)`` is executed first,
+but here, tryout() doesn't have the chance to capture the clis behind it, so it can't inject
+a try-catch block around them. This also means that in the 1st and 2nd line, the final multify-by-2
+step is not caught, because tryout() is bounded by the parentheses. If you're composing this
+inside of another cli, then the scope is bounded by the outside cli::
+
+    range(5) | apply( tryout(-1) | op()**2)  | deref() # returns [0, 1, 4, 9, 16]. tryout() will capture op()**2
+    range(5) | apply((tryout(-1) | op()**2)) | deref() # returns [0, 1, 4, 9, 16], exactly the same as before, demonstrating that you don't have to wrap tryout() around another pair of braces
+
 Cli composition
 ---------------
 
@@ -341,6 +366,28 @@ normal clis like so::
 So you might want to use these vanilla versions initially if you're having a hard time with this,
 but I wouldn't recommend using vanilla in the long term.
 
+Philosophy
+----------
+
+Just a short note: while I was developing this, the emphasis is on creating very succinct
+code that does a whole lot, to aid in exploring/creating datasets. Because of it, I've chosen
+to sacrifice readability. The idea is, if it's so fast to create a functionality, whenever
+you need to change the code, it'll be faster to just recreate it from scratch than try to
+change the existing code. And the mental effort to recreate it is substantially lower than
+the mental effort needed to understand a normal codebase written using vanilla Python. Also
+this encourages you to rethink the problem in a new light entirely, which usually results in
+much shorter and simpler code than if you were to adapt an existing solution. This seem to be
+true for me so far.
+
+Note that creating unreadable, fantastically complicated code only happens around 5%. Majority
+of the time it's actually very readable and I can change an obscure detail after 10 seconds.
+The way I usually do it is to "feel" what the data looks like, instead of trying to trace what
+it looks like from the very beginning. This is possible because certain functions has certain
+common signatures. For example, ``~apply(lambda x,y: x+y, 3)`` probably means that it's manipulating
+a table with the 3rd column being a list of 2 coordinate numbers. So, overtime, you'll develop
+an intuition for what's happenning and can visualize the data's shape right in the middle of the
+pipeline.
+
 Where to start?
 -------------------------
 
@@ -361,7 +408,7 @@ Then other important, not necessarily core clis include:
 
 - :class:`~modifier.applyMp`, :class:`~modifier.sort`, :class:`~modifier.randomize`
 - :class:`~utils.wrapList`, :class:`~utils.ignore`, :class:`~inp.cmd`
-- :class:`~structural.repeat` and friends, :class:`~structural.groupBy`
+- :class:`~structural.repeat` and friends, :class:`~structural.groupBy`, :class:`~structural.ungroup`, :class:`~structural.hist`
 
 So, start reading over what these do first, as you can pretty much 95% utilize everything
 the cli workflow has to offer with those alone. Then skim over basic conversions in
@@ -390,7 +437,7 @@ the following debugging steps, to see how everything works::
    A | B.all() | deref()
 
    # assume there's this piece of code:
-   A | (B & C)
+   A | B & C
    # do this instead:
    A | B | deref()
 
@@ -567,6 +614,18 @@ modifier module
 -------------------------
 
 .. automodule:: k1lib.cli.modifier
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+_applyCl module
+-------------------------
+
+These are helper functions for :class:`~k1lib.cli.modifier.applyCl` and are not
+intended for the end user (aka you) to use. They're just here so that you can read
+the source code if interested.
+
+.. automodule:: k1lib.cli._applyCl
    :members:
    :undoc-members:
    :show-inheritance:
