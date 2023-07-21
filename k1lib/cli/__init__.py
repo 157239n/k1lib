@@ -15,6 +15,8 @@ from .output import *
 from .structural import *
 from .conv import *
 from .utils import *
+from .models import *
+from .lsext import *
 
 # bio/chem specific
 from .bio import *
@@ -23,11 +25,11 @@ from . import mgi;  mgi  = _wrapMod(mgi)
 from . import cif;  #cif  = _wrapMod(cif)
 
 # file formats
-from . import kxml; kxml = _wrapMod(kxml)
-from . import kcsv; kcsv = _wrapMod(kcsv)
-from . import sam;  sam  = _wrapMod(sam)
-from . import gb;   gb   = _wrapMod(gb)
-from . import nb;   nb   = _wrapMod(nb)
+from . import ktree; ktree = _wrapMod(ktree)
+from . import kxml;  kxml = _wrapMod(kxml)
+from . import sam;   sam  = _wrapMod(sam)
+from . import gb;    gb   = _wrapMod(gb)
+from . import nb;    nb   = _wrapMod(nb)
 
 from .optimizations import *
 from .trace import * # has to be last, to wait for others to load up

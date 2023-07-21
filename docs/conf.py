@@ -135,3 +135,12 @@ toCliTable = apply("k1lib.cli." + op())\
     "structural", "trace", "utils", "typehint", "optimizations"] | toCliTable | file("literals/cli-tables.rst")
 ["bio", "cif", "mgi", "gb", "sam"] | toCliTable | file(
     "literals/cli-bio-tables.rst")
+
+# --- cli optimization tables
+
+fns = k1.cli.__dict__.items() | instanceOf(type(k1), 1) | cut(1) | apply(lambda m: m.__all__ | apply("getattr(m, x)") | filt("type(x) == type") | filt("issubclass(x, BaseCli)")) | joinStreams() | aS(set) | deref()
+hasNpAllOpts = fns | filt(lambda x: len(x._all_array_opt.__code__.co_code) > 4).split() | deref()
+hasNpOpts = fns | iden() & apply(aS("x.__ror__.__code__.co_names") | aS(lambda x: ["np", "torch", "arrayTypes"] | inSet(x) | shape(0))) | transpose() | filt(op()>0, 1).split() | cut(0).all() | deref()
+".. code-block::\n" | file("literals/cli-accel.rst")
+[hasNpAllOpts, hasNpOpts] | item().all() | intersection(full=True) | insert([hasNpAllOpts[1], hasNpOpts[1]] | intersection(), False) | aS(lambda x: [x.__module__.split(".")[-1], x.__name__] | join(".")).all(2) | sort(None, False).all() | wrapList() | insert(["`array | cli` and `array | cli.all(int)` capability", "`array | cli.all(int)` capability alone", "`array | cli` capability alone", "No array acceleration"]) | transpose() | apply("f'========== {x}'", 0) | apply(batched(3, True), 1) | transpose() | iden() + (~pretty() | join("\n").all()) | transpose() | join("\n").all() | join("\n\n") | op().split("\n") | apply(lambda x: f"   {x}") | join("\n") >> file("literals/cli-accel.rst")
+

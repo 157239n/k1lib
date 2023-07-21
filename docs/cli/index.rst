@@ -408,7 +408,8 @@ Then other important, not necessarily core clis include:
 
 - :class:`~modifier.applyMp`, :class:`~modifier.sort`, :class:`~modifier.randomize`
 - :class:`~utils.wrapList`, :class:`~utils.ignore`, :class:`~inp.cmd`
-- :class:`~structural.repeat` and friends, :class:`~structural.groupBy`, :class:`~structural.ungroup`, :class:`~structural.hist`
+- :class:`~structural.repeat` and friends, :class:`~structural.groupBy`, :class:`~structural.ungroup`,
+  :class:`~structural.hist`, :class:`~structural.insert`, :class:`~structural.insertIdColumn`
 
 So, start reading over what these do first, as you can pretty much 95% utilize everything
 the cli workflow has to offer with those alone. Then skim over basic conversions in
@@ -498,6 +499,30 @@ then you can extend from :class:`~k1lib.cli.init.BaseCli` like so::
             return s
 
    [range(12, 30), range(8)] | NewCli(4).all() | deref() # returns [373, 32]
+
+Accelerations
+-------------------------
+
+Cli tools are pretty dynamic and clever. A lot of times, they try to understand what you're trying
+to do, then rewrite your code into something else completely, but still produce exactly the desired
+output. For example::
+
+   ["what is 3+4?", "what is 8+7?"] | apply(complete()) # returns ['0', '7']. I know, LLMs are still bad at math
+   np.random.randn(3, 4, 5) | apply(repeat(2).all() | transpose() | joinStreams()) # returns numpy array with shape (3, 8, 5)
+
+On the first line, normally, ``complete()`` takes in 1 single string and also outputs a single string.
+But if you know how these LLMs are run, you know that it's a lot more efficient for the GPU to batch
+multiple sentences together to generate text at the same time. So on the surface, this line seems
+horribly inefficient, as it will call the model 2 times, one for each string. However, cli tools are
+smart enough to realize you're trying feed multiple things to a model, and will batch them up automatically.
+
+On the second line, there're lots of operations that should normally heavily bisect the input data
+(a numpy array), like ``apply()`` and ``repeat()`` and whatnot, but believe it or not, cli tools are
+smart enough to transform the array completely in C, and the output of the whole thing is still another
+numpy array and not a nested generator. Here's the summary of the operations that are accelerated in this
+way:
+
+.. include:: ../literals/cli-accel.rst
 
 Biology-related clis
 ***********************
@@ -606,6 +631,22 @@ kxml module
 -------------------------
 
 .. automodule:: k1lib.cli.kxml
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+lsext module
+-------------------------
+
+.. automodule:: k1lib.cli.lsext
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+models module
+-------------------------
+
+.. automodule:: k1lib.cli.models
    :members:
    :undoc-members:
    :show-inheritance:
