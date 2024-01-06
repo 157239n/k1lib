@@ -2,6 +2,40 @@
 Changelogs
 ==========
 
+`1.5 </1.5>`_ - Jan 6th, 2024
+-------------------------------
+
+.. currentmodule:: k1lib.cli
+
+Cli:
+
+- Added s3 compatibility with ``ls()`` and ``cat()`` at :mod:`k1lib.cli.lsext`
+- Added :class:`~conv.toUnix`, :class:`~conv.toLinks`, :class:`~conv.toArgmin`,
+  :class:`~conv.toArgmax`, :class:`~conv.toMovingAvg`, :class:`~conv.toCm`
+- Added :class:`~structural.batchedTrigger`, :class:`~structural.latch`, alias :class:`~structural.insId`
+- Added :class:`~utils.zeroes`, :class:`~utils.normalize`
+- Added :class:`~filt.trigger`, :class:`~filt.filtStd`
+- Added :class:`~modifier.clamp`
+- Added :class:`~output.unpretty`
+- Added :class:`~kapi.post`
+- Added :meth:`utils.deref.js` to transpile any data (not functions) into JS
+- Removed :class:`structural.expandE`, because it's so niche
+- Added JS transpiler functionality to generate JS code automatically from clis
+- Added module :mod:`~k1lib.cli.kjs` in support for the JS transpiler
+- Added module :mod:`~k1lib.cli.kgv` to quickly plot graphviz plots
+- Added tail() optimization for :class:`~inp.catPickle`
+
+Generic:
+
+- Added websocket client and server support at :mod:`~k1lib.kws`
+- Added logging integration with https://logs.mlexps.com using :meth`~k1lib.log`
+- Added module :mod:`~k1lib.kast` for advanced abstract syntax tree manipulation
+  in support for the JS transpiler
+- Added :meth:`~k1lib.resolve` to resolve coroutines everywhere
+- Added :meth:`serve.json`, :meth:`serve.date`, :meth:`serve.serialized`, :meth:`serve.apiKey` and souped up :mod:`~k1lib.serve` a little
+- Added :mod:`~k1lib.serpent`, a lua serialization module
+- Added formatting function :meth:`~k1lib.fmt.rmAnsi`
+
 `1.4 </1.4>`_ - June 30th, 2023
 -------------------------------
 
@@ -36,6 +70,9 @@ Cli:
 - Added robust Actor model for :class:`~modifier.applyCl`.
 - Accelerated :class:`~filt.rows` and :class:`~filt.cut` for array types
 - Added unsort mode to :class:`~modifier.sort`
+- Added :class:`~modifier.roll`, :meth:`~k1lib.batchify`
+- Added :mod:`k1lib.cli.kapi` to use ML apis published on mlexps.com
+- Added :mod:`k1lib.selen` to extract main content of a webpage using Selenium
 
 Generic:
 

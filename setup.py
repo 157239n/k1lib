@@ -22,7 +22,7 @@ setup(
               "k1lib._mo", "k1lib.serve", "k1lib.k1ui"],
     data_files=[('k1lib/serve', ['k1lib/serve/main.html']),
                 ('k1lib/k1ui', ['k1lib/k1ui/mouseKey.pth', 'k1lib/k1ui/256.model.state_dict.pth'])],
-    version="1.4.2",
+    version="1.5",
     python_requires='>=3.7',
     install_requires=["numpy>=1.14", "matplotlib>=2.0", "dill", "forbiddenfruit", "wurlitzer", "validators"],
     extras_require={"all": deps},
@@ -32,5 +32,6 @@ setup(
     author_email="157239q@gmail.com",
     long_description=md,
     long_description_content_type='text/markdown',
+    include_package_data=True,
     license="MIT",
 )

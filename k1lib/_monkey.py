@@ -297,25 +297,30 @@ if hasTorch:                                                                    
         """Like :meth:`torch.linspace`, but spread the values out in log space,
     instead of linear space. Different from :meth:`torch.logspace`"""            # dummy
         return math.e**torch.linspace(math.log(a), math.log(b), n, **kwargs)     # dummy
-try:                                                                             # dummy
-    import graphviz                                                              # dummy
-    @k1lib.patch(graphviz.Digraph, "__call__")                                   # dummy
-    @k1lib.patch(graphviz.Graph, "__call__")                                     # dummy
-    def _call(self, _from, *tos, **kwargs):                                      # dummy
+@k1lib.patch(np)                                                                 # dummy
+def loglinspace(a, b, n=100, **kwargs):                                          # loglinspace
+    """Like :meth:`torch.linspace`, but spread the values out in log space,
+instead of linear space. Different from :meth:`torch.logspace`"""                # loglinspace
+    return math.e**np.linspace(math.log(a), math.log(b), n, **kwargs)            # loglinspace
+try:                                                                             # loglinspace
+    import graphviz                                                              # loglinspace
+    @k1lib.patch(graphviz.Digraph, "__call__")                                   # loglinspace
+    @k1lib.patch(graphviz.Graph, "__call__")                                     # loglinspace
+    def _call(self, _from, *tos, **kwargs):                                      # loglinspace
         """Convenience method to quickly construct graphs.
 Example::
 
     g = k1lib.graph()
     g("a", "b", "c")
     g # displays arrows from "a" to "b" and "a" to "c"
-"""                                                                              # dummy
-        for to in tos: self.edge(_from, to, **kwargs)                            # dummy
-except: pass                                                                     # dummy
-try:                                                                             # dummy
-    import matplotlib.pyplot as plt                                              # dummy
-    from mpl_toolkits.mplot3d import Axes3D, art3d                               # dummy
-    @k1lib.patch(Axes3D)                                                         # dummy
-    def march(self, heatMap, level:float=0, facecolor=[0.45, 0.45, 0.75], edgecolor=None): # dummy
+"""                                                                              # loglinspace
+        for to in tos: self.edge(_from, to, **kwargs)                            # loglinspace
+except: pass                                                                     # loglinspace
+try:                                                                             # loglinspace
+    import matplotlib.pyplot as plt                                              # loglinspace
+    from mpl_toolkits.mplot3d import Axes3D, art3d                               # loglinspace
+    @k1lib.patch(Axes3D)                                                         # loglinspace
+    def march(self, heatMap, level:float=0, facecolor=[0.45, 0.45, 0.75], edgecolor=None): # loglinspace
         """Use marching cubes to plot surface of a 3d heat map.
 Example::
 
@@ -334,37 +339,37 @@ The function name is "march" because how it works internally is by using
 something called marching cubes.
 
 :param heatMap: 3d numpy array
-:param level: array value to form the surface on"""                              # dummy
-        from skimage import measure                                              # dummy
-        try: verts, faces, normals, values = measure.marching_cubes(heatMap, level) # dummy
-        except: verts, faces, normals, values = measure.marching_cubes_lewiner(heatMap, level) # dummy
-        mesh = art3d.Poly3DCollection(verts[faces])                              # dummy
-        if facecolor is not None: mesh.set_facecolor(facecolor)                  # dummy
-        if edgecolor is not None: mesh.set_edgecolor(edgecolor)                  # dummy
-        self.add_collection3d(mesh)                                              # dummy
-        self.set_xlim(0, heatMap.shape[0])                                       # dummy
-        self.set_ylim(0, heatMap.shape[1])                                       # dummy
-        self.set_zlim(0, heatMap.shape[2]); return self                          # dummy
-    @k1lib.patch(Axes3D)                                                         # dummy
-    def aspect(self):                                                            # dummy
-        """Use the same aspect ratio for all axes."""                            # dummy
-        self.set_box_aspect([ub - lb for lb, ub in (getattr(self, f'get_{a}lim')() for a in 'xyz')]) # dummy
-    @k1lib.patch(plt)                                                            # dummy
-    def k3d(size=8, labels=True, *args, **kwargs):                               # dummy
+:param level: array value to form the surface on"""                              # loglinspace
+        from skimage import measure                                              # loglinspace
+        try: verts, faces, normals, values = measure.marching_cubes(heatMap, level) # loglinspace
+        except: verts, faces, normals, values = measure.marching_cubes_lewiner(heatMap, level) # loglinspace
+        mesh = art3d.Poly3DCollection(verts[faces])                              # loglinspace
+        if facecolor is not None: mesh.set_facecolor(facecolor)                  # loglinspace
+        if edgecolor is not None: mesh.set_edgecolor(edgecolor)                  # loglinspace
+        self.add_collection3d(mesh)                                              # loglinspace
+        self.set_xlim(0, heatMap.shape[0])                                       # loglinspace
+        self.set_ylim(0, heatMap.shape[1])                                       # loglinspace
+        self.set_zlim(0, heatMap.shape[2]); return self                          # loglinspace
+    @k1lib.patch(Axes3D)                                                         # loglinspace
+    def aspect(self):                                                            # loglinspace
+        """Use the same aspect ratio for all axes."""                            # loglinspace
+        self.set_box_aspect([ub - lb for lb, ub in (getattr(self, f'get_{a}lim')() for a in 'xyz')]) # loglinspace
+    @k1lib.patch(plt)                                                            # loglinspace
+    def k3d(size=8, labels=True, *args, **kwargs):                               # loglinspace
         """Convenience function to get an :class:`~mpl_toolkits.mplot3d.axes3d.Axes3D`.
 
 :param labels: whether to include xyz labels or not
-:param size: figure size"""                                                      # dummy
-        if isinstance(size, (int, float)): size = (size, size)                   # dummy
-        fig = plt.figure(figsize=size, constrained_layout=True, *args, **kwargs) # dummy
-        ax = fig.add_subplot(projection="3d")                                    # dummy
-        if labels:                                                               # dummy
-            ax.set_xlabel('x')                                                   # dummy
-            ax.set_ylabel('y')                                                   # dummy
-            ax.set_zlabel('z')                                                   # dummy
-        return ax                                                                # dummy
-    @k1lib.patch(plt)                                                            # dummy
-    def animate(azimSpeed=3, azimStart=0, elevSpeed=0.9, elevStart=0, frames=20, close=True): # dummy
+:param size: figure size"""                                                      # loglinspace
+        if isinstance(size, (int, float)): size = (size, size)                   # loglinspace
+        fig = plt.figure(figsize=size, constrained_layout=True, *args, **kwargs) # loglinspace
+        ax = fig.add_subplot(projection="3d")                                    # loglinspace
+        if labels:                                                               # loglinspace
+            ax.set_xlabel('x')                                                   # loglinspace
+            ax.set_ylabel('y')                                                   # loglinspace
+            ax.set_zlabel('z')                                                   # loglinspace
+        return ax                                                                # loglinspace
+    @k1lib.patch(plt)                                                            # loglinspace
+    def animate(azimSpeed=3, azimStart=0, elevSpeed=0.9, elevStart=0, frames=20, close=True): # loglinspace
         """Animates the existing 3d axes.
 Example::
 
@@ -373,15 +378,15 @@ Example::
 
 :param frames: how many frames to render? Frame rate is 30 fps
 :param close: whether to close the figure (to prevent the animation and
-    static plot showing at the same time) or not"""                              # dummy
-        fig = plt.gcf()                                                          # dummy
-        def f(frame):                                                            # dummy
-            for ax in fig.axes:                                                  # dummy
-                ax.view_init(elevStart+frame*elevSpeed, azimStart+frame*azimSpeed) # dummy
-        if close: plt.close()                                                    # dummy
-        return k1lib.viz.FAnim(fig, f, frames)                                   # dummy
-    @k1lib.patch(plt)                                                            # dummy
-    def getFig():                                                                # dummy
+    static plot showing at the same time) or not"""                              # loglinspace
+        fig = plt.gcf()                                                          # loglinspace
+        def f(frame):                                                            # loglinspace
+            for ax in fig.axes:                                                  # loglinspace
+                ax.view_init(elevStart+frame*elevSpeed, azimStart+frame*azimSpeed) # loglinspace
+        if close: plt.close()                                                    # loglinspace
+        return k1lib.viz.FAnim(fig, f, frames)                                   # loglinspace
+    @k1lib.patch(plt)                                                            # loglinspace
+    def getFig():                                                                # loglinspace
         """Grab figure of the current plot.
 Example::
 
@@ -390,22 +395,26 @@ Example::
 Internally, this just calls ``plt.gcf()`` and that's it, pretty simple.
 But I usually plot things as a part of the cli pipeline, and it's very
 annoying that I can't quite chain ``plt.gcf()`` operation, so I created
-this"""                                                                          # dummy
-        def inner(_): return plt.gcf()                                           # dummy
-        return cli.aS(inner)                                                     # dummy
-    k1lib._settings.monkey.add("capturePlt", False, "whether to intercept matplotlib's show() and turn it into an image or not") # dummy
-    _oldShow = plt.show; _recentImg = [None]                                     # dummy
-    @k1lib.patch(plt)                                                            # dummy
-    def show(*args, **kwargs):                                                   # dummy
-        try:                                                                     # dummy
-            if k1lib._settings.monkey.capturePlt: _recentImg[0] = plt.gcf() | k1lib.cli.toImg() # dummy
-        except: return _oldShow(*args, **kwargs)                                 # dummy
-    @k1lib.patch(plt)                                                            # dummy
-    def _k1_capturedImg(): return _recentImg[0]                                  # dummy
-except: pass                                                                     # dummy
-try:                                                                             # dummy
-    @k1lib.patch(Axes3D)                                                         # dummy
-    def plane(self, origin, v1, v2=None, s1:float=1, s2:float=1, **kwargs):      # dummy
+this
+
+This has an alias called ``plt.toFig()``
+"""                                                                              # loglinspace
+        return cli.aS(lambda _: plt.gcf())                                       # loglinspace
+    @k1lib.patch(plt)                                                            # loglinspace
+    def toFig(): return cli.aS(lambda _: plt.gcf())                              # loglinspace
+    k1lib._settings.monkey.add("capturePlt", False, "whether to intercept matplotlib's show() and turn it into an image or not") # loglinspace
+    _oldShow = plt.show; _recentImg = [None]                                     # loglinspace
+    @k1lib.patch(plt)                                                            # loglinspace
+    def show(*args, **kwargs):                                                   # loglinspace
+        try:                                                                     # loglinspace
+            if k1lib._settings.monkey.capturePlt: _recentImg[0] = plt.gcf() | k1lib.cli.toImg() # loglinspace
+        except: return _oldShow(*args, **kwargs)                                 # loglinspace
+    @k1lib.patch(plt)                                                            # loglinspace
+    def _k1_capturedImg(): return _recentImg[0]                                  # loglinspace
+except: pass                                                                     # loglinspace
+try:                                                                             # loglinspace
+    @k1lib.patch(Axes3D)                                                         # loglinspace
+    def plane(self, origin, v1, v2=None, s1:float=1, s2:float=1, **kwargs):      # loglinspace
         """Plots a 3d plane.
 
 :param origin: origin vector, shape (3,)
@@ -414,42 +423,42 @@ try:                                                                            
     by 2 vectors. If not, plots a plane perpendicular to the 1st vector
 :param s1: optional, how much to scale 1st vector by
 :param s2: optional, how much to scale 2nd vector by
-:param kwargs: keyword arguments passed to :meth:`~mpl_toolkits.mplot3d.axes3d.Axes3D.plot_surface`""" # dummy
-        v1 = (v1 if isinstance(v1, torch.Tensor) else torch.tensor(v1)).float()  # dummy
-        if v2 is None:                                                           # dummy
-            v = v1                                                               # dummy
-            v1 = torch.tensor([1.0, 1, -(v[0]+v[1])/v[2]])                       # dummy
-            v2 = torch.cross(v, v1)                                              # dummy
-        v2 = (v2 if isinstance(v2, torch.Tensor) else torch.tensor(v2)).float()  # dummy
-        origin = (origin if isinstance(origin, torch.Tensor) else torch.tensor(origin)).float() # dummy
-        x = torch.linspace(-1, 1, 50)[:,None]                                    # dummy
-        v1 = (v1[None,:]*x*s1)[:,None]                                           # dummy
-        v2 = (v2[None,:]*x*s2)[None,:]                                           # dummy
-        origin = origin[None,None,:]                                             # dummy
-        plane = (origin + v1 + v2).permute(2, 0, 1)                              # dummy
-        self.plot_surface(*plane.numpy(), **kwargs)                              # dummy
-except: pass                                                                     # dummy
-try:                                                                             # dummy
-    @k1lib.patch(Axes3D)                                                         # dummy
-    def point(self, v, **kwargs):                                                # dummy
+:param kwargs: keyword arguments passed to :meth:`~mpl_toolkits.mplot3d.axes3d.Axes3D.plot_surface`""" # loglinspace
+        v1 = (v1 if isinstance(v1, torch.Tensor) else torch.tensor(v1)).float()  # loglinspace
+        if v2 is None:                                                           # loglinspace
+            v = v1                                                               # loglinspace
+            v1 = torch.tensor([1.0, 1, -(v[0]+v[1])/v[2]])                       # loglinspace
+            v2 = torch.cross(v, v1)                                              # loglinspace
+        v2 = (v2 if isinstance(v2, torch.Tensor) else torch.tensor(v2)).float()  # loglinspace
+        origin = (origin if isinstance(origin, torch.Tensor) else torch.tensor(origin)).float() # loglinspace
+        x = torch.linspace(-1, 1, 50)[:,None]                                    # loglinspace
+        v1 = (v1[None,:]*x*s1)[:,None]                                           # loglinspace
+        v2 = (v2[None,:]*x*s2)[None,:]                                           # loglinspace
+        origin = origin[None,None,:]                                             # loglinspace
+        plane = (origin + v1 + v2).permute(2, 0, 1)                              # loglinspace
+        self.plot_surface(*plane.numpy(), **kwargs)                              # loglinspace
+except: pass                                                                     # loglinspace
+try:                                                                             # loglinspace
+    @k1lib.patch(Axes3D)                                                         # loglinspace
+    def point(self, v, **kwargs):                                                # loglinspace
         """Plots a 3d point.
 
 :param v: point location, shape (3,)
-:param kwargs: keyword argument passed to :meth:`~mpl_toolkits.mplot3d.axes3d.Axes3D.scatter`""" # dummy
-        v = (v if hasTorch and isinstance(v, torch.Tensor) else torch.tensor(v)).float() # dummy
-        self.scatter(*v, **kwargs)                                               # dummy
-    @k1lib.patch(Axes3D)                                                         # dummy
-    def line(self, v1, v2, **kwargs):                                            # dummy
+:param kwargs: keyword argument passed to :meth:`~mpl_toolkits.mplot3d.axes3d.Axes3D.scatter`""" # loglinspace
+        v = (v if hasTorch and isinstance(v, torch.Tensor) else torch.tensor(v)).float() # loglinspace
+        self.scatter(*v, **kwargs)                                               # loglinspace
+    @k1lib.patch(Axes3D)                                                         # loglinspace
+    def line(self, v1, v2, **kwargs):                                            # loglinspace
         """Plots a 3d line.
 
 :param v1: 1st point location, shape (3,)
 :param v2: 2nd point location, shape (3,)
-:param kwargs: keyword argument passed to :meth:`~mpl_toolkits.mplot3d.axes3d.Axes3D.plot`""" # dummy
-        self.plot(*torch.tensor([list(v1), list(v2)]).float().T, **kwargs)       # dummy
-except: pass                                                                     # dummy
-try:                                                                             # dummy
-    @k1lib.patch(Axes3D)                                                         # dummy
-    def surface(self, z, **kwargs):                                              # dummy
+:param kwargs: keyword argument passed to :meth:`~mpl_toolkits.mplot3d.axes3d.Axes3D.plot`""" # loglinspace
+        self.plot(*torch.tensor([list(v1), list(v2)]).float().T, **kwargs)       # loglinspace
+except: pass                                                                     # loglinspace
+try:                                                                             # loglinspace
+    @k1lib.patch(Axes3D)                                                         # loglinspace
+    def surface(self, z, **kwargs):                                              # loglinspace
         """Plots 2d surface in 3d. Pretty much exactly the same as
 :meth:`~mpl_toolkits.mplot3d.axes3d.Axes3D.plot_surface`, but fields x and y
 are filled in automatically. Example::
@@ -460,62 +469,62 @@ are filled in automatically. Example::
 .. image:: images/surface.png
 
 :param z: 2d numpy array for the heights
-:param kwargs: keyword arguments passed to ``plot_surface``"""                   # dummy
-        if hasTorch and isinstance(z, torch.Tensor): z = z.numpy()               # dummy
-        x, y = z.shape                                                           # dummy
-        x, y = np.meshgrid(np.array(range(y)), np.array(range(x)))               # dummy
-        return self.plot_surface(x, y, z, **kwargs)                              # dummy
-except: pass                                                                     # dummy
-try:                                                                             # dummy
-    import pandas as pd                                                          # dummy
-    @k1lib.patch(pd.DataFrame)                                                   # dummy
-    def table(self):                                                             # dummy
+:param kwargs: keyword arguments passed to ``plot_surface``"""                   # loglinspace
+        if hasTorch and isinstance(z, torch.Tensor): z = z.numpy()               # loglinspace
+        x, y = z.shape                                                           # loglinspace
+        x, y = np.meshgrid(np.array(range(y)), np.array(range(x)))               # loglinspace
+        return self.plot_surface(x, y, z, **kwargs)                              # loglinspace
+except: pass                                                                     # loglinspace
+try:                                                                             # loglinspace
+    import pandas as pd                                                          # loglinspace
+    @k1lib.patch(pd.DataFrame)                                                   # loglinspace
+    def table(self):                                                             # loglinspace
         """Converts a :class:`pandas.core.frame.DataFrame` to a normal table made
 from lists (with column headers), so that it can be more easily manipulated
 with cli tools. Example::
 
-    pd.read_csv("abc.csv").table()"""                                            # dummy
-        yield self.columns.to_list()                                             # dummy
-        yield from self.values                                                   # dummy
-except: pass                                                                     # dummy
-try:                                                                             # dummy
-    import forbiddenfruit                                                        # dummy
-    def splitCamel(s):                                                           # dummy
+    pd.read_csv("abc.csv").table()"""                                            # loglinspace
+        yield self.columns.to_list()                                             # loglinspace
+        yield from self.values                                                   # loglinspace
+except: pass                                                                     # loglinspace
+try:                                                                             # loglinspace
+    import forbiddenfruit                                                        # loglinspace
+    def splitCamel(s):                                                           # loglinspace
         """Splits a string up based on camel case.
 Example::
 
     # returns ['IHave', 'No', 'Idea', 'What', 'To', 'Put', 'Here']
-    "IHaveNoIdeaWhatToPutHere".splitCamel()"""                                   # dummy
-        words = [[s[0]]]                                                         # dummy
-        for c in s[1:]:                                                          # dummy
-            if words[-1][-1].islower() and c.isupper():                          # dummy
-                words.append(list(c))                                            # dummy
-            else: words[-1].append(c)                                            # dummy
-        return [''.join(word) for word in words]                                 # dummy
-    forbiddenfruit.curse(str, "splitCamel", splitCamel)                          # dummy
-except: pass                                                                     # dummy
-try:                                                                             # dummy
-    import ray                                                                   # dummy
-    @ray.remote                                                                  # dummy
-    class RayProgress:                                                           # dummy
-        def __init__(self, n): self.values = [0]*n; self.thStop = False          # dummy
-        def update(self, idx:int, val:float): self.values[idx] = val; return self.values[idx] # dummy
-        def stop(self): self.thStop = True                                       # dummy
-        def content(self): return self.thStop, self.values | cli.apply(lambda x: f"{round(x*100)}%") | cli.join(" | ") # dummy
-    def startRayProgressThread(rp, title:str="Progress"):                        # dummy
-        def inner(x):                                                            # dummy
-            if x == 0: return                                                    # dummy
-            print("Starting...\r", end="")                                       # dummy
-            beginTime = time.time()                                              # dummy
-            while True:                                                          # dummy
-                stop, content = ray.get(rp.content.remote())                     # dummy
-                print(f"{title}: {content}, {round(time.time()-beginTime)}s elapsed         \r", end="") # dummy
-                if stop: break                                                   # dummy
-                time.sleep(0.01)                                                 # dummy
-        [0, 1] | cli.applyTh(inner, timeout=1e9, prefetch=10) | cli.item()       # dummy
-    @k1lib.patch(ray)                                                            # dummy
-    @contextmanager                                                              # dummy
-    def progress(n:int, title:str="Progress"):                                   # dummy
+    "IHaveNoIdeaWhatToPutHere".splitCamel()"""                                   # loglinspace
+        words = [[s[0]]]                                                         # loglinspace
+        for c in s[1:]:                                                          # loglinspace
+            if words[-1][-1].islower() and c.isupper():                          # loglinspace
+                words.append(list(c))                                            # loglinspace
+            else: words[-1].append(c)                                            # loglinspace
+        return [''.join(word) for word in words]                                 # loglinspace
+    forbiddenfruit.curse(str, "splitCamel", splitCamel)                          # loglinspace
+except: pass                                                                     # loglinspace
+try:                                                                             # loglinspace
+    import ray                                                                   # loglinspace
+    @ray.remote                                                                  # loglinspace
+    class RayProgress:                                                           # loglinspace
+        def __init__(self, n): self.values = [0]*n; self.thStop = False          # loglinspace
+        def update(self, idx:int, val:float): self.values[idx] = val; return self.values[idx] # loglinspace
+        def stop(self): self.thStop = True                                       # loglinspace
+        def content(self): return self.thStop, self.values | cli.apply(lambda x: f"{round(x*100)}%") | cli.join(" | ") # loglinspace
+    def startRayProgressThread(rp, title:str="Progress"):                        # loglinspace
+        def inner(x):                                                            # loglinspace
+            if x == 0: return                                                    # loglinspace
+            print("Starting...\r", end="")                                       # loglinspace
+            beginTime = time.time()                                              # loglinspace
+            while True:                                                          # loglinspace
+                stop, content = ray.get(rp.content.remote())                     # loglinspace
+                print(f"{title}: {content}, {round(time.time()-beginTime)}s elapsed         \r", end="") # loglinspace
+                if stop: break                                                   # loglinspace
+                time.sleep(0.01)                                                 # loglinspace
+        [0, 1] | cli.applyTh(inner, timeout=1e9, prefetch=10) | cli.item()       # loglinspace
+    @k1lib.patch(ray)                                                            # loglinspace
+    @contextmanager                                                              # loglinspace
+    def progress(n:int, title:str="Progress"):                                   # loglinspace
         """Manages multiple progress bars distributedly.
 Example::
 
@@ -531,11 +540,11 @@ This will print out a progress bar that looks like this::
     Progress: 100% | 100% | 100% | 100% | 100%
 
 :param n: number of progresses to keep track of
-:param title: title of the progress to show"""                                   # dummy
-        rp = RayProgress.remote(n); startRayProgressThread(rp, title); yield rp  # dummy
-        ray.get(rp.stop.remote()); time.sleep(0.1)                               # dummy
-except: pass                                                                     # dummy
-@k1lib.patch(np)                                                                 # dummy
+:param title: title of the progress to show"""                                   # loglinspace
+        rp = RayProgress.remote(n); startRayProgressThread(rp, title); yield rp  # loglinspace
+        ray.get(rp.stop.remote()); time.sleep(0.1)                               # loglinspace
+except: pass                                                                     # loglinspace
+@k1lib.patch(np)                                                                 # loglinspace
 def gather(self, dim, index):                                                    # gather
     """Gathers values along an axis specified by ``dim``.
 

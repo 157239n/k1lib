@@ -2,7 +2,7 @@
 """This module is for all things related to atoms, molecules and their simulations"""
 import k1lib, math, k1lib.cli as cli
 from typing import Dict, List, Union
-import matplotlib.pyplot as plt
+plt = k1lib.dep("matplotlib.pyplot")
 from collections import deque
 from .atom import Atom, _depthAuto
 try: import torch; hasTorch = True

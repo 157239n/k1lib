@@ -159,6 +159,7 @@ Functions
 
 .. autofunction:: k1lib.isNumeric
 .. autofunction:: k1lib.patch
+.. autofunction:: k1lib.cron
 .. autofunction:: k1lib.wraps
 .. autofunction:: k1lib.squeeze
 .. autofunction:: k1lib.raiseEx
@@ -187,3 +188,4 @@ Higher order functions
 .. autofunction:: k1lib.optimize
 .. autofunction:: k1lib.inverse
 .. autofunction:: k1lib.integral
+.. autofunction:: k1lib.batchify

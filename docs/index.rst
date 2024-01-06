@@ -110,6 +110,8 @@ Submodules
    p5
    schedule
    selector
+   selen
+   serpent
    serve
    viz
 

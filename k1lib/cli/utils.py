@@ -2,10 +2,10 @@
 """
 This is for all short and random quality-of-life utilities."""
 from k1lib.cli.init import patchDefaultDelim, BaseCli, yieldT
-import k1lib.cli as cli, numbers, numpy as np, dis
+import k1lib.cli as cli, k1lib.cli.init as init, numbers, numpy as np, dis
 from k1lib.cli.typehint import *
 from typing import overload, Iterator, Any, List, Set, Union, Callable
-import k1lib, time, math, os
+import k1lib, time, math, os, json
 from collections import defaultdict
 try: import torch; hasTorch = True
 except: torch = k1lib.Object().withAutoDeclare(lambda: type("RandomClass", (object, ), {})); hasTorch = False
@@ -16,7 +16,7 @@ except: pass
 __all__ = ["size", "shape", "item", "rItem", "iden", "join", "wrapList",
            "equals", "reverse", "ignore", "rateLimit", "timeLimit", "tab", "indent",
            "clipboard", "deref", "bindec", "smooth", "disassemble",
-           "tree", "lookup", "dictFields", "backup", "sketch", "syncStepper"]
+           "tree", "lookup", "dictFields", "backup", "sketch", "syncStepper", "zeroes", "normalize"]
 settings = k1lib.settings.cli
 def exploreSize(it):                                                             # exploreSize
     """Returns first element and length of array. Returns [first item, length]""" # exploreSize
@@ -73,7 +73,9 @@ this, but only use it if you are sure that ``len(it)`` can be called.
         idx = self.idx                                                           # size
         if idx == 0:                                                             # size
             try: return len(it)                                                  # size
-            except: return exploreSize(it)[1]                                    # size
+            except:                                                              # size
+                try: return exploreSize(it)[1]                                   # size
+                except: pass                                                     # size
         if hasPIL and isinstance(it, PIL.Image.Image):                           # size
             return it.size if idx is None else it.size[idx]                      # size
         if idx is None:                                                          # size
@@ -86,6 +88,10 @@ this, but only use it if you are sure that ``len(it)`` can be called.
             except TypeError: pass                                               # size
             return tuple(answer)                                                 # size
         return exploreSize(it | self._f)[1]                                      # size
+    def _jsF(self, meta):                                                        # size
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # size
+        post = "" if self.idx is None else f"[{cli.kjs.v(self.idx)}]"            # size
+        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.shape(){post}", fIdx    # size
 shape = size                                                                     # size
 noFill = object()                                                                # size
 class item(BaseCli):                                                             # item
@@ -117,6 +123,9 @@ Example::
     def __ror__(self, it:Iterator[str]):                                         # item
         if self.amt != 1: return it | self._f                                    # item
         return next(iter(it), *self.fillP)                                       # item
+    def _jsF(self, meta):                                                        # item
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # item
+        return f"const {fIdx} = ({dataIdx}) => {dataIdx}[0]", fIdx               # item
 class rItem(BaseCli):                                                            # rItem
     def __init__(self, idx:int):                                                 # rItem
         """Combines ``rows(idx) | item()``, as this is a pretty common pattern.
@@ -130,6 +139,9 @@ Example::
         if isinstance(it, self.arrayTypes): return it[self.idx]                  # rItem
         for i, e in zip(range(self.idx+1), it): pass                             # rItem
         return e                                                                 # rItem
+    def _jsF(self, meta):                                                        # rItem
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # rItem
+        return f"const {fIdx} = ({dataIdx}) => {dataIdx}[{cli.kjs.v(self.idx)}]", fIdx # rItem
 class iden(BaseCli):                                                             # iden
     def __init__(self):                                                          # iden
         """Yields whatever the input is. Useful for multiple streams.
@@ -141,6 +153,9 @@ Example::
     def _all_array_opt(self, it, level): return it                               # iden
     def _typehint(self, inp): return inp                                         # iden
     def __ror__(self, it:Iterator[Any]): return it                               # iden
+    def _jsF(self, meta):                                                        # iden
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # iden
+        return f"const {fIdx} = ({dataIdx}) => {dataIdx}", fIdx                  # iden
 class join(BaseCli):                                                             # join
     def __init__(self, delim:str=None):                                          # join
         r"""Merges all strings into 1, with `delim` in the middle. Basically
@@ -152,6 +167,9 @@ class join(BaseCli):                                                            
     def _typehint(self, inp): return str                                         # join
     def __ror__(self, it:Iterator[str]):                                         # join
         return self.delim.join(it | cli.apply(str))                              # join
+    def _jsF(self, meta):                                                        # join
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # join
+        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.join({json.dumps(self.delim)})", fIdx # join
 class wrapList(BaseCli):                                                         # wrapList
     def __init__(self):                                                          # wrapList
         """Wraps inputs inside a list. There's a more advanced cli tool
@@ -165,6 +183,9 @@ built from this, which is :meth:`~k1lib.cli.structural.unsqueeze`. Example::
     def __ror__(self, it) -> List[Any]:                                          # wrapList
         if isinstance(it, settings.arrayTypes): return it[None]                  # wrapList
         return [it]                                                              # wrapList
+    def _jsF(self, meta):                                                        # wrapList
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # wrapList
+        return f"const {fIdx} = ({dataIdx}) => [{dataIdx}]", fIdx                # wrapList
 class _EarlyExp(Exception): pass                                                 # _EarlyExp
 class equals:                                                                    # equals
     def __init__(self):                                                          # equals
@@ -194,6 +215,9 @@ Example::
     def __ror__(self, it:Iterator[str]) -> List[str]:                            # reverse
         if isinstance(it, settings.arrayTypes): return it[::-1]                  # reverse
         return reversed(list(it))                                                # reverse
+    def _jsF(self, meta):                                                        # reverse
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # reverse
+        return f"const {fIdx} = ({dataIdx}) => [...{dataIdx}].reverse()", fIdx   # reverse
 class ignore(BaseCli):                                                           # ignore
     def __init__(self):                                                          # ignore
         r"""Just loops through everything, ignoring the output.
@@ -209,6 +233,9 @@ Example::
     def __ror__(self, it:Iterator[Any]):                                         # ignore
         if isinstance(it, settings.arrayTypes): return                           # ignore
         for _ in it: pass                                                        # ignore
+    def _jsF(self, meta):                                                        # ignore
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # ignore
+        return f"const {fIdx} = ({dataIdx}) => {dataIdx}", fIdx                  # ignore
 class rateLimit(BaseCli):                                                        # rateLimit
     def __init__(self, f, delay=0.1):                                            # rateLimit
         """Limits the execution flow rate upon a condition.
@@ -298,7 +325,7 @@ Example::
         import pyperclip; self.pyperclip = pyperclip                             # clipboard
     def _typehint(self, inp): return type(None)                                  # clipboard
     def __ror__(self, s): self.pyperclip.copy(s)                                 # clipboard
-a = [numbers.Number, np.number, str, bool, bytes, k1lib.UValue]                  # clipboard
+a = [numbers.Number, np.number, str, bool, bytes, k1lib.UValue, cli.conv.Audio]  # clipboard
 if hasTorch: a.append(torch.nn.Module)                                           # clipboard
 settings.atomic.add("deref", tuple(a), "used by deref")                          # clipboard
 Tensor = torch.Tensor; atomic = settings.atomic                                  # clipboard
@@ -390,6 +417,53 @@ will never try to iterate over it. If you wish to change it, do something like::
 everything an iterator. Not entirely sure when this comes in handy, but it's
 there."""                                                                        # deref
         return inv_dereference(self.igT)                                         # deref
+    def _jsF(self, meta):                                                        # deref
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # deref
+        return f"const {fIdx} = ({dataIdx}) => {dataIdx}", fIdx                  # deref
+    @staticmethod                                                                # deref
+    def js():                                                                    # deref
+        """Deref incoming object and turn them into a js object (NOT json string!).
+Example::
+
+    # returns "[...Array(10).keys()]"
+    range(10) | deref.json()
+
+How does it know to transpile it? Based on the dictionary at `settings.cli.kjs.jsonF`
+and the object's "._jsonF" function. Say you have a custom list object, you can do
+something like this::
+
+    class CustomList:
+        def __init__(self): ...
+        def _jsonF(self): return "your js string here"
+
+Or, you can do something like this::
+
+    class CustomList: ...
+    settings.cli.kjs.jsonF[CustomList] = lambda obj: "your js string here"
+
+A variety of data types are included out of the box already for common types,
+view the source code of this method to check them out."""                        # deref
+        jsonF = settings.kjs.jsonF                                               # deref
+        jsonF[list] = lambda x: "[" + ", ".join([deref_js(e) for e in x]) + "]"  # deref
+        jsonF[str] = lambda x: json.dumps(x)                                     # deref
+        jsonF[tuple] = jsonF[list]; jsonF[set] = lambda x: "new Set(" + jsonF[list](x) + ")" # deref
+        jsonF[type(None)] = lambda x: "null"                                     # deref
+        jsonF[np.ndarray] = lambda x: json.dumps(x | deref(igT=False))           # deref
+        if hasTorch: jsonF[torch.Tensor] = lambda x: json.dumps(x | deref(igT=False)) # deref
+        jsonF[type(iter(range(10)))] = lambda x: "[" + ", ".join([str(e) for e in x]) + "]" # deref
+        jsonF[type((x for x in range(0)))] = jsonF[list]                         # deref
+        jsonF[type({}.keys())] = jsonF[list]; jsonF[type({}.values())] = jsonF[list] # deref
+        jsonF[dict] = lambda x: "{" + ", ".join([f"{json.dumps(k)}: {deref_js(v)}" for k,v in x.items()]) + "}" # deref
+        jsonF[defaultdict] = jsonF[dict]                                         # deref
+        deref.js = lambda: cli.aS(deref_js); return deref.js() # initializes at runtime, then patches deref.json() to get a faster path! # deref
+def deref_js(obj):                                                               # deref_js
+    # only 2 special cases, perf considerations, everything else is pluggable    # deref_js
+    if isinstance(obj, bool): return "true" if obj else "false"                  # deref_js
+    if isinstance(obj, (numbers.Number, np.number)): return str(obj)             # deref_js
+    fn = settings.kjs.jsonF.get(type(obj), None)                                 # deref_js
+    if fn: return fn(obj)                                                        # deref_js
+    if hasattr(obj, "_jsonF"): return obj._jsonF()                               # deref_js
+    raise Exception(f"Don't know how to transcribe object with class {type(obj)}. Either add the serialization function to `settings.cli.kjs.jsonF`, or implement the function `._jsonF()` to your custom class") # deref_js
 class bindec(BaseCli):                                                           # bindec
     def __init__(self, cats:List[Any], f=None):                                  # bindec
         """Binary decodes the input.
@@ -436,11 +510,14 @@ time, like this::
         plt.plot(x | smooth() | deref(), y | smooth() | deref())
 
 :param consecutives: if not defined, then used the value inside ``settings.cli.smooth``""" # smooth
-        self.b = cli.batched(consecutives or settings.smooth)                    # smooth
+        self.b = cli.batched(consecutives or settings.smooth); self.consecutives = consecutives # smooth
     def __ror__(self, it):                                                       # smooth
         it = it | self.b                                                         # smooth
         if isinstance(it, settings.arrayTypes): return it.mean(1)                # smooth
         return it | cli.toMean().all()                                           # smooth
+    def _jsF(self, meta):                                                        # smooth
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # smooth
+        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.smooth({cli.kjs.v(self.consecutives)})", fIdx # smooth
 def _f(): pass                                                                   # _f
 _code = type(_f.__code__)                                                        # _f
 def disassemble(f=None):                                                         # disassemble
@@ -507,6 +584,13 @@ class lookup(BaseCli):                                                          
     # returns [3, 5, 52, 52, 3]
     "abcca" | lookup(d) | deref()
 
+    # raises Exception, as "d" does not exist
+    "abccad" | lookup(d) | deref()
+    # returns [3, 5, 52, 52, 3, '(not found)']
+    "abccad" | lookup(d, fill="(not found)") | deref()
+    # returns [3, 5, 52, 52, 3, 'd']
+    "abccad" | lookup(d, fill=input) | deref()
+
     # returns [[0, 3], [1, 5], [2, 52], [3, 52], [4, 3]]
     [range(5), "abcca"] | transpose() | lookup(d, 1) | deref()
 
@@ -514,17 +598,21 @@ class lookup(BaseCli):                                                          
 :param col: if None, lookup on each row, else lookup a specific
     column only
 :param fill: if None, throws error if looked up element is not
-    available, else returns the fill value"""                                    # lookup
-        self.d = d; self.col = col                                               # lookup
-        if fill is not None: self.d = defaultdict(lambda: fill, self.d)          # lookup
+    available, else returns the fill value (or the input value if ``fill == input``)""" # lookup
+        self.d = d; self.col = col; self.fill = fill                             # lookup
+        if fill is None: self.f = lambda e: d[e]                                 # lookup
+        elif fill == input: self.f = lambda e: d.get(e, e)                       # lookup
+        else: self.f = lambda e: d.get(e, fill)                                  # lookup
     def _typehint(self, inp):                                                    # lookup
         t = inferType(list(self.d.values()))                                     # lookup
         if isinstance(t, tListIterSet): return tIter(t.child)                    # lookup
         if isinstance(t, tCollection): return tIter(tLowest(*t.children))        # lookup
         return tIter(tAny())                                                     # lookup
-    def __ror__(self, it):                                                       # lookup
-        d = self.d                                                               # lookup
-        return it | cli.apply(lambda e: d[e], self.col)                          # lookup
+    def __ror__(self, it): return it | cli.apply(self.f, self.col)               # lookup
+    def _jsF(self, meta):                                                        # lookup
+        fIdx = init._jsFAuto(); dictIdx = init._jsDAuto(); dataIdx = init._jsDAuto() # lookup
+        if not self.col is None: raise Exception("lookup._jsF() doesn't support custom .col yet") # lookup
+        return f"const {dictIdx} = {json.dumps(self.d)}\nconst {fIdx} = ({dataIdx}) => {dataIdx}.lookup({dictIdx}, {cli.kjs.v(self.col)}, {cli.kjs.v(self.fill)})", fIdx # lookup
 class dictFields(BaseCli):                                                       # dictFields
     def __init__(self, *fields, default=""):                                     # dictFields
         """Grab a bunch of dictionary fields.
@@ -558,8 +646,10 @@ not available on Windows."""                                                    
             None | cli.cmd(f"rm -rf '{it}'") | cli.ignore()                      # backup
             None | cli.cmd(f"cp -r '{it}.backup' '{it}'") | cli.ignore()         # backup
         return cli.aS(inner)                                                     # backup
+sketch_interceptor = {}                                                          # backup
 class sketch(BaseCli):                                                           # sketch
-    def __init__(self, transforms:List[callable]=[], titles:List[str]=None, im:bool=False, ncols:int=None): # sketch
+    _jsF_ctxIdx = None                                                           # sketch
+    def __init__(self, transforms:List[callable]=[], titles:List[str]=None, im:bool=False, ncols:int=None, n:int=None, axes:int=None): # sketch
         """Convenience tool to plot multiple matplotlib plots at the same
 time, while still keeping everything short and in 1 line. For this example,
 we're trying to plot x^1, x^2, ..., x^8 on 2 separate plots, one left one
@@ -602,24 +692,110 @@ a grid, make y axis log)
 
 See also: :class:`~k1lib.cli.output.plotImgs`
 
+Check out a gallery of more examples at `kapi/9-mpl <https://mlexps.com/kapi/9-mpl/>`_.
+
 :param transforms: transform functions to be run when drawing every plot. ``plt`` (aka ``matplotlib.pyplot``) will be passed in
 :param titles: if specified, use these titles for each plot. Kinda hacky I have to admit
 :param im: if True, returns a PIL image and closes the sketch, else return nothing but still have the sketch open
-:param ncols: if specified, will sketch with this number of columns"""           # sketch
+:param ncols: if specified, will sketch with this number of columns
+:param n: if specified, use this number of sketch instead of figuring out automatically
+:param axes: if specified, forgo calculating #axes and initialization altogether and just use the provided axes""" # sketch
         super().__init__(capture=True); self.titles = titles; self.im = im       # sketch
-        self.transforms = [cli.fastF(t) for t in transforms]; self.ncols = ncols # sketch
+        self.transforms = [cli.fastF(t) for t in transforms]; self.ncols = ncols; self.n = n; self.axes = axes # sketch
     def __ror__(self, it):                                                       # sketch
-        it = list(it); n = len(it); s = self.capturedSerial; transforms = self.transforms # sketch
+        it = list(it); n = self.n or len(it); s = self.capturedSerial; transforms = self.transforms # sketch
         ncols = self.ncols or math.ceil(n**0.5); nrows = math.ceil(n/ncols)      # sketch
-        fig, axes = plt.subplots(nrows, ncols, figsize=(ncols*5, nrows*4))       # sketch
+        if self.axes: axes = self.axes                                           # sketch
+        else:                                                                    # sketch
+            fig, axes = plt.subplots(nrows, ncols, figsize=(ncols*5, nrows*4))   # sketch
+            if nrows*ncols == 1: axes = [axes]                                   # sketch
         if axes | cli.shape() | cli.shape(0) > 1: axes = axes.flatten()          # sketch
         for i, [ax, e, title] in enumerate(zip(axes, it, self.titles or ("" | cli.repeat()))): # sketch
             plt.sca(ax); e | s | cli.deref()                                     # sketch
             if title: plt.title(title)                                           # sketch
             for trans in transforms: trans(plt)                                  # sketch
-        axes[i+1:] | cli.op().remove().all() | cli.deref(); plt.tight_layout()   # sketch
+        if self.n is None: axes[i+1:] | cli.op().remove().all() | cli.deref(); plt.tight_layout() # sketch
         if self.im: return plt.gcf() | cli.toImg()                               # sketch
-import numbers, sys; from collections import deque                               # sketch
+        if self.n: return axes[i+1:]                                             # sketch
+    def _jsF(self, meta):                                                        # sketch
+        if self.n: raise Exception("sketch()._jsF() doesn't support .n parameter yet") # sketch
+        if self.axes: raise Exception("sketch()._jsF() doesn't support .axes parameter yet") # sketch
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto(); ctxIdx = init._jsDAuto() # sketch
+        # generate all child functions here                                      # sketch
+        sketch._jsF_ctxIdx = ctxIdx                                              # sketch
+        header, _fIdx, _async = k1lib.kast.asyncGuard(self.capturedSerial._jsF(meta)) # sketch
+        # then generate all transforms here, using a tracing compiler            # sketch
+        tfStmts = ""                                                             # sketch
+        if len(self.transforms) > 0:                                             # sketch
+            class Interceptor:                                                   # sketch
+                def __getattr__(self, attr):                                     # sketch
+                    if getattr(plt, attr) not in sketch_interceptor: raise Exception(f"Transpiling function `plt.{attr}` is not supported at the moment") # sketch
+                    return lambda *args, **kwargs: sketch_interceptor[getattr(plt, attr)](*args, **kwargs) # sketch
+            tfStmts = tfs = self.transforms | cli.apply(cli.init.fastF) | cli.op()(Interceptor()).all() | cli.join("; ") # sketch
+        sketch._jsF_ctxIdx = None                                                # sketch
+        return f"""\
+let {ctxIdx} = null;\n{header}
+const {fIdx} = async ({dataIdx}) => {{ // dataIdx should have
+    const ctx = []; // this is the object that will be sent to the rendering server!
+    const titles = {json.dumps(self.titles)} ?? Array({dataIdx}.length);
+    for (const i of [...Array({dataIdx}.length).keys()]) {{
+        {ctxIdx} = [];
+        // actually executing function and plotting function downstream
+        {'await ' if _async else ''}{_fIdx}({dataIdx}[i]);
+        if (titles[i]) {ctxIdx}.push(["title", titles[i]]);
+        // inject all transforms here
+        {tfStmts};
+        ctx.push({ctxIdx}); {ctxIdx} = null;
+    }}
+    // console.log(ctx);
+    // console.log(JSON.stringify(ctx));
+    const res = await (await fetch("https://local.mlexps.com/routeServer/kapi_9-mpl", {{
+      method: "POST",
+      body: JSON.stringify({{ "ctx": JSON.stringify(ctx) }}),
+      headers: {{ "Content-Type": "application/json" }}
+    }})).json()
+    if (res.success) {{
+        const base64 = res.data;
+        console.log("mpl fetched");
+        return `<img src="data:image/jpg;base64, ${{base64}}" />`
+    }} else {{ throw new Error(res.reason); }}
+    // return ctx;
+}}""", fIdx                                                                      # sketch
+        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.repeatFrom({cli.kjs.v(self.limit)})", fIdx # sketch
+def _jsF_plt_ctxGuard():                                                         # _jsF_plt_ctxGuard
+    if sketch._jsF_ctxIdx is None: raise Exception("Have to wrap any plotting operations around sketch(). So, transform your code from `data | (toJsFunc() | ~aS(plt.plot))` into `[data] | (toJsFunc() | (sketch() | ~aS(plt.plot)))`") # _jsF_plt_ctxGuard
+    return sketch._jsF_ctxIdx                                                    # _jsF_plt_ctxGuard
+try: import matplotlib.pyplot as plt; hasMpl = True                              # _jsF_plt_ctxGuard
+except: hasMpl = False                                                           # _jsF_plt_ctxGuard
+if hasMpl:                                                                       # _jsF_plt_ctxGuard
+    def _jsF_plt_plot(meta, c=None):                                             # _jsF_plt_ctxGuard
+        fIdx = init._jsFAuto(); xIdx = init._jsDAuto(); yIdx = init._jsDAuto(); ctxIdx = _jsF_plt_ctxGuard() # _jsF_plt_ctxGuard
+        return f"""\
+    const {fIdx} = ({xIdx}, {yIdx}=null) => {{
+        if (!{yIdx}) {{ // handle only xIdx is available case
+            {yIdx} = {xIdx}; {xIdx} = [...Array({yIdx}.length).keys()];
+        }}
+        {ctxIdx}.push(["plot", {xIdx}, {yIdx}]);
+    }}""", fIdx                                                                  # _jsF_plt_ctxGuard
+    settings.kjs.jsF[plt.plot] = _jsF_plt_plot                                   # _jsF_plt_ctxGuard
+    def _jsF_plt_title(meta): # version that passes args in js side              # _jsF_plt_ctxGuard
+        fIdx = init._jsFAuto(); titleIdx = init._jsDAuto(); ctxIdx = _jsF_plt_ctxGuard() # _jsF_plt_ctxGuard
+        return f"""const {fIdx} = ({titleIdx}) => {{ {ctxIdx}.push(["title", {titleIdx}]); }}""", fIdx # _jsF_plt_ctxGuard
+    settings.kjs.jsF[plt.title] = _jsF_plt_title # below is version that passes args in python side, returns statement, instead of (header, fIdx) like usual # _jsF_plt_ctxGuard
+    sketch_interceptor[plt.title] = lambda title: f"""{_jsF_plt_ctxGuard()}.push(["title", `{title}`])""" # _jsF_plt_ctxGuard
+    def _jsF_plt_grid(meta):                                                     # _jsF_plt_ctxGuard
+        fIdx = init._jsFAuto(); tfIdx = init._jsDAuto(); ctxIdx = _jsF_plt_ctxGuard() # _jsF_plt_ctxGuard
+        return f"""const {fIdx} = ({tfIdx}) => {{ {ctxIdx}.push(["grid", {tfIdx}]); }}""", fIdx # _jsF_plt_ctxGuard
+    settings.kjs.jsF[plt.grid] = _jsF_plt_grid; sketch_interceptor[plt.grid] = lambda tf=True: f"""{_jsF_plt_ctxGuard()}.push(["grid", {cli.kjs.v(tf)}])""" # _jsF_plt_ctxGuard
+    def _jsF_plt_legend(meta):                                                   # _jsF_plt_ctxGuard
+        fIdx = init._jsFAuto(); legendIdx = init._jsDAuto(); ctxIdx = _jsF_plt_ctxGuard() # _jsF_plt_ctxGuard
+        return f"""const {fIdx} = ({legendIdx}) => {{ {ctxIdx}.push(["legend", {legendIdx}]); }}""", fIdx # _jsF_plt_ctxGuard
+    settings.kjs.jsF[plt.legend] = _jsF_plt_legend; sketch_interceptor[plt.legend] = lambda legend=None: f"""{_jsF_plt_ctxGuard()}.push(["legend", {cli.kjs.v(legend)}])""" # _jsF_plt_ctxGuard
+                                                                                 # _jsF_plt_ctxGuard
+    sketch_interceptor[plt.xlim] = lambda left=None, right=None: f"""{_jsF_plt_ctxGuard()}.push(["xlim", {cli.kjs.v(left)}, {cli.kjs.v(right)}])""" # _jsF_plt_ctxGuard
+    sketch_interceptor[plt.ylim] = lambda bottom=None, top=None: f"""{_jsF_plt_ctxGuard()}.push(["ylim", {cli.kjs.v(bottom)}, {cli.kjs.v(top)}])""" # _jsF_plt_ctxGuard
+    sketch_interceptor[plt.xscale] = lambda scale: f"""{_jsF_plt_ctxGuard()}.push(["xscale", {cli.kjs.v(scale)}])""" # _jsF_plt_ctxGuard
+import numbers, sys; from collections import deque                               # _jsF_plt_ctxGuard
 class syncStepper(BaseCli):                                                      # syncStepper
     def __init__(self, col=0, sort=False):                                       # syncStepper
         """Steps forward all streams at a time, yielding same results from min to max.
@@ -679,6 +855,8 @@ With k streams each having n elements, you should expect memory complexity to be
 O(k), and the time complexity to be O(n*k^2/2). That k^2 term is kinda worrying,
 but in most use cases, k is small and so k^2 can be treated as a constant
 
+See also: :class:`~k1lib.cli.structural.latch`
+
 :param col: column where it should compare values and merge them together. Can be None, but that would be quite a weird use case
 :param sort: whether to sort the streams or not. This cli requires it, but it's
     not turned on by default because it's an intensive operation"""              # syncStepper
@@ -721,3 +899,126 @@ but in most use cases, k is small and so k^2 can be treated as a constant
             res, changed = self._yieldNext()                                     # syncStepper
             if not changed: break                                                # syncStepper
             yield res                                                            # syncStepper
+class zeroes(BaseCli):                                                           # zeroes
+    def __init__(self, col:int=None, log=False, offset:float=0):                 # zeroes
+        """Shift the specified column so that the first element is zero
+Example::
+
+    range(13, 20)   | zeroes()         | deref() # returns [0, 1, 2, 3, 4, 5, 6]
+    range(13, 20)   | zeroes(offset=5) | deref() # returns [5, 6, 7, 8, 9, 10, 11]
+    [2, 3, 1, 4, 7] | zeroes()         | deref() # returns [0, 1, -1, 2, 5]
+
+Assumes the first element is going to be transformed to zero, thus the last example.
+This cli also has log mode, where the natural log of the values will be shifted to zero::
+
+    # returns [1.0, 1.5, 0.5, 2.0, 3.5]
+    [2, 3, 1, 4, 7] | zeroes(log=True)           | aS(round, 2).all() | deref()
+    # returns [2.72, 4.08, 1.36, 5.44, 9.51]
+    [2, 3, 1, 4, 7] | zeroes(offset=1, log=True) | aS(round, 2).all() | deref()
+
+This is essentially the same as dividing everything by 2, so that the first element
+turns into 1. Super neat. The 2nd example is equivalent to multiplying everything by e/2.
+
+This cli can function in a table (.col != None)::
+
+    # returns [[0, 'a'], [1, 'b'], [2, 'c'], [3, 'd'], [4, 'e'], [5, 'f'], [6, 'g']]
+    [[13, 'a'], [14, 'b'], [15, 'c'], [16, 'd'], [17, 'e'], [18, 'f'], [19, 'g']] | zeroes(0) | deref()
+
+This cli can also act across multiple list of numbers::
+
+    data = [[2, 3, 1, 4, 7], [1, 4, 3, 6, 9]]
+    data2 = [[[2, 'b'], [3, 'c'], [1, 'a'], [4, 'd'], [7, 'g']], [[1, 'a'], [4, 'd'], [3, 'c'], [6, 'f'], [9, 'i']]]
+
+    # returns [[0, 1, -1, 2, 5], [5, 8, 7, 10, 13]]
+    data | ~zeroes() | deref()
+    # returns [[1, 2, 0, 3, 6], [6, 9, 8, 11, 14]]
+    data | ~zeroes(offset=1) | deref()
+    # returns [[1.0, 1.5, 0.5, 2.0, 3.5], [3.5, 14.0, 10.5, 21.0, 31.5]]
+    data | ~zeroes(log=True) | aS(round, 2).all(2) | deref()
+
+    # returns [[[0, 'b'], [1, 'c'], [-1, 'a'], [2, 'd'], [5, 'g']], [[5, 'a'], [8, 'd'], [7, 'c'], [10, 'f'], [13, 'i']]]
+    data2 | ~zeroes(0) | deref()
+
+So as you can see, the offsets are adjusted so that the first element of each list
+starts from the last element of the previous list
+
+:param col: column to shift values
+:param offset: custom offset of the minimum value, defaulted to zero
+:param log: whether to zero it linearly or zero it logarithmically"""            # zeroes
+        self.col = col; self.log = log; self.offset = offset; self.inverted = False # zeroes
+    def __invert__(self): res = zeroes(self.col, self.log, self.offset); res.inverted = True; return res # zeroes
+    def __ror__(self, it):                                                       # zeroes
+        col = self.col; log = self.log; offset = self.offset                     # zeroes
+        if self.inverted:                                                        # zeroes
+            def gen():                                                           # zeroes
+                currentOffset = offset                                           # zeroes
+                for arr in it:                                                   # zeroes
+                    arr = arr | zeroes(col, log, currentOffset)                  # zeroes
+                    if isinstance(arr, settings.arrayTypes):                     # zeroes
+                        bm = np if isinstance(arr, np.ndarray) else (torch if hasTorch and isinstance(arr, torch.Tensor) else None) # zeroes
+                        if bm:                                                   # zeroes
+                            if col is None: currentOffset = bm.log(arr[-1]) if log else arr[-1] # zeroes
+                            else: currentOffset = bm.log(arr[-1][col]) if log else arr[-1][col] # zeroes
+                            yield arr; continue                                  # zeroes
+                    # yes, we have to deref() them, even though perf will suffer, because let's say # zeroes
+                    # that the user then does rItem(3), and discards elements 0, 1 and 2. Then 0, 1, 2 # zeroes
+                    # won't be run, so element 3 won't know its offset!          # zeroes
+                    if col is None: arr = list(arr);        currentOffset = math.log(arr[-1])      if log else arr[-1] # zeroes
+                    else: arr = [list(row) for row in arr]; currentOffset = math.log(arr[-1][col]) if log else arr[-1][col] # zeroes
+                    yield arr                                                    # zeroes
+            return gen()                                                         # zeroes
+        if isinstance(it, settings.arrayTypes):                                  # zeroes
+            bm = np if isinstance(it, np.ndarray) else (torch if hasTorch and isinstance(it, torch.Tensor) else None) # zeroes
+            if bm:                                                               # zeroes
+                cloneF = np.copy if isinstance(it, np.ndarray) else torch.clone  # zeroes
+                if log:                                                          # zeroes
+                    if col is None: minValue = bm.log(it[0]) - offset; return bm.exp(bm.log(it) - minValue) # zeroes
+                    else: minValue = bm.log(it[0, col]) - offset; it = cloneF(it); it[:,col] = bm.exp(bm.log(it[:,col]) - minValue); return it # zeroes
+                else:                                                            # zeroes
+                    if col is None: minValue = it[0] - offset; return it - minValue # zeroes
+                    else: minValue = it[0, col] - offset; it = cloneF(it); it[:,col] = it[:,col] - minValue; return it # zeroes
+        row, it = it | cli.peek()                                                # zeroes
+        if it == []: return []                                                   # zeroes
+        if log:                                                                  # zeroes
+            mlog = math.log; mexp = math.exp                                     # zeroes
+            if col is None: minValue = mlog(row) - offset; return (mexp(mlog(row) - minValue) for row in it) # zeroes
+            else: minValue = mlog(row[col]) - offset; return ([*row[:col], mexp(mlog(row[col]) - minValue), *row[col+1:]] for row in it) # zeroes
+        else:                                                                    # zeroes
+            if col is None: minValue = row - offset; return (row - minValue for row in it) # zeroes
+            else: minValue = row[col] - offset; return ([*row[:col], row[col] - minValue, *row[col+1:]] for row in it) # zeroes
+class normalize(BaseCli):                                                        # normalize
+    def __init__(self, col:int=None, mode:int=0):                                # normalize
+        """Normalize the data going in.
+Example::
+
+    arr = np.random.randn(100)+10
+    arr | normalize()       # returns array with mean around 0
+    arr | normalize(mode=1) # returns array with mean around 0.5, min 0, max 1
+
+    arr = np.random.randn(100, 20)+10
+    arr | normalize(2)         # returns array with 2nd (0-indexing!) column have mean around 0. Other columns not touched
+    arr | normalize(2, mode=1) # returns array with 2nd (0-indexing!) column have mean around 0.5
+
+:param col: column to apply the normalization to
+:param mode: 0 for ``(x - x.mean())/s.std()``, 1 for ``(x - x.min())/(x.max() - x.min())``""" # normalize
+        self.col = col; self.mode = mode                                         # normalize
+    def __ror__(self, x):                                                        # normalize
+        col = self.col; mode = self.mode                                         # normalize
+        if isinstance(x, k1lib.settings.cli.arrayTypes):                         # normalize
+            dims = len(x.shape)                                                  # normalize
+            if col is None: return (x - x.mean())/x.std() if mode == 0 else (x - x.min())/(x.max() - x.min()) # normalize
+            else:                                                                # normalize
+                if mode == 0: xc = x[:,col]; x[:,col] = (xc - xc.mean())/xc.std(); return x # normalize
+                else: xc = x[:,col]; x[:,col] = (xc - xc.min())/(xc.max() - xc.min()); return x # normalize
+        if col is None: return np.array(list(x)) | self                          # normalize
+        else:                                                                    # normalize
+            it = x; ans = []; it = it | cli.deref(2)                             # normalize
+            if mode == 0:                                                        # normalize
+                mean = [row[col] for row in it] | cli.toMean()                   # normalize
+                std = [row[col] for row in it] | cli.toStd()                     # normalize
+                for row in it: row[col] = (row[col]-mean)/std; ans.append(row)   # normalize
+            else:                                                                # normalize
+                _min = min([row[col] for row in it])                             # normalize
+                _max = max([row[col] for row in it])                             # normalize
+                for row in it: row[col] = (row[col]-_min)/(_max-_min); ans.append(row) # normalize
+            return ans                                                           # normalize

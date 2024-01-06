@@ -3,13 +3,13 @@
 from typing import Iterator, Union, Any, List
 import k1lib, urllib, subprocess, warnings, os, k1lib, threading, time, warnings, math, io, dill, urllib, validators
 from collections import deque
-from k1lib.cli import BaseCli; import k1lib.cli as cli
+from k1lib.cli import BaseCli, init; import k1lib.cli as cli
 from k1lib.cli.typehint import *
 from contextlib import contextmanager
 requests = k1lib.dep("requests")
 try: import minio; hasMinio = True
 except: hasMinio = False
-__all__ = ["cat", "splitSeek", "refineSeek", "wget", "ls", "cmd", "walk", "requireCli", "urlPath", "kzip", "kunzip", "unzip"]
+__all__ = ["cat", "catPickle", "splitSeek", "refineSeek", "wget", "ls", "cmd", "walk", "requireCli", "urlPath", "kzip", "kunzip", "unzip"]
 settings = k1lib.settings.cli
 class NoPartialContent(Exception): pass                                          # NoPartialContent
 def getChunk(url:str, sB:int, eB:int, timeout:float, retries:int) -> bytes: # start inclusive, end exclusive # getChunk
@@ -116,9 +116,9 @@ class ZipWrapper:                                                               
         a = self.a; s = f" ({round(a.compress_size/a.file_size*100)}%)" if a.file_size > 0 else "" # ZipWrapper
         return f"<Zip subfile name='{a.filename}' {k1lib.fmt.size(a.file_size)} -> {k1lib.fmt.size(a.compress_size)}{s}>" # ZipWrapper
     @property                                                                    # ZipWrapper
-    def size(self): return a.file_size                                           # ZipWrapper
+    def size(self): return self.a.file_size                                      # ZipWrapper
     @property                                                                    # ZipWrapper
-    def compressedSize(self): return a.compress_size                             # ZipWrapper
+    def compressedSize(self): return self.a.compress_size                        # ZipWrapper
     def _catHandle(self):                                                        # ZipWrapper
         with zipfile.ZipFile(self.zfn) as zipf:                                  # ZipWrapper
             with zipf.open(self.a.filename) as subfile:                          # ZipWrapper
@@ -212,12 +212,27 @@ class _cat(BaseCli):                                                            
         fn = os.path.expanduser(fn) if isinstance(fn, str) else fn               # _cat
         if text and chunks and k1lib._settings.packages.k1a and isinstance(fn, str) and os.path.exists(fn): # _cat
             return k1lib._k1a.k1a.StrIterCat(fn, sB, eB) | ser # accelerated C version # _cat
-        if chunks: return _catGenText(fn, sB, eB) if text else _catGenBin(fn, sB, eB) | ser # _cat
+        if chunks: return (_catGenText(fn, sB, eB) | ser) if text else (_catGenBin(fn, sB, eB) | ser) # _cat
         sB = wrap(fn, sB); eB = wrap(fn, eB)                                     # _cat
         if text:                                                                 # _cat
             with openFile(fn, True) as f: f.seek(sB); return f.read(eB-sB).splitlines() | ser # _cat
         else:                                                                    # _cat
             with openFile(fn, False) as f: f.seek(sB); return f.read(eB-sB) | ser # _cat
+    def _jsF(self, meta):                                                        # _cat
+        """Only supports get requests and JS objects that has async ._cat() function""" # _cat
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # _cat
+        header, _fIdx, _async = k1lib.kast.asyncGuard(self.capturedSerial._jsF(meta)) # _cat
+        return f"""\
+{header}
+const {fIdx} = async ({dataIdx}) => {{
+    if (typeof({dataIdx}) === "string") {{
+        const res = await fetch({dataIdx}, {{ method: "GET" }})
+        if (res.ok) return {'await ' if _async else ''}{_fIdx}(await res.text());
+        throw new Error(`Can't fetch ${{{dataIdx}}}: ${{res.status}} - ${{res.statusText}}`)
+    }}
+    return {'await ' if _async else ''}{_fIdx}(await {dataIdx}._cat());
+}}""", fIdx                                                                      # _cat
+        pass                                                                     # _cat
 class Profile(BaseCli):                                                          # Profile
     def __init__(self, text): self.data = []; self.text = text                   # Profile
     def __ror__(self, it):                                                       # Profile
@@ -279,7 +294,7 @@ If you are working with large files and would like to read 1 file from multiple
 threads/processes, then you can use this cli in conjunction with :class:`splitSeek`.
 
 If you are dumping multiple pickled objects into a single file, you can read all
-of them using :meth:`cat.pickle`.
+of them using :meth:`cat.pickle`, which uses :class:`catPickle` underneath.
 
 This cli has lots of settings at :data:`~k1lib.settings`.cli.cat
 
@@ -397,8 +412,10 @@ See also: :meth:`ls`
     f = _cat(text, chunks, sB, eB)                                               # cat
     if profile: f = f | Profile(text)                                            # cat
     return f if fileName is None else fileName | f                               # cat
-def _catPickle(fileName=None, pickleModule=dill):                                # _catPickle
-    """Reads a file as a series of pickled objects.
+k1lib.settings.cli.cat.add("pickle", k1lib.Settings().add("safetyFactor", 2, "for when using `fn | (cat.pickle() | tail())` operation. Check out more docs at inp.catPickle() class"), "inp.cat.pickle() settings") # cat
+class catPickle(BaseCli):                                                        # catPickle
+    def __init__(self, pickleModule=None):                                       # catPickle
+        """Reads a file as a series of pickled objects.
 Example::
 
     "ab" | aS(dill.dumps) | file("test/catTest.pth")
@@ -408,16 +425,77 @@ Example::
     # also returns ["ab", "cd"], same style as :class:`cat`
     "test/catTest.pth" | cat.pickle() | deref()
 
-:param fileName: name of the pickled file
+The function ``cat.pickle`` internally uses this class, so don't worry about the discrepancy
+in the examples. So this kinda relies on a trick that you can continuously dump pickled
+objects to a single file and it would still work as usual::
+
+    [1, 2, 3] | aS(dill.dumps) |  file("b.pth")
+    [4, 5]    | aS(dill.dumps) >> file("b.pth")
+
+    with open("b.pth", "rb") as f:
+        objs = [dill.load(f), dill.load(f)]
+
+    assert objs == [[1, 2, 3], [4, 5]]
+
+.. admonition:: tail() optimization
+
+    If you regularly append pickled objects to files, say you're trying to save
+    complex time series data, and you want to grab the most recent data, you
+    might do it like ``fn | cat.pickle() | tail(10)`` to get the last 10 objects.
+    But normally, this means that you have to read through the entire file in order
+    to just read the last bit of it. You can't exactly start close to the end as
+    you don't know where the object boundaries are. Luckily, I got fed up with this
+    so much that now when you do this: ``fn | (cat.pickle() | tail(10))`` (note the
+    parenthesis!), it will only read the end of the file! This optimization is mostly
+    airtight, but not entirely.
+
+    How it works is that cat.pickle() tries to unpickle the first object in the file
+    and grab the object's size in bytes. This info is used to make guesses as to where
+    it should start reading the file from, which is ``endByte - tail.n * object_size * 2``
+
+    That factor ``2`` is the safety factor, which should be a nice tradeoff between
+    being airtight and being fast, configurable using ``settings.cli.cat.pickle.safetyFactor = 2``.
+    This assumes that your objects are roughly similar in sizes. This of course, might
+    be broken by you and thus, you might see only 5 results returned when you asked for
+    10. In these scenarios, either increase the safetyFactor, or just don't use the
+    optimized version by getting rid of the parenthesis: ``fn | cat.pickle() | tail(10)``
+
+    Also, this optimization has only been tested on :mod:`dill` and :mod:`pickle`.
+    :mod:`cloudpickle` has been tested to not work (magic numbers are a little different).
+    I can potentially add in a mechanism for you to specify magic numbers for any pickler
+    you want, but it feels niche, so I'm going to skip that for now.
+
 :param pickleModule: pickle module to use. Python's default is "pickle", but
-    I usually use :mod:`dill` because it's more robust"""                        # _catPickle
-    def gen(fn):                                                                 # _catPickle
-        with open(os.path.expanduser(fn), "rb") as f:                            # _catPickle
-            try:                                                                 # _catPickle
-                while True: yield dill.load(f)                                   # _catPickle
-            except: pass                                                         # _catPickle
-    return cli.aS(gen) if fileName is None else fileName | cli.aS(gen)           # _catPickle
+    I usually use :mod:`dill` because it's more robust"""                        # catPickle
+        super().__init__(capture=True); self.pm = pickleModule or dill           # catPickle
+    def __ror__(self, fn):                                                       # catPickle
+        pm = self.pm                                                             # catPickle
+        def g(sB=0):                                                             # catPickle
+            with open(os.path.expanduser(fn), "rb") as f:                        # catPickle
+                f.seek(sB)                                                       # catPickle
+                try:                                                             # catPickle
+                    while True: yield pm.load(f)                                 # catPickle
+                except EOFError: pass                                            # catPickle
+        if len(self.capturedClis) >= 1:                                          # catPickle
+            c0 = self.capturedClis[0]; s = os.path.getsize(fn)                   # catPickle
+            if isinstance(c0, cli.tail) and s > 1e6 and isinstance(c0.n, int) and c0.n > 0: # if less than 1MB then it's not worth optimizing! # catPickle
+                # figures out the size of the first element to guage the relative steps we need to take! # catPickle
+                with open(os.path.expanduser(fn), "rb") as f: s1 = len(pm.dumps(pm.load(f)))*k1lib.settings.cli.cat.pickle.safetyFactor # multiply by 2 for safety factor, to make sure we've included all the data required by tail()! # catPickle
+                return g((fn | cli.splitSeek(c=b"\x80\x04\x95", ws=[s-c0.n*s1, c0.n*s1]))[1] - 1) | self.capturedSerial # then execute the rest of the pipeline # catPickle
+        return g() | self.capturedSerial                                         # catPickle
+def _catPickle(fileName=None, pickleModule=dill):                                # _catPickle
+    """Reads a file as a series of pickled objects. See :class:`catPickle`"""    # _catPickle
+    return catPickle(pickleModule) if fileName is None else fileName | catPickle(pickleModule) # _catPickle
 cat.pickle = _catPickle                                                          # _catPickle
+class splitSeekRes:                                                              # splitSeekRes
+    def __init__(self, fn, res):                                                 # splitSeekRes
+        """Return result of splitSeek(). We don't want to return just a list alone, because
+we also want to pass along information like the file name"""                     # splitSeekRes
+        self.fn = fn; self.res = res                                             # splitSeekRes
+    def __getitem__(self, idx): return self.res[idx]                             # splitSeekRes
+    def __len__(self): return len(self.res)                                      # splitSeekRes
+    def __iter__(self): return iter(self.res)                                    # splitSeekRes
+    def __repr__(self): return self.res.__repr__()                               # splitSeekRes
 class splitSeek(BaseCli):                                                        # splitSeek
     def __init__(self, n=None, c=b'\n', ws=None):                                # splitSeek
         """Splits a file up into n fragments aligned to the closest character and return the seek points.
@@ -438,8 +516,16 @@ Example::
 
 So, the generated file has 120 lines in total. Each line is 10 bytes (9 for
 the string, and 1 for the new line character). Splitting the file into 31
-fragments will result in 32 seek points (:math:`p_i\quad i\in[1, n+1]`). You
-can then use these seek points to read the file in multiple threads/processes
+fragments will result in 32 seek points (:math:`p_i\quad i\in[1, n+1]`).
+
+Also notice how the returned seek position is not the position of the character
+themselves, but the character right after. So if we're splitting by the new line
+character, then it will return the next character after the new line. This is
+by default because the majority of the time, I just want it to split by lines.
+But you might have other ideas on how to use this in mind. Then just subtract 1
+from all returned seek points.
+
+You can then use these seek points to read the file in multiple threads/processes
 using :meth:`cat`, like this::
 
     # returns [['  0_56789', '  1_56789', '  2_56789'], ['  3_56789', '  4_56789', '  5_56789', '  6_56789']]
@@ -485,7 +571,7 @@ using :meth:`splitSeek.forward` and :meth:`splitSeek.backward`. To help with thi
 :param n: how many splits do you want?
 :param c: block-boundary character, usually just the new line character
 :param ws: weights. If given, the splits length ratios will roughly correspond to this""" # splitSeek
-        self.n = n; self.c = c; self.ws = ws; self.fn = None; self.res = None # file name, result # splitSeek
+        self.n = n; self.c = c; self.ws = ws                                     # splitSeek
         if ws is None and n is None: raise Exception("Specify at least n or ws for splitSeek to work") # splitSeek
     @staticmethod                                                                # splitSeek
     def forward(f, i:int, c=b'\n') -> int:                                       # splitSeek
@@ -534,24 +620,17 @@ Example::
         if isinstance(f, str):                                                   # splitSeek
             with openFile(os.path.expanduser(f), False) as _f: return inner(_f)  # splitSeek
         else: return inner(f)                                                    # splitSeek
-    def __ror__(self, fn): # why return self instead of the seek positions directly? Because we want to pass along dependencies like file name to downstream processes like refineSeek # splitSeek
+    def __ror__(self, fn): # why return splitSeekRes instead of the seek positions as a list directly? Because we want to pass along dependencies like file name to downstream processes like refineSeek # splitSeek
         if isinstance(fn, str): fn = os.path.expanduser(fn)                      # splitSeek
-        n = self.n; c = self.c; ws = self.ws; self.fn = fn                       # splitSeek
-        def func(f):                                                             # splitSeek
+        n = self.n; c = self.c; ws = self.ws                                     # splitSeek
+        def func(f): # f is a file-like object                                   # splitSeek
             f.seek(0, os.SEEK_END); end = f.tell()                               # splitSeek
             if ws is None: begins = range(n) | cli.apply(lambda x: int(x*end/n)) # splitSeek
             else: begins = range(end) | cli.splitW(*ws) | cli.apply(lambda x: x.start) # splitSeek
             return [*begins | cli.apply(lambda x: splitSeek.backward(f, x, c)), end] # splitSeek
         if isinstance(fn, str):                                                  # splitSeek
-            with openFile(os.path.expanduser(fn), False, True) as f: self.res = func(f); return self # splitSeek
-        else: self.res = func(fn); return self                                   # splitSeek
-    def __or__(self, aft):                                                       # splitSeek
-        if self.res is None: return super().__or__(aft)                          # splitSeek
-        return aft.__ror__(self)                                                 # splitSeek
-    def __getitem__(self, idx): return self.res[idx]                             # splitSeek
-    def __len__(self): return len(self.res)                                      # splitSeek
-    def __iter__(self): return iter(self.res)                                    # splitSeek
-    def __repr__(self): return self.res.__repr__()                               # splitSeek
+            with openFile(os.path.expanduser(fn), False, True) as f: return splitSeekRes(fn, func(f)) # splitSeek
+        else: return splitSeekRes(fn, func(fn))                                  # splitSeek
 class refineSeek(BaseCli):                                                       # refineSeek
     def __init__(self, f=None, window=1):                                        # refineSeek
         """Refines seek positions.

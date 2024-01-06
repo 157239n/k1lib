@@ -13,12 +13,14 @@ If it sounds complicated (convert to PIL image, tensor, ...) then most likely it
 convert object to object. Lastly, there are some that just feels right to input
 an iterator and output a single object (like getting max, min, std, mean values)."""
 __all__ = ["toTensor", "toRange", "toList",
-           "toSum", "toProd", "toAvg", "toMean", "toStd", "toMax", "toMin", "toPIL", "toImg",
-           "toRgb", "toRgba", "toGray", "toDict",
-           "toFloat", "toInt", "toBytes", "toHtml", "toAscii", "toHash", "toCsv"]
-import re, k1lib, math, os, numpy as np, io, base64, unicodedata
-from k1lib.cli.init import BaseCli, T, yieldT; import k1lib.cli as cli
-from k1lib.cli.typehint import *; import matplotlib as mpl; import matplotlib.pyplot as plt
+           "toSum", "toProd", "toAvg", "toMean", "toStd", "toMax", "toMin", "toArgmin", "toArgmax",
+           "toPIL", "toImg", "toRgb", "toRgba", "toGray", "toDict",
+           "toFloat", "toInt", "toBytes", "toDataUri", "toAnchor", "toHtml",
+           "toAscii", "toHash", "toCsv", "toAudio", "toUnix", "toIso", "toYMD", "toLinks",
+           "toMovingAvg", "toCm"]
+import re, k1lib, math, os, numpy as np, io, json, base64, unicodedata, inspect
+from k1lib.cli.init import BaseCli, T, yieldT; import k1lib.cli as cli, k1lib.cli.init as init
+from k1lib.cli.typehint import *; mpl = k1lib.dep("matplotlib"); plt = k1lib.dep("matplotlib.pyplot")
 from collections import deque, defaultdict; from typing import Iterator, Any, List, Set, Tuple, Dict, Callable, Union
 settings = k1lib.settings.cli
 try: import PIL; hasPIL = True
@@ -32,14 +34,14 @@ except: hasGraphviz = False
 try: import plotly; import plotly.express as px; hasPlotly = True
 except: hasPlotly = False
 class toTensor(BaseCli):                                                         # toTensor
-    def __init__(self, dtype=torch.float32):                                     # toTensor
+    def __init__(self, dtype=None):                                              # toTensor
         """Converts generator to :class:`torch.Tensor`. Essentially
-``torch.tensor(list(it))``.
+``torch.tensor(list(it))``. Default dtype is float32
 
 Also checks if input is a PIL Image. If yes, turn it into a :class:`torch.Tensor`
 and return."""                                                                   # toTensor
-        self.dtype = dtype                                                       # toTensor
-    def __ror__(self, it:Iterator[float]) -> torch.Tensor:                       # toTensor
+        self.dtype = dtype or torch.float32                                      # toTensor
+    def __ror__(self, it:Iterator[float]) -> "torch.Tensor":                     # toTensor
         try:                                                                     # toTensor
             import PIL; pic=it                                                   # toTensor
             if isinstance(pic, PIL.Image.Image): # stolen from torchvision ToTensor transform # toTensor
@@ -65,12 +67,14 @@ So this cli is sort of outdated. It still works fine, nothing wrong
 with it, but just do ``aS(list)`` instead. It's not removed to
 avoid breaking old projects."""                                                  # toList
         super().__init__()                                                       # toList
-                                                                                 # toList
     def _typehint(self, inp):                                                    # toList
         if isinstance(inp, tListIterSet): return tList(inp.child)                # toList
         if isinstance(inp, tCollection): return inp                              # toList
         return tList(tAny())                                                     # toList
     def __ror__(self, it:Iterator[Any]) -> List[Any]: return list(it)            # toList
+    def _jsF(self, meta):                                                        # toList
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # toList
+        return f"const {fIdx} = ({dataIdx}) => {dataIdx}", fIdx                  # toList
 def _toRange(it):                                                                # _toRange
     for i, _ in enumerate(it): yield i                                           # _toRange
 class toRange(BaseCli):                                                          # toRange
@@ -84,8 +88,11 @@ Example::
     def __ror__(self, it:Iterator[Any]) -> Iterator[int]:                        # toRange
         try: return range(len(it))                                               # toRange
         except: return _toRange(it)                                              # toRange
+    def _jsF(self, meta):                                                        # toRange
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # toRange
+        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.toRange()", fIdx        # toRange
 tOpt.addPass(lambda cs, ts, _: [cs[0]], [toRange, toRange])                      # toRange
-settings.add("arrayTypes", (torch.Tensor, np.ndarray), "default array types used to accelerate clis") # toRange
+settings.add("arrayTypes", (torch.Tensor, np.ndarray) if hasTorch else (np.ndarray,), "default array types used to accelerate clis") # toRange
 def genericTypeHint(inp):                                                        # genericTypeHint
     if isinstance(inp, tListIterSet): return inp.child                           # genericTypeHint
     if isinstance(inp, tCollection): return inp.children[0]                      # genericTypeHint
@@ -106,6 +113,9 @@ Example::
     def __ror__(self, it:Iterator[float]):                                       # toSum
         if isinstance(it, settings.arrayTypes): return it.sum()                  # toSum
         return sum(it)                                                           # toSum
+    def _jsF(self, meta):                                                        # toSum
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # toSum
+        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.toSum()", fIdx          # toSum
 class toProd(BaseCli):                                                           # toProd
     def __init__(self):                                                          # toProd
         """Calculates the product of a list of numbers. Can pipe in :class:`torch.Tensor` or :class:`numpy.ndarray`.
@@ -124,6 +134,9 @@ Example::
     def __ror__(self, it):                                                       # toProd
         if isinstance(it, settings.arrayTypes): return it.prod()                 # toProd
         else: return math.prod(it)                                               # toProd
+    def _jsF(self, meta):                                                        # toProd
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # toProd
+        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.toProd()", fIdx         # toProd
 class toAvg(BaseCli):                                                            # toAvg
     def __init__(self):                                                          # toAvg
         """Calculates average of list of numbers. Can pipe in :class:`torch.Tensor` or :class:`numpy.ndarray`.
@@ -151,6 +164,9 @@ Example::
         i += 1                                                                   # toAvg
         if not k1lib.settings.cli.strict and i == 0: return float("nan")         # toAvg
         return s / i                                                             # toAvg
+    def _jsF(self, meta):                                                        # toAvg
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # toAvg
+        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.toAvg()", fIdx          # toAvg
 if hasTorch:                                                                     # toAvg
     torchVer = int(torch.__version__.split(".")[0])                              # toAvg
     if torchVer >= 2:                                                            # toAvg
@@ -185,6 +201,9 @@ or :class:`numpy.ndarray` to be faster. Example::
             if isinstance(it, np.ndarray): return np.std(it, ddof=ddof)          # toStd
             elif hasTorch and isinstance(it, torch.Tensor): return torchStd(it, ddof) # toStd
         return np.std(np.array(list(it)))                                        # toStd
+    def _jsF(self, meta):                                                        # toStd
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # toStd
+        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.toStd()", fIdx          # toStd
 toMean = toAvg                                                                   # toStd
 class toMax(BaseCli):                                                            # toMax
     def __init__(self):                                                          # toMax
@@ -203,6 +222,9 @@ Example::
     def __ror__(self, it:Iterator[float]) -> float:                              # toMax
         if isinstance(it, settings.arrayTypes): return it.max()                  # toMax
         return max(it)                                                           # toMax
+    def _jsF(self, meta):                                                        # toMax
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # toMax
+        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.toMax()", fIdx          # toMax
 class toMin(BaseCli):                                                            # toMin
     def __init__(self):                                                          # toMin
         """Calculates the min of a bunch of numbers. Can pipe in :class:`torch.Tensor` or :class:`numpy.ndarray`.
@@ -220,8 +242,37 @@ Example::
     def __ror__(self, it:Iterator[float]) -> float:                              # toMin
         if isinstance(it, settings.arrayTypes): return it.min()                  # toMin
         return min(it)                                                           # toMin
-settings.add("font", None, "default font file. Best to use .ttf files, used by toPIL()") # toMin
-settings.add("chem", k1lib.Settings().add("imgSize", 200, "default image size used in toPIL() when drawing rdkit molecules"), "chemistry-related settings") # toMin
+    def _jsF(self, meta):                                                        # toMin
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # toMin
+        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.toMin()", fIdx          # toMin
+class toArgmin(BaseCli):                                                         # toArgmin
+    def __init__(self):                                                          # toArgmin
+        """Get the input iterator's index of the min value.
+Example::
+
+    [2, 3, 4, 1, 5] | toArgmin() # returns 3
+"""                                                                              # toArgmin
+        pass                                                                     # toArgmin
+    def __ror__(self, it):                                                       # toArgmin
+        if isinstance(it, k1lib.settings.cli.arrayTypes): return it.argmin().item() # toArgmin
+        else:                                                                    # toArgmin
+            try: len(it); return np.array(it) | self                             # toArgmin
+            except: np.array(list(it)) | self                                    # toArgmin
+class toArgmax(BaseCli):                                                         # toArgmax
+    def __init__(self):                                                          # toArgmax
+        """Get the input iterator's index of the max value.
+Example::
+
+    [2, 3, 4, 1, 5] | toArgmin() # returns 4
+"""                                                                              # toArgmax
+        pass                                                                     # toArgmax
+    def __ror__(self, it):                                                       # toArgmax
+        if isinstance(it, k1lib.settings.cli.arrayTypes): return it.argmax().item() # toArgmax
+        else:                                                                    # toArgmax
+            try: len(it); return np.array(it) | self                             # toArgmax
+            except: np.array(list(it)) | self                                    # toArgmax
+settings.add("font", None, "default font file. Best to use .ttf files, used by toPIL()") # toArgmax
+settings.add("chem", k1lib.Settings().add("imgSize", 200, "default image size used in toPIL() when drawing rdkit molecules"), "chemistry-related settings") # toArgmax
 def cropToContentNp(ogIm, pad=10):                                               # cropToContentNp
     dim = len(ogIm.shape); im = ogIm                                             # cropToContentNp
     if dim > 2: im = im.mean(0)                                                  # cropToContentNp
@@ -245,6 +296,8 @@ Example::
     ["abc", "def"] | toPIL()
     # converts SMILES string to molecule, then to image
     "c1ccc(C)cc1" | toMol() | toImg()
+    # sketches a graphviz plot, converts to svg then renders the svg as an image
+    ["ab", "bc", "ca"] | (kgv.sketch() | kgv.edges()) | toHtml() | toImg()
 
 You can also save a matplotlib figure by piping in a :class:`matplotlib.figure.Figure` object::
 
@@ -268,6 +321,10 @@ You can also save a matplotlib figure by piping in a :class:`matplotlib.figure.F
     def _typehint(self, inp):                                                    # toPIL
         return PIL.Image.Image                                                   # toPIL
     def __ror__(self, path) -> "PIL.Image.Image":                                # toPIL
+        if isinstance(path, Svg):                                                # toPIL
+            import tempfile; a = tempfile.NamedTemporaryFile()                   # toPIL
+            import cairosvg; cairosvg.svg2png(bytestring=path,write_to=a.name); im = a.name | toImg() # toPIL
+            return im                                                            # toPIL
         if isinstance(path, str):                                                # toPIL
             return self.PIL.Image.open(os.path.expanduser(path))                 # toPIL
         if isinstance(path, bytes):                                              # toPIL
@@ -280,7 +337,7 @@ You can also save a matplotlib figure by piping in a :class:`matplotlib.figure.F
             img = self.PIL.Image.frombytes('RGB', canvas.get_width_height(), canvas.tostring_rgb()) # toPIL
             if self.closeFig: plt.close(path)                                    # toPIL
             return img | cli.aS(cropToContentPIL)                                # toPIL
-        if isinstance(path, graphviz.Digraph):                                   # toPIL
+        if hasGraphviz and isinstance(path, graphviz.Digraph):                   # toPIL
             import tempfile; a = tempfile.NamedTemporaryFile()                   # toPIL
             path.render(a.name, format="jpeg");                                  # toPIL
             fn = f"{a.name}.jpeg"; im = fn | toImg()                             # toPIL
@@ -388,6 +445,10 @@ That returns::
             if isinstance(r, str): return it | cli.apply(cli.aS(lambda x: x.split(" ")) | cli.head(1).split() | cli.item() + cli.join(" ")) | toDict() # toDict
             return f({_k:_v for _k, _v in it})                                   # toDict
         return f({_k:_v for _k, _v in zip(*it)})                                 # toDict
+    def _jsF(self, meta):                                                        # toDict
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # toDict
+        if not self.rows: raise Exception("toDict._jsF() doesn't support .rows=False yet") # toDict
+        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.toDict()", fIdx         # toDict
 def _toop(toOp, c, force, defaultValue):                                         # _toop
     return cli.apply(toOp, c) | (cli.apply(lambda x: x or defaultValue, c) if force else cli.filt(cli.op() != None, c)) # _toop
 def _toFloat(e) -> Union[float, None]:                                           # _toFloat
@@ -421,15 +482,31 @@ as they will not be broken up into an iterator::
     - 0: simple ``float()`` function, fastest, but will throw errors if it can't be parsed
     - 1: if there are errors, then replace it with zero
     - 2: if there are errors, then eliminate the row"""                          # toFloat
-        self.columns = columns; self.mode = mode;                                # toFloat
+        self.columns = columns; self.mode = mode                                 # toFloat
     def __ror__(self, it):                                                       # toFloat
         columns = self.columns; mode = self.mode                                 # toFloat
         if len(columns) == 0:                                                    # toFloat
             if isinstance(it, np.ndarray): return it.astype(float)               # toFloat
             if isinstance(it, torch.Tensor): return it.float()                   # toFloat
-            if mode == 0: return it | cli.apply(float)                           # toFloat
+            if mode == 0: return (float(e) for e in it)                          # toFloat
             return it | _toop(_toFloat, None, mode == 1, 0.0)                    # toFloat
         else: return it | cli.init.serial(*(_toop(_toFloat, c, mode == 1, 0.0) for c in columns)) # toFloat
+    def _jsF(self, meta):                                                        # toFloat
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto(); cols = self.columns   # toFloat
+        if len(cols) == 0:                                                       # toFloat
+            if mode == 0: return f"const {fIdx} = ({dataIdx}) => {dataIdx}.map((v) => parseFloat(v))", fIdx # toFloat
+            if mode == 1: return f"const {fIdx} = ({dataIdx}) => {dataIdx}.map((v) => {{ const a = parseFloat(v); return a === a ? a : 0 }})", fIdx # toFloat
+            if mode == 2: return f"const {fIdx} = ({dataIdx}) => {{ const ans = []; for (const v of {dataIdx}) {{ const a = parseFloat(v); if (a === a) ans.push(a); }}; return ans; }}" # toFloat
+        else: return f"""\
+const {fIdx} = ({dataIdx}) => {{
+    const ans = [];
+    for (const row of {dataIdx}) {{
+        {'ans.push(row.map(parseFloat));' if mode == 0 else ''}
+        {'ans.push(row.map(parseFloat).map((v) => (v === v ? v : 0)));' if mode == 1 else ''}
+        {'const rowp = row.map(parseFloat);if (rowp.map((v) => v === v).every((v) => v)) ans.push(rowp);' if mode == 2 else ''}
+    }}
+    return ans;
+}}""", fIdx                                                                      # toFloat
 def _toInt(e) -> Union[int, None]:                                               # _toInt
     try: return int(float(e))                                                    # _toInt
     except: return None                                                          # _toInt
@@ -454,32 +531,133 @@ See also: :meth:`toFloat`"""                                                    
         if len(columns) == 0:                                                    # toInt
             if isinstance(it, np.ndarray): return it.astype(int)                 # toInt
             if isinstance(it, torch.Tensor): return it.int()                     # toInt
-            if mode == 0: return it | cli.apply(int)                             # toInt
-            return it | _toop(_toInt, None, mode == 1, 0.0)                      # toInt
+            if mode == 0: return (int(e) for e in it)                            # toInt
+            return it | _toop(_toInt, None, mode == 1, 0)                        # toInt
         else: return it | cli.init.serial(*(_toop(_toInt, c, mode == 1, 0.0) for c in columns)) # toInt
+    def _jsF(self, meta):                                                        # toInt
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto(); cols = self.columns   # toInt
+        if len(cols) == 0:                                                       # toInt
+            if mode == 0: return f"const {fIdx} = ({dataIdx}) => {dataIdx}.map((v) => parseInt(v))", fIdx # toInt
+            if mode == 1: return f"const {fIdx} = ({dataIdx}) => {dataIdx}.map((v) => {{ const a = parseInt(v); return a === a ? a : 0 }})", fIdx # toInt
+            if mode == 2: return f"const {fIdx} = ({dataIdx}) => {{ const ans = []; for (const v of {dataIdx}) {{ const a = parseInt(v); if (a === a) ans.push(a); }}; return ans; }}" # toInt
+        else: return f"""\
+const {fIdx} = ({dataIdx}) => {{
+    const ans = [];
+    for (const row of {dataIdx}) {{
+        {'ans.push(row.map(parseInt));' if mode == 0 else ''}
+        {'ans.push(row.map(parseInt).map((v) => (v === v ? v : 0)));' if mode == 1 else ''}
+        {'const rowp = row.map(parseInt);if (rowp.map((v) => v === v).every((v) => v)) ans.push(rowp);' if mode == 2 else ''}
+    }}
+    return ans;
+}}""", fIdx                                                                      # toInt
 class toBytes(BaseCli):                                                          # toBytes
-    def __init__(self, imgType="JPEG"):                                          # toBytes
+    def __init__(self, dataType=None):                                           # toBytes
         """Converts several object types to bytes.
 Example::
 
     # converts string to bytes
     "abc" | toBytes()
-    # converts image to base64 bytes
+    # converts image to bytes in jpg format
     torch.randn(200, 100) | toImg() | toBytes()
+    # converts image to bytes in png format
+    torch.randn(200, 100) | toImg() | toBytes("PNG")
 
-:param imgType: if input is an image then this is the image type. Can
-    change to "PNG" or sth like that"""                                          # toBytes
-        self.imgType = imgType                                                   # toBytes
+    "some_file.mp3" | toAudio() | toBytes("mp3")
+
+.. admonition:: Custom datatype
+
+    It is possible to build objects that can interoperate with this cli,
+    like this::
+
+        class custom1:
+            def __init__(self, config=None): ...
+            def _toBytes(self): return b"abc"
+        class custom2:
+            def __init__(self, config=None): ...
+            def _toBytes(self, dataType):
+                if dataType == "png": return b"123"
+                else: return b"456"
+
+        custom1() | toBytes()      # returns b"abc"
+        custom2() | toBytes()      # returns b"456"
+        custom2() | toBytes("png") # returns b"123"
+
+    When called upon, :class:`toBytes` will detect that the input has the ``_toBytes``
+    method, which will prompt it to execute that method of the complex object. Of
+    course, this means that you can return anything, not necessarily bytes, but to
+    maintain intuitiveness, you should return either bytes or iterator of bytes
+
+:param dataType: depending on input. If it's an image then this can be png, jpg. If
+    it's a sound then this can be mp3, wav or things like that"""                # toBytes
+        self.dataType = dataType                                                 # toBytes
     def __ror__(self, it):                                                       # toBytes
         if isinstance(it, str): return it.encode()                               # toBytes
         if hasPIL:                                                               # toBytes
             if isinstance(it, PIL.Image.Image):                                  # toBytes
-                it = it | toRgb()                                                # toBytes
-                buffered = io.BytesIO()                                          # toBytes
-                it.save(buffered, format=self.imgType)                           # toBytes
-                return buffered.getvalue()                                       # toBytes
-        import dill                                                              # toBytes
-        return dill.dumps(it)                                                    # toBytes
+                it = it | toRgb(); buffered = io.BytesIO()                       # toBytes
+                it.save(buffered, format=(self.dataType or "JPEG")); return buffered.getvalue() # toBytes
+        if hasattr(it, "_toBytes"):                                              # toBytes
+            n = len(inspect.getfullargspec(it._toBytes).args[1:])                # toBytes
+            if n == 0: return it._toBytes()                                      # toBytes
+            elif n == 1: return it._toBytes(self.dataType)                       # toBytes
+            else: raise Exception(f"{it.__class__.__name__} have 2 or more arguments, which is unsupported") # toBytes
+        import dill; return dill.dumps(it)                                       # toBytes
+mpld3 = k1lib.dep("mpld3")                                                       # toBytes
+class Svg(str): pass                                                             # Svg
+class DataUri:                                                                   # DataUri
+    def __init__(self, uri:str):                                                 # DataUri
+        self.uri = uri # "data:image/png;base64, ..."                            # DataUri
+        self.mime = uri.split(";")[0].split(":")[-1] # "image/png"               # DataUri
+        self.mimeBase = self.mime.split("/")[0] # "image"                        # DataUri
+    def _repr_html_(self):                                                       # DataUri
+        if self.mimeBase == "image": return f"<img src=\"{self.uri}\"/>"         # DataUri
+        if self.mime == "text/html": return base64.b64decode(self.uri.split("base64,")[-1]).decode() # DataUri
+    def __repr__(self):                                                          # DataUri
+        uri = self.uri                                                           # DataUri
+        return f"<DataUri mime='{self.mime}', self.uri='{(uri[:75] + '...') if len(uri) > 75 else uri}'>" # DataUri
+def _dataUriHtml(it): return DataUri(f"data:text/html;base64, {base64.b64encode(it.encode()).decode()}") # _dataUriHtml
+class toDataUri(BaseCli):                                                        # toDataUri
+    def __init__(self):                                                          # toDataUri
+        """Converts incoming object into data uri scheme.
+Data uris are the things that look like "data:image/png;base64, ...",
+or "data:text/html;base64, ...". This is a convenience tool mainly
+for other tools, and not quite useful directly. Example::
+
+    randomImg = cat("https://mlexps.com/ergun.png", False) | toImg() # returns PIL image
+    randomImg | toDataUri()              # returns k1lib.cli.conv.DataUri object with .mime field "image/png" and .uri field "data:image/png;base64, ..."
+    randomImg | toDataUri() | toHtml()   # returns hmtl string `<img src="data:image/png;base64, ..."/>`
+    randomImg | toHtml()                 # same like above. toHtml() actually calls toDataUri() behind the scenes
+    randomImg | toDataUri() | toAnchor() # creates anchor tag (aka link elements "<a></a>") that, when clicked, displays the image in a new tab
+    randomImg | toAnchor()               # same as above. toAnchor() actually calls toDataUri() behind the scenes
+"""                                                                              # toDataUri
+        self.throw = False # can be configured by outside clis, like toHtml()    # toDataUri
+    def __ror__(self, it):                                                       # toDataUri
+        if isinstance(it, str): return _dataUriHtml(it)                          # toDataUri
+        if isinstance(it, DataUri): return it                                    # toDataUri
+        if hasPIL and isinstance(it, PIL.Image.Image):                           # toDataUri
+            it = it | toBytes(dataType="PNG") | cli.aS(base64.b64encode) | cli.op().decode() # toDataUri
+            return DataUri(f"data:image/png;base64, {it}")                       # toDataUri
+        try: return DataUri(it._toDataUri())                                     # toDataUri
+        except Exception as e:                                                   # toDataUri
+            if self.throw: raise Exception(f"toDataUri() called on an unfamiliar object, and the object doesn't implement _toDataUri(). Error: {e}") # toDataUri
+            return _dataUriHtml(it | toHtml())                                   # toDataUri
+class toAnchor(BaseCli):                                                         # toAnchor
+    def __init__(self, text:str="click here"):                                   # toAnchor
+        """Converts incoming object into a html anchor tag that, when clicked,
+displays the incoming object's html in another tab. Example::
+
+    randomImg = cat("https://mlexps.com/ergun.png", False) | toImg() # returns PIL image
+    randomImg | toAnchor() # returns html string `<a href="data:image/png;base64, ..."></a>`
+
+On some browsers, there's sort of a weird bug where a new tab would open, but
+there's nothing displayed on that tab. If you see this is happening, just press
+F5 or Ctrl+R to refresh the page and it should display everything nicely
+
+:param text: text to display inside of the anchor"""                             # toAnchor
+        self.text = text                                                         # toAnchor
+    def __ror__(self, it:str):                                                   # toAnchor
+        s = it | toDataUri() | cli.op().uri                                      # toAnchor
+        return f"<a href=\"{s}\" target=\"_blank\">{self.text}</a>"              # toAnchor
 class toHtml(BaseCli):                                                           # toHtml
     def __init__(self):                                                          # toHtml
         """Converts several object types to bytes.
@@ -487,18 +665,48 @@ Example::
 
     # converts PIL image to html <img> tag
     torch.randn(200, 100) | toImg() | toHtml()
+    # converts graphviz graph to svg text (which is essentially html)
+    g = k1.digraph(); g(*"abc"); g(*"bcd"); g | toHtml()
+
+    # converts plotly graphs to html
+    import plotly.express as px; import pandas as pd
+    df = pd.DataFrame({'x': [1, 2, 3, 4, 5], 'y': [10, 11, 12, 14, 15]})
+    fig = px.line(df, x='x', y='y', title='Simple Line Chart')
+    fig | toHtml()
+
+    # converts matplotlib plot to image, and then to html. Do this if you want a static plot
+    x = np.linspace(-2, 2); y = x**2
+    plt.plot(x, x**2); plt.gcf() | toImg() | toHtml()
+    # converts matplotlib plot to D3.js html sketch
+    plt.plot(x, x**2); plt.gcf() | toHtml()
 """                                                                              # toHtml
         pass                                                                     # toHtml
     def __ror__(self, it):                                                       # toHtml
-        if hasPIL:                                                               # toHtml
-            if isinstance(it, PIL.Image.Image):                                  # toHtml
-                it = it | toBytes(imgType="PNG") | cli.aS(base64.b64encode) | cli.op().decode() # toHtml
-                return f"<img src=\"data:image/png;base64, {it}\" />"            # toHtml
-        if hasPlotly:                                                            # toHtml
-            if isinstance(it, plotly.graph_objs._figure.Figure):                 # toHtml
-                out = io.StringIO(); it.write_html(out); out.seek(0); return out.read() # toHtml
-        try: return it._repr_html_()                                             # toHtml
-        except: return it.__repr__()                                             # toHtml
+        if isinstance(it, str): return it                                        # toHtml
+        if hasPlotly and isinstance(it, plotly.graph_objs._figure.Figure):       # toHtml
+            out = io.StringIO(); it.write_html(out); out.seek(0); return out.read() # toHtml
+        if isinstance(it, mpl.figure.Figure): res = mpld3.fig_to_html(it); plt.close(it); return res # toHtml
+        if hasGraphviz and isinstance(it, graphviz.Digraph):                     # toHtml
+            import tempfile; a = tempfile.NamedTemporaryFile()                   # toHtml
+            it.render(a.name, format="svg");                                     # toHtml
+            fn = f"{a.name}.svg"; im = cli.cat(fn) | cli.join("")                # toHtml
+            try: os.remove(fn)                                                   # toHtml
+            except: pass                                                         # toHtml
+            return Svg(im)                                                       # toHtml
+        try:                                                                     # toHtml
+            res = it._repr_html_()                                               # toHtml
+            if res: return res                                                   # toHtml
+        except: pass                                                             # toHtml
+        try:                                                                     # toHtml
+            res = it._toHtml()                                                   # toHtml
+            if res: return res                                                   # toHtml
+        except: pass                                                             # toHtml
+        try:                                                                     # toHtml
+            f = toDataUri(); f.throw = True                                      # toHtml
+            res = (it | f)._repr_html_()                                         # toHtml
+            if res: return res                                                   # toHtml
+        except: pass                                                             # toHtml
+        return it.__repr__()                                                     # toHtml
 try:                                                                             # toHtml
     from rdkit import Chem                                                       # toHtml
     from rdkit.Chem import Draw                                                  # toHtml
@@ -549,6 +757,16 @@ Example::
     "def.xlsx" | toCsv()     # returns table of values in the first sheet
     "def.xlsx" | toCsv(True) # returns List[Sheet name (str), table of values]
 
+.. warning::
+
+    Note that this is pretty slow compared to just splitting by semicolons. If your
+    dataset doesn't have anything complicated like semicolons in quotes, then just
+    do ``op().split(",").all()``
+
+    If your dataset does have complicated quotes, then I'd suggest reading the csv
+    using this cli, then convert it to a tsv file (tab-separated value). Then you can
+    always just split the string using tab characters
+
 :param allSheets: if input is an Excel sheet, whether to read in all sheets or
     just the first sheet. No effect if input is a normal csv file"""             # toCsv
         self.allSheets = allSheets                                               # toCsv
@@ -560,3 +778,289 @@ Example::
         def gen():                                                               # toCsv
             with open(fn) as f: yield from csv.reader(f)                         # toCsv
         return gen()                                                             # toCsv
+import validators, shutil, html, io, os; pydub = k1lib.dep("pydub")              # toCsv
+class Audio:                                                                     # Audio
+    def __init__(self, raw:"pydub.audio_segment.AudioSegment"): self.raw = raw   # Audio
+    def resample(self, rate) -> "self":                                          # Audio
+        """Resamples the audio"""                                                # Audio
+        if rate:                                                                 # Audio
+            self.raw = self.raw.set_frame_rate(rate)                             # Audio
+            self.data = np.array(self.raw.get_array_of_samples())/2.15e9         # Audio
+            self.rate = self.raw.frame_rate                                      # Audio
+        return self                                                              # Audio
+    def _toBytes(self, dataType) -> bytes: f = io.BytesIO(); self.raw.export(f, format=(dataType or "wav")); return f.read() # Audio
+    def __repr__(self): return f"<Audio duration={k1lib.fmt.time(self.raw.duration_seconds)} rate={self.raw.frame_rate}>" # Audio
+    def __len__(self): return int(self.raw.frame_count())                        # Audio
+    def __getitem__(self, slice_):                                               # Audio
+        if not isinstance(slice_, slice): return None                            # Audio
+        data = np.array(self.raw.get_array_of_samples()) | cli.batched(self.raw.channels) | cli.op()[slice_] # Audio
+        return Audio(pydub.AudioSegment(data.tobytes(), frame_rate=self.raw.frame_rate, sample_width=self.raw.sample_width, channels=self.raw.channels)) # Audio
+    def _repr_html_(self): # plays a short sample, first 10s or sth like that    # Audio
+        return f"{html.escape(self.__repr__())}<br>{self.raw[:10000]._repr_html_()}" # Audio
+class toAudio(BaseCli):                                                          # toAudio
+    def __init__(self, rate=None):                                               # toAudio
+        """Reads audio from either a file or a URL or from bytes directly.
+Example::
+
+    au = "some_file.wav" | toAudio() # can display in a notebook, which will preview the first 10 second
+    au | toBytes()      # exports audio as .wav file
+    au | toBytes("mp3") # exports audio as .mp3 file
+    au.resample(16000)  # resamples audio to new rate
+    au | head(0.1)      # returns new Audio that has the first 10% of the audio only
+    au | splitW(8, 2)   # splits Audio into 2 Audios, first one covering 80% and second one covering 20% of the track
+    au.raw              # internal pydub.AudioSegment object. If displayed in a notebook, will play the whole thing
+
+You can also use this on any Youtube video or random mp3 links online and on raw bytes::
+
+    "https://www.youtube.com/watch?v=FtutLA63Cp8" | toAudio() # grab Bad Apple song from internet
+    cat("some_file.wav", False) | toAudio() # grab from raw bytes of mp3 or wav, etc.
+"""                                                                              # toAudio
+        self.rate = rate                                                         # toAudio
+    def __ror__(self, it:"str|byte") -> Audio:                                   # toAudio
+        if isinstance(it, str):                                                  # toAudio
+            if os.path.exists(os.path.expanduser(it)): fn = os.path.expanduser(it); tmp = False # toAudio
+            elif validators.url(it):                                             # toAudio
+                if not shutil.which("yt-dlp"): raise Exception(f"'{it}' looks like a link, but the required 'yt-dlp' binary is not found. Please install it by doing `pip install yt-dlp`") # toAudio
+                fn = None | cli.cmd(f"yt-dlp -o - -x {it}", mode=0, text=False) | cli.item() | cli.file(); tmp = True # toAudio
+            else: raise Exception(f"The file '{it}' does not exist, and it doesn't look like a URL") # toAudio
+        elif isinstance(it, bytes): fn = it | cli.file(); tmp = True             # toAudio
+        else: raise Exception(f"Unknown {type(it)} audio type")                  # toAudio
+        res = Audio(pydub.AudioSegment.from_file(fn)).resample(self.rate)        # toAudio
+        if tmp: os.remove(fn)                                                    # toAudio
+        return res                                                               # toAudio
+dateutil = k1lib.dep("dateutil")                                                 # toAudio
+class toUnix(BaseCli):                                                           # toUnix
+    def __init__(self, tz:"str | dateutil.tz.tz.tzfile"=None):                   # toUnix
+        """Tries anything piped in into a unix timestamp. If can't convert
+then return None. Example::
+
+Local time zone independent::
+
+    "2023" | toUnix()                      # returns 2023, or 2023 seconds after unix epoch. Might be undesirable, but has to support raw ints/floats
+    "2023-11-01T00Z" | toUnix()            # midnight Nov 1st 2023 GMT
+    "2023-11-01T00:00:00-04:00" | toUnix() # midnight Nov 1st 2023 EST
+    "2023-11-01" | toUnix("US/Pacific")    # midnight Nov 1st 2023 PST
+    "2023-11-01" | toUnix("UTC")           # midnight Nov 1st 2023 UTC
+
+Local time zone dependent (assumes EST)::
+
+    "2023-11" | toUnix() # if today's Nov 2nd EST, then this would be 1698897600, or midnight Nov 2nd 2023 EST
+    "2023-11-04" | toUnix() # midnight Nov 4th 2023 EST
+
+Feel free to experiment more, but in general, this is pretty versatile in what it can
+convert. With more effort, I'd probably make this so that every example given will not
+depend on local time, but since I just use this to calculate time differences, I don't
+really care.
+
+:param tz: Timezone, like "US/Eastern", "US/Pacific". If not specified, then assumes local timezone""" # toUnix
+        if tz: self.tz = tz if isinstance(tz, dateutil.tz.tz.tzfile) else dateutil.tz.gettz(tz) # toUnix
+        else: self.tz = None                                                     # toUnix
+    def __ror__(self, t):                                                        # toUnix
+        try: return float(t)                                                     # toUnix
+        except:                                                                  # toUnix
+            try:                                                                 # toUnix
+                a = dateutil.parser.parse(t)                                     # toUnix
+                if self.tz: a = a.replace(tzinfo=self.tz)                        # toUnix
+                return a.timestamp()                                             # toUnix
+            except: return None                                                  # toUnix
+from datetime import datetime as dt                                              # toUnix
+class toIso(BaseCli):                                                            # toIso
+    def __init__(self):                                                          # toIso
+        """Converts unix timestamp into ISO 8601 string format.
+Example::
+
+    1701382420 | toIso()            # returns '2023-11-30T17:13:40', which is correct in EST time
+    1701382420 | toIso() | toUnix() # returns 1701382420, the input timestamp, showing it's correct
+    1701382420.123456789 | toIso()  # returns '2023-11-30T17:13:40.123457'
+
+As you might have noticed, this cli depends on the timezone of the host computer
+"""                                                                              # toIso
+        pass                                                                     # toIso
+    def __ror__(self, it):                                                       # toIso
+        return dt.fromtimestamp(it).isoformat()                                  # toIso
+class toYMD(BaseCli):                                                            # toYMD
+    def __init__(self, idx=None, mode=int):                                      # toYMD
+        """Converts unix timestamp into tuple (year, month, day, hour, minute, second).
+Example::
+
+    1701382420 | toYMD()  # returns [2023, 11, 30, 17, 13, 40] in EST timezone
+    1701382420 | toYMD(0) # returns 2023
+    1701382420 | toYMD(1) # returns 11
+
+    1701382395 | toYMD(mode=str) # returns ['2023', '11', '30', '17', '13', '15']
+
+:param idx: if specified, take the desired element only. If 0, then take year, 1, then month, etc.
+:param mode: either int or str. If str, then returns nicely adjusted numbers"""  # toYMD
+        self.idx = idx; self.mode = mode                                         # toYMD
+    def __ror__(self, it):                                                       # toYMD
+        d = dt.fromtimestamp(it)                                                 # toYMD
+        if self.mode == int: res = [d.year, d.month, d.day, d.hour, d.minute, d.second] # toYMD
+        else: res = [f"{d.year}", f"{d.month}".rjust(2,"0"), f"{d.day}".rjust(2,"0"), # toYMD
+                     f"{d.hour}".rjust(2,"0"), f"{d.minute}".rjust(2,"0"), f"{d.second}".rjust(2,"0")] # toYMD
+        return res if self.idx is None else res[self.idx]                        # toYMD
+settings.add("toLinks", k1lib.Settings()\
+    .add("splitChars", ["<br>", "<div ", *"\n\t<> ,;"], "characters/strings to split the lines by, so that each link has the opportunity to be on a separate line, so that the first instance in a line don't overshadow everything after it")\
+    .add("protocols", ["http", "https", "ftp"], "list of recognized protocols to search for links, like 'http' and so on"), "conv.toLinks() settings"); # toYMD
+class toLinks(BaseCli):                                                          # toLinks
+    def __init__(self, f=None):                                                  # toLinks
+        """Extracts links and urls from a paragraph.
+Example::
+
+    paragraph = [
+        "http://a.c",
+        "http://a2.c some other text in between <a href='http://b.d'>some link</a> fdvb"
+    ]
+    # returns {'http://a.c', 'http://a2.c', 'http://b.d'}
+    paragraph | toLinks() | deref()
+
+If the input is a string instead of an iterator of strings, then
+it will :meth:`~k1lib.cli.inp.cat` it first, then look for links
+inside the result. For example::
+
+    "https://en.wikipedia.org/wiki/Cheese" | toLinks()
+
+At the time of writing, that returns a lot of links::
+
+    {'/wiki/Rind-washed_cheese',
+     '#cite_ref-online_5-7',
+     'https://web.archive.org/web/20160609031000/http://www.theguardian.com/lifeandstyle/wordofmouth/2012/jun/27/how-eat-cheese-and-biscuits',
+     'https://is.wikipedia.org/wiki/Ostur',
+     '/wiki/Meat_and_milk',
+     '/wiki/Wayback_Machine',
+     '/wiki/File:WikiCheese_-_Saint-Julien_aux_noix_01.jpg',
+     'https://gv.wikipedia.org/wiki/Caashey',
+     '/wiki/Eyes_(cheese)',
+     '/wiki/Template_talk:Condiments',
+     '#Pasteurization',
+     '/wiki/Tuscan_dialect',
+     '#cite_note-23',
+     '#cite_note-aha2017-48',
+
+So, keep in mind that lots of different things can be considered a
+link. That includes absolute links ('https://gv.wikipedia.org/wiki/Caashey'),
+relative links within that particular site ('/wiki/Tuscan_dialect'), and
+relative links within the page ('#Pasteurization').
+
+How it works underneath is that it's looking for a string like "https://..."
+and a string like "href='...'", which usually have a link inside. For the
+first detection style, you can specify extra protocols that you want to
+search for using ``settings.cli.toLinks.protocols = [...]``.
+
+Also, this will detect links nested within each other multiple times.
+For example, the link 'https://web.archive.org/web/20160609031000/http://www.theguardian.com/lifeandstyle/wordofmouth/2012/jun/27/how-eat-cheese-and-biscuits'
+will appear twice in the result, once as itself, but also 'https://www.theguardian.com/lifeandstyle/wordofmouth/2012/jun/27/how-eat-cheese-and-biscuits'
+
+Note that if you really try, you will be able to find an example where this won't
+work, so don't expect 100% reliability. But for ost use cases, this should perform
+splendidly."""                                                                   # toLinks
+        self.f = f or cli.iden()                                                 # toLinks
+        chars = " \t,;" # random characters to split, so that the first instance in a line doesn't overshadow the ones after # toLinks
+        self.preprocess = cli.serial(*[(cli.op().split(ch).all() | cli.joinSt()) for ch in settings.toLinks.splitChars]) # toLinks
+        protocols = "|".join([f"({p})" for p in settings.toLinks.protocols])     # toLinks
+        self.g = cli.grep(f"(?P<g>({protocols})" + "://[^\(\)\[\]\<\>\{\}\'\" ]*)", extract="g") # toLinks
+        self.href = cli.grep('href="(?P<g>.+)"', extract="g") & cli.grep("href='(?P<g>.+)'", extract="g") | cli.joinSt() # toLinks
+        self.post = cli.joinSt() | cli.aS(set)                                   # toLinks
+    def __ror__(self, it):                                                       # toLinks
+        if hasattr(it, "_toLinks"): return it._toLinks(self.f) if len(inspect.getfullargspec(it._toLinks).args) == 2 else it._toLinks() # toLinks
+        host = ""                                                                # toLinks
+        if isinstance(it, str): host = it; it = cli.cat(it) # reads the website first # toLinks
+        it = it | self.preprocess | cli.aS(list)                                 # toLinks
+        return it | self.href & self.g | self.post | self.f | cli.aS(set)        # toLinks
+class toMovingAvg(BaseCli):                                                      # toMovingAvg
+    def __init__(self, col:int=None, alpha=0.9, debias=True, v:float=0, dt:float=1): # toMovingAvg
+        """Smoothes out sequential data using momentum.
+Example::
+
+    # returns [4.8, 4.62, 4.458]. 4.8 because 0.9*5 + 0.1*3 = 4.8, and so on
+    [3, 3, 3] | toMovingAvg(v=5, debias=False) | deref()
+
+Sometimes you want to ignore the initial value, then you can turn on debias mode::
+
+    x = np.linspace(0, 10, 100); y = np.cos(x)
+    plt.plot(x, y)
+    plt.plot(x, y | toMovingAvg(debias=False)             | deref())
+    plt.plot(x, y | toMovingAvg(debias=False, alpha=0.95) | deref())
+    plt.plot(x, y | toMovingAvg(debias=True)              | deref())
+    plt.plot(x, y | toMovingAvg(debias=True,  alpha=0.95) | deref())
+    plt.legend(["Signal", "Normal - 0.9 alpha", "Normal - 0.95 alpha", "Debiased - 0.9 alpha", "Debiased - 0.95 alpha"], framealpha=0.3)
+    plt.grid(True)
+
+.. image:: ../images/movingAvg.png
+
+As you can see, normal mode still has the influence of the initial value at
+0 and can't rise up fast, whereas the debias mode will ignore the initial
+value and immediately snaps to the first value.
+
+Also, the 2 graphs with 0.9 alpha snap together quicker than the 2 graphs
+with 0.95 alpha. Here's the effect of several alpha values:
+
+.. image:: ../images/movingAvg-alphas.png
+
+:param col: column to apply moving average to
+:param alpha: momentum term
+:param debias: whether to turn on debias mode or not
+:param v: initial value, doesn't matter in debias mode
+:param dt: pretty much never used, hard to describe, belongs to debias mode, checkout source code for details""" # toMovingAvg
+        self.col = col; self.initV = v; self.alpha = alpha; self.debias = debias; self.dt = dt # toMovingAvg
+        if debias and v != 0: raise Exception("Debias mode activated! This means that the initial value doesn't matter, yet you've specified one") # toMovingAvg
+        if alpha > 1 or alpha < 0: raise Exception("Alpha is outside the [0, 1] range. which does not make sense") # toMovingAvg
+    def __ror__(self, it):                                                       # toMovingAvg
+        m = value = self.initV; alpha = self.alpha; col = self.col               # toMovingAvg
+        if self.debias:                                                          # toMovingAvg
+            dt = self.dt; t = 1; tooSmall = False                                # toMovingAvg
+            if col is None:                                                      # toMovingAvg
+                for v in it:                                                     # toMovingAvg
+                    m = m * alpha + v * (1 - alpha)                              # toMovingAvg
+                    if tooSmall: yield m # skips complex exponential calculation once it's small enough to speed things up # toMovingAvg
+                    else:                                                        # toMovingAvg
+                        exp = alpha**t; value = m / (1 - exp)                    # toMovingAvg
+                        tooSmall = 10*exp < (1-alpha); t += dt; yield value      # toMovingAvg
+            else:                                                                # toMovingAvg
+                for row in it:                                                   # toMovingAvg
+                    m = m * alpha + row[col] * (1 - alpha)                       # toMovingAvg
+                    if tooSmall: yield [*row[:col], m, *row[col+1:]]             # toMovingAvg
+                    else:                                                        # toMovingAvg
+                        exp = alpha**t; value = m / (1 - exp)                    # toMovingAvg
+                        tooSmall = 10**exp < (1-alpha); t += dt; yield [*row[:col], value, *row[col+1:]] # toMovingAvg
+        else:                                                                    # toMovingAvg
+            if col is None:                                                      # toMovingAvg
+                for v in it: m = m * alpha + v * (1 - alpha); yield m            # toMovingAvg
+            else:                                                                # toMovingAvg
+                for row in it:                                                   # toMovingAvg
+                    m = m * alpha + row[col] * (1 - alpha)                       # toMovingAvg
+                    yield [*row[:col], m, *row[col+1:]]                          # toMovingAvg
+cm = k1lib.dep("matplotlib.cm")                                                  # toMovingAvg
+class toCm(BaseCli):                                                             # toCm
+    def __init__(self, col:int, cmap=None, title:str=None):                      # toCm
+        """Converts the specified column to a bunch of color
+values, and adds a colorbar automatically. "cm" = "color map". Example::
+
+    import matplotlib.cm as cm
+    exps = [1, 2, 3, 4, 5]
+    x = np.linspace(-2, 2)
+    data = exps | apply(lambda exp: [exp, x, x**exp]) | deref()
+
+    # without toCm(), plots fine, demonstrates underlying mechanism, but doesn't allow plotting a separate colorbar
+    data | normalize(0, mode=1) | apply(cm.viridis, 0) | ~apply(lambda c,x,y: plt.plot(x, y, color=c)) | ignore()
+    # with toCm(), draws a colorbar automatically
+    data | toCm(0, cm.viridis, "Exponential") | ~apply(lambda c,x,y: plt.plot(x, y, color=c)) | ignore()
+
+.. image:: ../images/toCm.png
+
+Functionality is kind of niche, but I need this over and over
+again, so have to make it
+
+:param col: column to convert float/int to color (tuple of 4 floats)
+:param cmap: colormap to use. If not specified, defaults to ``cm.viridis``
+:param title: title of the colorbar, optional"""                                 # toCm
+        self.col = col; self.cmap = cmap or cm.viridis; self.title = title       # toCm
+    def __ror__(self, it):                                                       # toCm
+        col = self.col; cmap = self.cmap; title = self.title                     # toCm
+        if col is None:                                                          # toCm
+            if not isinstance(it, k1lib.settings.cli.arrayTypes): it = list(it)  # toCm
+            plt.colorbar(cm.ScalarMappable(norm=plt.Normalize(*it | cli.toMin() & cli.toMax()), cmap=cmap), ax=plt.gca(), label=title) # toCm
+            return it | cli.normalize(None, 1) | cli.apply(cmap)                 # toCm
+        else:                                                                    # toCm
+            it = it | cli.deref(2)                                               # toCm
+            plt.colorbar(cm.ScalarMappable(norm=plt.Normalize(*it | cli.cut(col) | cli.toMin() & cli.toMax()), cmap=cmap), ax=plt.gca(), label=title) # toCm
+            return it | cli.normalize(col, 1) | cli.apply(cmap, col)             # toCm

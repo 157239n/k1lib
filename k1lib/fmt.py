@@ -6,11 +6,11 @@ automatically with::
    from k1lib.imports import *
    fmt.txt # exposed
 """
-import k1lib, math; from k1lib import cli
+import k1lib, math, re; from k1lib import cli
 from typing import Dict, Iterator, Tuple
 pygments = k1lib.dep("pygments")
 __all__ = ["generic", "metricPrefixes", "size", "fromSize", "sizeOf",
-           "comp", "compRate", "time", "item", "throughput", "txt", "code", "h", "pre", "row", "col", "colors"]
+           "comp", "compRate", "time", "item", "throughput", "txt", "code", "h", "pre", "row", "col", "colors", "rmAnsi"]
 k1lib.settings.add("fmt", k1lib.Settings().add("separator", True, "whether to have a space between the number and the unit"), "from k1lib.fmt module");
 settings = k1lib.settings.fmt
 metricPrefixes = {-8:"y",-7:"z",-6:"a",-5:"f",-4:"p",-3:"n",-2:"u",-1:"m",0:"",1:"k",2:"M",3:"G",4:"T",5:"P",6:"E",7:"Z",8:"Y"}
@@ -178,28 +178,52 @@ Example::
 
 :param level: what's the header level?"""                                        # h
     return f"<h{level}>{code}</h{level}>"                                        # h
-def pre(code:str) -> str:                                                        # pre
+def _jsF_h(meta, level=3):                                                       # _jsF_h
+    fIdx = cli.init._jsFAuto(); dataIdx = cli.init._jsDAuto()                    # _jsF_h
+    return f"const {fIdx} = ({dataIdx}) => `<h{level}>${{{dataIdx}}}</h{level}>`", fIdx # _jsF_h
+k1lib.settings.cli.kjs.jsF[h] = _jsF_h                                           # _jsF_h
+def pre(code:str, extras:str="") -> str:                                         # pre
     """Wraps content inside a 'pre' html tag.
 Example::
 
     fmt.pre("abc")
 """                                                                              # pre
-    return f"<pre style='font-family: monospace'>{code}</pre>"                   # pre
-def col(args):                                                                   # col
+    return f"<pre style='font-family: monospace' {extras} >{code}</pre>"         # pre
+def _jsF_pre(meta):                                                              # _jsF_pre
+    fIdx = cli.init._jsFAuto(); dataIdx = cli.init._jsDAuto()                    # _jsF_pre
+    return f"const {fIdx} = ({dataIdx}) => `<pre style='font-family: monospace'>${{{dataIdx}}}</pre>`", fIdx # _jsF_pre
+k1lib.settings.cli.kjs.jsF[pre] = _jsF_pre                                       # _jsF_pre
+def col(args, margin=10):                                                        # col
     """Creates a html col of all the elements.
 Example::
 
     fmt.col(["abc", "def"]) | aS(IPython.display.HTML)
 """                                                                              # col
-    return args | cli.apply(lambda x: f"<div style='margin: 10px'>{x}</div>") | cli.join("") | cli.aS(lambda x: f"<div style='display: flex; flex-direction: column'>{x}</div>") # col
-def row(args):                                                                   # row
+    return args | cli.apply(lambda x: f"<div style='margin: {margin}px'>{x}</div>") | cli.join("") | cli.aS(lambda x: f"<div style='display: flex; flex-direction: column'>{x}</div>") # col
+def _jsF_col(meta, margin=10):                                                   # _jsF_col
+    fIdx = cli.init._jsFAuto(); dataIdx = cli.init._jsDAuto()                    # _jsF_col
+    fIdx2 = cli.init._jsFAuto(); dataIdx2 = cli.init._jsDAuto()                  # _jsF_col
+    return f"""
+const {fIdx2} = ({dataIdx2}) => `<div style='margin: {margin}px'>${{{dataIdx2}}}</div>`
+const {fIdx}  = ({dataIdx})  => `<div style='display: flex; flex-direction: column'>${{{dataIdx}.map({fIdx2}).join('')}}</div>`
+    """, fIdx                                                                    # _jsF_col
+k1lib.settings.cli.kjs.jsF[col] = _jsF_col                                       # _jsF_col
+def row(args, margin=10):                                                        # row
     """Creates a html row of all the elements.
 Example::
 
     fmt.row(["abc", "def"]) | aS(IPython.display.HTML)
 """                                                                              # row
-    return args | cli.apply(lambda x: f"<div style='margin: 10px'>{x}</div>") | cli.join("") | cli.aS(lambda x: f"<div style='display: flex; flex-direction: row'>{x}</div>") # row
-settings.add("colors", ["#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#80b1d3", "#fdb462", "#b3de69", "#fccde5", "#d9d9d9", "#bc80bd", "#ccebc5", "#ffed6f"], "List of colors to cycle through in fmt.colors()") # row
+    return args | cli.apply(lambda x: f"<div style='margin: {margin}px'>{x}</div>") | cli.join("") | cli.aS(lambda x: f"<div style='display: flex; flex-direction: row'>{x}</div>") # row
+def _jsF_row(meta, margin=10):                                                   # _jsF_row
+    fIdx = cli.init._jsFAuto(); dataIdx = cli.init._jsDAuto()                    # _jsF_row
+    fIdx2 = cli.init._jsFAuto(); dataIdx2 = cli.init._jsDAuto()                  # _jsF_row
+    return f"""
+const {fIdx2} = ({dataIdx2}) => `<div style='margin: {margin}px'>${{{dataIdx2}}}</div>`
+const {fIdx}  = ({dataIdx})  => `<div style='display: flex; flex-direction: row'>${{{dataIdx}.map({fIdx2}).join('')}}</div>`
+    """, fIdx                                                                    # _jsF_row
+k1lib.settings.cli.kjs.jsF[row] = _jsF_row                                       # _jsF_row
+settings.add("colors", ["#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#80b1d3", "#fdb462", "#b3de69", "#fccde5", "#d9d9d9", "#bc80bd", "#ccebc5", "#ffed6f"], "List of colors to cycle through in fmt.colors()") # _jsF_row
 def colors():                                                                    # colors
     """Returns an infinite iterator that cycles through 12 colors.
 Example::
@@ -208,3 +232,7 @@ Example::
 
 Color scheme taken from https://colorbrewer2.org/#type=qualitative&scheme=Set3&n=12""" # colors
     return settings.colors | cli.repeatFrom()                                    # colors
+ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')               # colors
+def rmAnsi(text):                                                                # rmAnsi
+    """Removes ansi escape characters, courtesy of https://stackoverflow.com/questions/14693701/how-can-i-remove-the-ansi-escape-sequences-from-a-string-in-python.""" # rmAnsi
+    return ansi_escape.sub('', text)                                             # rmAnsi

@@ -7,7 +7,7 @@ This module is for nice visualization tools. This is exposed automatically with:
 """
 import k1lib, base64, io, os, matplotlib as mpl, warnings
 import k1lib.cli as cli
-import matplotlib.pyplot as plt, numpy as np
+plt = k1lib.dep("matplotlib.pyplot"); import numpy as np
 from typing import Callable, List, Union
 from functools import partial, update_wrapper
 try: import torch; import torch.nn as nn; hasTorch = True
@@ -174,35 +174,12 @@ the same length as your data, filled with ints, like this::
         if lx != None: _x = [lx] + _x; _y = [ly] + _y                            # plotSegments
         plt.plot(_x, _y, colors[state])                                          # plotSegments
 class _Carousel:                                                                 # _Carousel
-    _idx = k1lib.AutoIncrement.random()                                          # _Carousel
-    def __init__(self, imgs=[], searchMode:int=0):                               # _Carousel
-        self.imgs:List[Tuple[str, str]] = [] # Tuple[format, base64 img]         # _Carousel
-        self.defaultFormat = "jpeg"                                              # _Carousel
+    def __init__(self, searchMode, imgs, titles):                                # _Carousel
         self.searchMode = searchMode                                             # _Carousel
-        self.titles = []; imgs | self                                            # _Carousel
-    def _process(self, e):                                                       # _Carousel
-        if isinstance(e, str): return f"{e}"                                     # _Carousel
-        elif hasPIL and isinstance(e, PIL.Image.Image):                          # _Carousel
-            return f"<img alt='' style='max-width: 100%' src='data:image/png;base64, {base64.b64encode(e | cli.toBytes()).decode()}' />" # _Carousel
-        else: raise Exception(f"Content is not a string nor a PIL image. Can't make a Carousel out of this unknown type: {type(e)}") # _Carousel
-    def __ror__(self, it):                                                       # _Carousel
-        """Adds an image/html content to the collection"""                       # _Carousel
-        searchMode = self.searchMode                                             # _Carousel
-        if searchMode == 0 or searchMode == 1:                                   # _Carousel
-            for e in it: self.imgs.append(k1lib.encode(self._process(e)))        # _Carousel
-        elif searchMode == 2:                                                    # _Carousel
-            for title, e in it:                                                  # _Carousel
-                if not isinstance(title, str): raise Exception("Title is not a string. Can't perform search") # _Carousel
-                self.imgs.append(k1lib.encode(title+self._process(e)))           # _Carousel
-                self.titles.append(k1lib.encode(title))                          # _Carousel
-        else: raise Exception(f"Invalid searchMode: {searchMode}")               # _Carousel
-        return self                                                              # _Carousel
-    def pop(self):                                                               # _Carousel
-        """Pops last image"""                                                    # _Carousel
-        return self.imgs.pop()                                                   # _Carousel
-    def __getitem__(self, idx): return self.imgs[idx]                            # _Carousel
+        self.imgs:List[Tuple[str, str]] = imgs # Tuple[format, base64 img]       # _Carousel
+        self.titles = titles                                                     # _Carousel
     def _repr_html_(self):                                                       # _Carousel
-        idx = _Carousel._idx(); pre = f"k1c_{idx}"; searchMode = self.searchMode # _Carousel
+        idx = Carousel._idx(); pre = f"k1c_{idx}"; searchMode = self.searchMode  # _Carousel
         imgs = self.imgs | cli.apply(lambda x: f"`{x}`") | cli.deref(); n = len(imgs) # _Carousel
         titles = self.titles | cli.apply(lambda x: f"`{x}`") | cli.deref()       # _Carousel
         if searchMode > 0: searchBar = f"<input type='text' value='' id='{pre}_search' placeholder='Search in {'content' if searchMode == 1 else 'header'}' style='padding: 4px 4px'>" # _Carousel
@@ -210,7 +187,7 @@ class _Carousel:                                                                
         if n > 0: contents = imgs | cli.apply(k1lib.decode) | cli.insertIdColumn() | ~cli.apply(lambda idx, html: f"<div id='{pre}_content{idx}'>{html}</div>") | cli.deref() | cli.join('\n') # _Carousel
         else: contents = "(no pages or images are found)"                        # _Carousel
         #imgs = [f"\"<img alt='' src='data:image/{fmt};base64, {img}' />\"" for fmt, img in self.imgs] # _Carousel
-        html = f"""<!-- k1lib.Carousel -->
+        html = f"""<!-- k1lib.Carousel start -->
 <style>
     .{pre}_btn {{
         cursor: pointer;
@@ -284,25 +261,21 @@ class _Carousel:                                                                
         }}
     }}
     {pre}_display();
-</script>"""                                                                     # _Carousel
+</script>
+<!-- k1lib.Carousel end -->"""                                                   # _Carousel
         return html                                                              # _Carousel
-def Carousel(imgs=None, searchMode=0):                                           # Carousel
-    """Creates a new Carousel. You can then add images and whatnot.
+class Carousel(cli.BaseCli):                                                     # Carousel
+    _idx = k1lib.AutoIncrement.random()                                          # Carousel
+    def __init__(self, searchMode:int=0):                                        # Carousel
+        """Creates a new Carousel that can flip through a list of images/html.
 Will even work even when you export the notebook as html. Example::
 
-    c = viz.Carousel()
     x = np.linspace(-2, 2); plt.plot(x, x ** 2); im1 = plt.gcf() | toImg()
     x = np.linspace(-1, 3); plt.plot(x, x ** 2); im2 - plt.gcf() | toImg()
     im3 = "<h1>abc</h1><div>Some content</div>" # can add html
-    viz.Carousel([im1, im2, im3]) # displays in notebook cell
-    [im1, im2, im3] | viz.Carousel() # also displays in notebook cell
+    [im1, im2, im3] | viz.Carousel() # displays in notebook cell
 
 .. image:: images/carousel.png
-
-You can also pipe the content into it like this::
-
-    ["abc", "def"] | viz.Carousel()
-    ["abc", "def"] | aS(viz.Carousel) # also valid, but kinda outdated and unintuitive
 
 There's also a builtin search functionality that works like this::
 
@@ -326,8 +299,80 @@ will search inside the title only, that means it's expecting to receive Iterator
     1 for search content, accepts Iterator[html/img],
     2 for search title, accepts Iterator[title, html/img]
 """                                                                              # Carousel
-    if imgs is None: return cli.aS(_Carousel, searchMode)                        # Carousel
-    else: return _Carousel(imgs, searchMode)                                     # Carousel
+        self.searchMode = searchMode                                             # Carousel
+    def _process(self, e):                                                       # Carousel
+        if isinstance(e, str): return f"{e}"                                     # Carousel
+        elif hasPIL and isinstance(e, PIL.Image.Image):                          # Carousel
+            return f"<img alt='' style='max-width: 100%' src='data:image/png;base64, {base64.b64encode(e | cli.toBytes()).decode()}' />" # Carousel
+        else: raise Exception(f"Content is not a string nor a PIL image. Can't make a Carousel out of this unknown type: {type(e)}") # Carousel
+    def __ror__(self, it):                                                       # Carousel
+        imgs = []; titles = []                                                   # Carousel
+        searchMode = self.searchMode                                             # Carousel
+        if searchMode == 0 or searchMode == 1:                                   # Carousel
+            for e in it: imgs.append(k1lib.encode(self._process(e)))             # Carousel
+        elif searchMode == 2:                                                    # Carousel
+            for title, e in it:                                                  # Carousel
+                if not isinstance(title, str): raise Exception("Title is not a string. Can't perform search") # Carousel
+                imgs.append(k1lib.encode(title+self._process(e)))                # Carousel
+                titles.append(k1lib.encode(title))                               # Carousel
+        else: raise Exception(f"Invalid searchMode: {searchMode}")               # Carousel
+        return _Carousel(searchMode, imgs, titles)                               # Carousel
+    def _jsF(self, meta):                                                        # Carousel
+        if self.searchMode != 0: raise Exception("viz.Carousel._jsF() does not support .searchMode!=0. You're using the JS transpiler anyway, you can trivially build your own, more complex search engine!") # Carousel
+        fIdx = cli.init._jsFAuto(); dataIdx = cli.init._jsDAuto(); imgIdx = cli.init._jsDAuto(); pre = cli.init._jsDAuto() # Carousel
+        return f"""const {fIdx} = ({dataIdx}) => {{
+        return unescape(`<!-- k1lib.Carousel start -->
+<style>
+    .{pre}_btn {{
+        cursor: pointer; padding: 6px 12px; background-color: #eee;
+        margin-right: 8px; color: #000;
+        box-shadow: 0 3px 5px rgb(0,0,0,0.3);
+        border-radius: 18px; user-select: none;
+        -webkit-user-select: none; /* Safari */
+        -ms-user-select: none; /* IE 10+ */
+    }}
+    .{pre}_btn:hover {{
+        box-shadow: box-shadow: 0 3px 10px rgb(0,0,0,0.6);
+        background: #4caf50; color: #fff;
+    }}
+</style>
+<div>
+    <div style="display: flex; flex-direction: row; padding: 8px">
+        <div id="{pre}_prevBtn" class="{pre}_btn">Prev</div>
+        <div id="{pre}_nextBtn" class="{pre}_btn">Next</div>
+    </div>
+    <div id="{pre}_status" style="padding: 10px"></div>
+</div>
+<div id="{pre}_imgContainer">
+    ${{{dataIdx}.map((x, i) => "<div id='{pre}_content" + i + "'>" + x + "</div>").join("")}}
+</div>
+%3Cscript%3E
+    (async () => {{
+        const {pre}_n = ${{{dataIdx}.length}}; {pre}_imgIdx = 0;
+        function {pre}_updatePageCount() {{
+            if ({pre}_n > 0) document.querySelector("#{pre}_status").innerHTML = "Page: " + ({pre}_imgIdx + 1) + "/" + {pre}_n;
+            else document.querySelector("#{pre}_status").innerHTML = "Page: 0/0"
+        }}
+        function {pre}_display() {{
+            for (let i = 0; i < {pre}_n; i++) document.querySelector("#{pre}_content" + i).style.display = "none";
+            if ({pre}_n > 0) document.querySelector("#{pre}_content" + {pre}_imgIdx).style.display = "block";
+            {pre}_updatePageCount();
+        }};
+        document.querySelector("#{pre}_prevBtn").onclick = () => {{
+            {pre}_imgIdx -= 1;
+            {pre}_imgIdx = Math.max({pre}_imgIdx, 0);
+            {pre}_display();
+        }};
+        document.querySelector("#{pre}_nextBtn").onclick = () => {{
+            {pre}_imgIdx += 1;
+            {pre}_imgIdx = Math.min({pre}_imgIdx, {pre}_n - 1);
+            {pre}_display();
+        }};
+        {pre}_display();
+    }})();
+%3C/script%3E`) }}
+<!-- k1lib.Carousel end -->""", fIdx                                             # Carousel
+k1lib.settings.cli.atomic.deref = (*k1lib.settings.cli.atomic.deref, Carousel)   # Carousel
 class Toggle(cli.BaseCli):                                                       # Toggle
     _idx = k1lib.AutoIncrement.random()                                          # Toggle
     def __init__(self):                                                          # Toggle
@@ -339,10 +384,14 @@ not. Useful if the html content is very big in size. Example::
 
 This will plot a graph, then create a button where you can toggle the image's visibility""" # Toggle
         self.content:str = "" # html string                                      # Toggle
-    def __ror__(self, it): self.content = it if isinstance(it, str) else it | cli.toHtml(); return self # Toggle
+        self._enteredRor = False                                                 # Toggle
+    def __ror__(self, it): self._enteredRor = True; self.content = it if isinstance(it, str) else it | cli.toHtml(); return self # Toggle
+    def __or__(self, it): # see discussion on Carousel()                         # Toggle
+        if self._enteredRor: return it.__ror__(self)                             # Toggle
+        else: return super().__or__(it)                                          # Toggle
     def _repr_html_(self):                                                       # Toggle
         pre = f"k1t_{Toggle._idx()}"                                             # Toggle
-        html = f"""<!-- k1lib.Toggle -->
+        html = f"""<!-- k1lib.Toggle start -->
 <style>
     #{pre}_btn {{
         cursor: pointer;
@@ -380,8 +429,56 @@ This will plot a graph, then create a button where you can toggle the image's vi
         {pre}_btn.innerHTML = {pre}_displayed ? "Hide content" : "Show content";
         {pre}_content.style.display = {pre}_displayed ? "block" : "none";
     }};
-</script>"""                                                                     # Toggle
+</script>
+<!-- k1lib.Toggle end -->"""                                                     # Toggle
         return html                                                              # Toggle
+    def _jsF(self, meta):                                                        # Toggle
+        fIdx = cli.init._jsFAuto(); dataIdx = cli.init._jsDAuto(); pre = cli.init._jsDAuto() # Toggle
+        return f"""const {fIdx} = ({dataIdx}) => {{
+        return unescape(`
+<!-- k1lib.Toggle start -->
+<style>
+    #{pre}_btn {{
+        cursor: pointer;
+        padding: 6px 12px;
+        background: #eee;
+        margin-right: 5px;
+        color: #000;
+        user-select: none;
+        -webkit-user-select: none; /* Safari */
+        -ms-user-select: none; /* IE 10+ */
+        box-shadow: 0 3px 5px rgb(0,0,0,0.3);
+        border-radius: 18px;
+    }}
+    #{pre}_btn:hover {{
+        box-shadow: 0 3px 5px rgb(0,0,0,0.6);
+        background: #4caf50;
+        color: #fff;
+    }}
+</style>
+<div>
+    <div style="display: flex; flex-direction: row; padding: 4px">
+        <div id="{pre}_btn">Show content</div>
+        <div style="flex: 1"></div>
+    </div>
+    <div id="{pre}_content" style="display: none; margin-top: 12px">${{{dataIdx}}}</div>
+</div>
+%3Cscript%3E
+    (async () => {{
+        console.log("setup script ran for {pre}");
+        {pre}_btn = document.querySelector("#{pre}_btn");
+        {pre}_content = document.querySelector("#{pre}_content");
+
+        {pre}_displayed = false;
+        {pre}_btn.onclick = () => {{
+            {pre}_displayed = !{pre}_displayed;
+            {pre}_btn.innerHTML = {pre}_displayed ? "Hide content" : "Show content";
+            {pre}_content.style.display = {pre}_displayed ? "block" : "none";
+        }};
+    }})();
+%3C/script%3E`) }}
+<!-- k1lib.Toggle end -->""", fIdx                                               # Toggle
+k1lib.settings.cli.atomic.deref = (*k1lib.settings.cli.atomic.deref, Toggle)     # Toggle
 def ToggleImage():                                                               # ToggleImage
     """This function is sort of legacy. It's just ``img | toHtml() | viz.Toggle()`` really""" # ToggleImage
     return cli.toHtml() | Toggle()                                               # ToggleImage
@@ -398,13 +495,24 @@ have a button to expand and view the rest. Example::
 This will plot a preview of a graph
 :param height: height of the parent container"""                                 # Scroll
         self.content:str = "" # html string                                      # Scroll
-        self.height = height                                                     # Scroll
-    def __ror__(self, it): self.content = it; return self                        # Scroll
+        self.height = height; self._enteredRor = False                           # Scroll
+    def __ror__(self, it): self._enteredRor = True; self.content = it; return self # Scroll
+    def __or__(self, it): # see discussion on Carousel()                         # Scroll
+        if self._enteredRor: return it.__ror__(self)                             # Scroll
+        else: return super().__or__(it)                                          # Scroll
     def _repr_html_(self):                                                       # Scroll
         pre = f"k1scr_{Scroll._idx()}"                                           # Scroll
-        html = f"""<!-- k1lib.Scroll -->
-<div style="max-height: {self.height}px">{self.content}</div>"""                 # Scroll
+        html = f"""<!-- k1lib.Scroll start -->
+<div style="max-height: {self.height}px; overflow-y: auto">{self.content}</div>
+<!-- k1lib.Scroll end -->"""                                                     # Scroll
         return html                                                              # Scroll
+    def _jsF(self, meta):                                                        # Scroll
+        fIdx = cli.init._jsFAuto(); dataIdx = cli.init._jsDAuto(); pre = cli.init._jsDAuto() # Scroll
+        return f"""const {fIdx} = ({dataIdx}) => {{
+        return unescape(`<!-- k1lib.Scroll start -->
+<div style="max-height: {self.height}px; overflow-y: auto">${{{dataIdx}}}</div>
+<!-- k1lib.Scroll end -->`) }}""", fIdx                                          # Scroll
+k1lib.settings.cli.atomic.deref = (*k1lib.settings.cli.atomic.deref, Scroll)     # Scroll
 def confusionMatrix(matrix:torch.Tensor, categories:List[str]=None, **kwargs):   # confusionMatrix
     """Plots a confusion matrix. Example::
 

@@ -22,9 +22,16 @@ from . import _k1a;
 from . import k1ui;     #k1ui     = wrapMod(k1ui)
 from . import serve;
 from . import p5;
+from . import selen;
+from . import kws;
+from . import kast;
+from . import serpent;
 
 #from . import gE
 from . import eqn;      #eqn      = wrapMod(eqn)
+
+from ._advanced import *
+from . import zircon;
 
 class _Mo(wrapMod):
     def __init__(self, mod): super().__init__(mod); self._MoWrap_dirs = ["registerSubstance"]

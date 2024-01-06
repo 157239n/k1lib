@@ -208,7 +208,7 @@ A and B should be mutually exclusive. Initial nodes are A, final nodes are A + B
     # actually transferring data to new nodes                                    # spreadOut
     meta = inter | apply(~aS(range) | splitW(*wsB) | ranges2Seeks | apply(lambda x: splitSeek.backward(fn, x)) | deref() | rS | window(2) | deref() | apply(wrapList()) | insertColumn(nBs), 1) | ungroup(False) | groupBy(1, True) | deref() # spreadOut
     with ray.progress(len(meta), "Transferring data to new nodes") as rp:        # spreadOut
-        meta | insertIdColumn(True) | applyTh(~aS(lambda idx, nB, nse: a_transfer(fn, nse, nB, rpF=aS(lambda p: ray.get(rp.update.remote(idx, p))))), timeout=24*3600) | deref() # spreadOut
+        meta | insertIdColumn(True) | applyTh(~aS(lambda idx, nB, nse: a_transfer(fn, nse, nB, rpF=aS(lambda p: ray.get(rp.update.remote(idx, p))))), timeout=1e9) | deref() # spreadOut
     # truncates the files in nAs nodes                                           # spreadOut
     inter | ~apply(lambda idx,se: [idx,se[0]]) | applyCl(lambda sB: open(fn, 'a').truncate(sB), pre=True, timeout=None) | deref() # spreadOut
 def balanceFile(fn:str, nAs:List[str]=None, nBs:List[str]=None, rS=None):        # balanceFile

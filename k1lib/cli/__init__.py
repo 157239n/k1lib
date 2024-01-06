@@ -23,13 +23,17 @@ from .bio import *
 from .mol import *
 from . import mgi;  mgi  = _wrapMod(mgi)
 from . import cif;  #cif  = _wrapMod(cif)
+from . import kapi; kapi  = _wrapMod(kapi)
 
 # file formats
 from . import ktree; ktree = _wrapMod(ktree)
-from . import kxml;  kxml = _wrapMod(kxml)
-from . import sam;   sam  = _wrapMod(sam)
-from . import gb;    gb   = _wrapMod(gb)
-from . import nb;    nb   = _wrapMod(nb)
+from . import kxml;  kxml  = _wrapMod(kxml)
+from . import sam;   sam   = _wrapMod(sam)
+from . import gb;    gb    = _wrapMod(gb)
+from . import nb;    nb    = _wrapMod(nb)
+from . import kjs;   kjs   = _wrapMod(kjs)
+from . import kgv;   kgv   = _wrapMod(kgv)
+toJsFunc = kjs.toJsFunc
 
 from .optimizations import *
 from .trace import * # has to be last, to wait for others to load up

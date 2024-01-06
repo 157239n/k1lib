@@ -14,7 +14,7 @@ except: torch = k1.dep("torch"); hasTorch = False
 try: import torchvision; hasTv = True
 except: hasTv = False
 from typing import Callable, List, Iterator, Tuple, Union, Dict; from collections import defaultdict, deque; from functools import lru_cache
-import matplotlib as mpl; import matplotlib.pyplot as plt
+mpl = k1lib.dep("matplotlib"); plt = k1lib.dep("matplotlib.pyplot")
 __all__ = ["get", "WsSession", "selectArea", "record", "execute", "Recording",
            "Track", "CharTrack", "WordTrack", "ContourTrack", "ClickTrack", "WheelTrack", "StreamTrack",
            "distNet", "TrainScreen"]
@@ -434,7 +434,7 @@ class ContourTrack(Track): # mouse movements                                    
     def __repr__(self): return f"<ContourTrack {self._displayTimes()} n ({self.coords.shape[0]})>" # ContourTrack
     def _tooltip(self, ctx):                                                     # ContourTrack
         return f"""<div><div style="margin-bottom:10px">{escapeHtml(self.__repr__())}</div>{self._imgHtml()}</div>""" # ContourTrack
-    def _imgHtml(self): return f"""<img src="data:image/png;base64,{self._img() | toBytes(imgType="png") | aS(base64.b64encode) | op().decode()}" alt="Mouse trajectory" />""" # ContourTrack
+    def _imgHtml(self): return f"""<img src="data:image/png;base64,{self._img() | toBytes(dataType="png") | aS(base64.b64encode) | op().decode()}" alt="Mouse trajectory" />""" # ContourTrack
     def _repr_html_(self): return f"""<!-- k1ui.ContourTrack --><div>{self._imgHtml()}</div>""" # ContourTrack
     def events(self): return self.coords | ~apply(lambda x, y, t: {"type": "mouseMoved", "x": x, "y": y, "timestamp": int(t*1000)}) | deref() # ContourTrack
     def copy(self): return ContourTrack(np.copy(self.coords))                    # ContourTrack

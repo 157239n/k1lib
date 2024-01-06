@@ -5,73 +5,86 @@ do. I put it here so that I can do::
     from k1lib.imports import *
 
 and everything will be in place"""
-try:
-    import torch; from torch import nn, optim
-    import torch.nn.functional as F, torch.utils.data as data
-except: pass
-import matplotlib.pyplot as plt, matplotlib as mpl
-import numpy as np, dill as pickle, multiprocessing as mp, concurrent.futures as futures, threading
-import math, os, time, sys, random, logging, traceback, re, typing, glob, warnings, asyncio
-import dill, json, inspect, xml, base64, io, html
-import functools; from functools import partial, lru_cache
-import contextlib; from contextlib import contextmanager
-from collections import deque, defaultdict
-from typing import List, Tuple, Callable, Union, Iterator, Set, Dict, Any
-import k1lib; from k1lib import schedule, graphEqn, mo, knn, fmt, selector,\
-viz, Cbs, settings, cli, _k1a, serve, p5, k1ui
-from k1lib.cli import *; k1 = k1lib; k1a = _k1a
-for e in cli._scatteredClis: globals()[e.__name__] = e
-if "py_k1lib_in_applyMp" not in os.environ: k1lib.dontWrap()
-plt.rcParams['figure.dpi'] = 100
-plt.rcParams["animation.html"] = "jshtml"
+import k1lib; settings = k1lib.settings; cli = k1lib.cli
+import numpy as np
+if settings.startup.import_optionals:
+    try:
+        import torch; from torch import nn, optim
+        import torch.nn.functional as F, torch.utils.data as data
+    except: pass
+    try:
+        import matplotlib.pyplot as plt, matplotlib as mpl; import matplotlib.cm as cm
+        plt.rcParams['figure.dpi'] = 100; plt.rcParams["animation.html"] = "jshtml"
+    except: pass
+    import dill as pickle, multiprocessing as mp, concurrent.futures as futures, threading
+    import math, os, time, sys, random, logging, traceback, re, typing, glob, warnings, asyncio, ast
+    import dill, json, inspect, xml, base64, io, html
+    import functools; from functools import partial, lru_cache
+    import contextlib; from contextlib import contextmanager
+    from collections import deque, defaultdict
+    from typing import List, Tuple, Callable, Union, Iterator, Set, Dict, Any
+    from k1lib import schedule, graphEqn, mo, knn, fmt, selector, viz, Cbs, _k1a, serve, p5, k1ui, selen, kws, kast, zircon, serpent
+    k1a = _k1a
+    for e in cli._scatteredClis: globals()[e.__name__] = e
+    if "py_k1lib_in_applyMp" not in os.environ: k1lib.dontWrap()
+from k1lib.cli import *; k1 = k1lib
 from math import e, pi; inf = float("inf"); nan = float("nan"); # this section is for constants
 h = 6.62607015e-34; hbar = h/(2*pi); Na = 6.0221408e23; kb = 1.380649e-23
 c = 299_792_458; qe = 1.60217663e-19; me = 9.1093837e-31; mn = 1.67262192e-27
 e0 = 8.85418782e-12; Dal = u = 1.6605390666e-27; R = 8.3145; sb = 5.670374e-8
+secondsInYear = 31_556_926
 if settings.startup.or_patch.numpy: cli.init.patchNumpy()
 if settings.startup.or_patch.dict: cli.init.patchDict()
-try:
-    import pandas as pd
-    if settings.startup.or_patch.pandas: cli.init.patchPandas()
-except ImportError as _: pass
-try:
-    import ray
-    if settings.startup.init_ray: ray.init()
-except: pass
+if settings.startup.import_optionals:
+    try:
+        import pandas as pd
+        if settings.startup.or_patch.pandas: cli.init.patchPandas()
+    except ImportError as _: pass
+    try:
+        import ray
+        if settings.startup.init_ray: ray.init()
+    except: pass
 def dummy():                                                                     # dummy
     """Does nothing. Only here so that you can read source code of this file
 and see what's up."""                                                            # dummy
     pass                                                                         # dummy
-try: # these are optional imports                                                # dummy
-    import torchvision as vision                                                 # dummy
-    import torchvision.datasets as tvDs                                          # dummy
-    import torchvision.transforms as tf                                          # dummy
-except: pass                                                                     # dummy
-try: import IPython                                                              # dummy
-except: pass                                                                     # dummy
-try: import PIL                                                                  # dummy
-except: pass                                                                     # dummy
-try: from scipy.optimize import fsolve; import scipy                             # dummy
-except: pass                                                                     # dummy
-try: import einops                                                               # dummy
-except: pass                                                                     # dummy
-try: from tqdm import tqdm                                                       # dummy
-except: pass                                                                     # dummy
-try: import sympy                                                                # dummy
-except: pass                                                                     # dummy
-try: import rdkit; from rdkit import Chem                                        # dummy
-except: pass                                                                     # dummy
-try: import requests                                                             # dummy
-except: pass                                                                     # dummy
-try: import seaborn as sns                                                       # dummy
-except: pass                                                                     # dummy
-try: import pyarrow; import pyarrow.feather as feather                           # dummy
-except: pass                                                                     # dummy
-try: import plotly; import plotly.express as px                                  # dummy
-except: pass                                                                     # dummy
-try: import graphviz                                                             # dummy
-except: pass                                                                     # dummy
-try: import line_profiler; line_profiler.load_ipython_extension(IPython.get_ipython()) # dummy
-except: pass                                                                     # dummy
-try: import cython; cython.load_ipython_extension(IPython.get_ipython())         # dummy
-except: pass                                                                     # dummy
+if settings.startup.import_optionals:                                            # dummy
+    try: # these are optional imports                                            # dummy
+        import torchvision as vision                                             # dummy
+        import torchvision.datasets as tvDs                                      # dummy
+        import torchvision.transforms as tf                                      # dummy
+    except: pass                                                                 # dummy
+    try: import datetime                                                         # dummy
+    except: pass                                                                 # dummy
+    try: import IPython                                                          # dummy
+    except: pass                                                                 # dummy
+    try: import PIL                                                              # dummy
+    except: pass                                                                 # dummy
+    try: from scipy.optimize import fsolve; import scipy                         # dummy
+    except: pass                                                                 # dummy
+    try: import einops                                                           # dummy
+    except: pass                                                                 # dummy
+    try: from tqdm import tqdm                                                   # dummy
+    except: pass                                                                 # dummy
+    try: import sympy                                                            # dummy
+    except: pass                                                                 # dummy
+    try: import rdkit; from rdkit import Chem                                    # dummy
+    except: pass                                                                 # dummy
+    try: import requests                                                         # dummy
+    except: pass                                                                 # dummy
+    try: import seaborn as sns                                                   # dummy
+    except: pass                                                                 # dummy
+    try: import pyarrow; import pyarrow.feather as feather                       # dummy
+    except: pass                                                                 # dummy
+    try: import plotly; import plotly.express as px                              # dummy
+    except: pass                                                                 # dummy
+    try: import graphviz                                                         # dummy
+    except: pass                                                                 # dummy
+    try: import line_profiler; line_profiler.load_ipython_extension(IPython.get_ipython()) # dummy
+    except: pass                                                                 # dummy
+    try: import cython; cython.load_ipython_extension(IPython.get_ipython())     # dummy
+    except: pass                                                                 # dummy
+    try: import websockets                                                       # dummy
+    except: pass                                                                 # dummy
+    try: import bs4                                                              # dummy
+    except: pass                                                                 # dummy

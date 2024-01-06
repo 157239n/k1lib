@@ -3,7 +3,7 @@ from .callbacks import Callback, Callbacks, Cbs
 import k1lib, numpy as np, math
 import k1lib.cli as cli
 from functools import partial
-import matplotlib.pyplot as plt
+plt = k1lib.dep("matplotlib.pyplot")
 from typing import Callable
 __all__ = ["Loss", "Accuracy"]
 def plotF(losses, f): # actual function stored by the sliceable plot             # plotF

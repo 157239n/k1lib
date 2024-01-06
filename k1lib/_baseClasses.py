@@ -5,7 +5,7 @@
 from typing import Callable, Iterator, Tuple, Union, Dict, Any, List
 from k1lib import isNumeric; import k1lib, contextlib, warnings
 import random, math, sys, io, os, numpy as np
-import matplotlib.pyplot as plt
+plt = k1lib.dep("matplotlib.pyplot")
 try: import torch; hasTorch = True
 except: hasTorch = False
 __all__ = ["Object", "Range", "Domain", "AutoIncrement", "Wrapper", "Every",
@@ -393,6 +393,7 @@ is :math:`(-\inf, a)`, then starts at the specified integer"""                  
 - -d: excludes the domain from R
 - d1 - d2: same as d1 + (-d2)
 - d1 & d2: intersects 2 domains"""                                               # Domain
+puas = [[ord(c) for c in cs] for cs in [["\ue000", "\uf8ff"], ["\U000f0000", "\U000ffffd"], ["\U00100000", "\U0010fffd"]]] # Domain
 class AutoIncrement:                                                             # AutoIncrement
     def __init__(self, initialValue:int=-1, n:int=float("inf"), prefix:str=None): # AutoIncrement
         """Creates a new AutoIncrement object. Every time the object is called
@@ -431,6 +432,16 @@ it gets incremented by 1 automatically. Example::
         self._value += 1                                                         # AutoIncrement
         if self._value >= self.n: self._value = 0                                # AutoIncrement
         return self.value                                                        # AutoIncrement
+    @staticmethod                                                                # AutoIncrement
+    def unicode_pua():                                                           # AutoIncrement
+        """Returns a generator that generates unicode characters from within
+unicode's private use area (PUA). Example::
+
+    a = k1.AutoIncrement.unicode_pua()
+    a | head() | deref() # returns ['\ue000', '\ue001', '\ue002', '\ue003', '\ue004', '\ue005', '\ue006', '\ue007', '\ue008', '\ue009']
+"""                                                                              # AutoIncrement
+        for pua in puas:                                                         # AutoIncrement
+            for c in range(pua[0], pua[1]+1): yield chr(c)                       # AutoIncrement
 class Wrapper:                                                                   # Wrapper
     value:Any                                                                    # Wrapper
     """Internal value of this :class:`Wrapper`"""                                # Wrapper
@@ -545,6 +556,10 @@ Example::
     a(3).value # returns 4.8, because 0.9*5 + 0.1*3 = 4.8
     a(3).value # returns 4.62
 
+There's also a cli at :class:`~k1lib.cli.conv.toMovingAvg` that does the exact
+same thing, but just more streamlined and cli-like. Both versions are kept as
+sometimes I do want a separate object with internal state
+
 Difference between normal and debias modes::
 
     x = torch.linspace(0, 10, 100); y = torch.cos(x) | op().item().all() | deref()
@@ -623,7 +638,7 @@ jitOpcodes = {"__len__": lambda x: f"len({x})",                                 
               "__ne__": lambda x, o: f"({x}!={o})",                              # MovingAvg
               "__gt__": lambda x, o: f"({x}>{o})",                               # MovingAvg
               "__ge__": lambda x, o: f"({x}>={o})",}                             # MovingAvg
-opcodeAuto = AutoIncrement(prefix="_op_var_")                                    # MovingAvg
+opcodeAuto = AutoIncrement(prefix=f"_op_{random.randint(100,999)}_var_")         # MovingAvg
 compareOps = {"__lt__", "__le__", "__eq__", "__ne__", "__gt__", "__ge__"}        # MovingAvg
 class Absorber:                                                                  # Absorber
     """Creates an object that absorbes every operation done on it. Could be
@@ -680,16 +695,11 @@ absorbed. Example::
     (op() * 2).ab_operate(3)"""                                                  # Absorber
         for desc, step in self._ab_steps: x = step(x)                            # Absorber
         return x                                                                 # Absorber
-    def ab_fastF(self):                                                          # Absorber
-        """Returns a function that operates on the input (just like :meth:`ab_operate`),
-but much faster, suitable for high performance tasks. Example::
-
-    f = (k1lib.Absorber() * 2).ab_fastF()
-    # returns 6
-    f(3)"""                                                                      # Absorber
+    def ab_fastFS(self) -> str:                                                  # Absorber
         s = self._ab_steps; l = len(s)                                           # Absorber
+        x = k1lib.cli.init._jsDAuto()                                            # Absorber
         try: # jit compilation                                                   # Absorber
-            ss = "x"; values = {}                                                # Absorber
+            ss = x; values = {}                                                  # Absorber
             for (opcode, *o), *_ in s:                                           # Absorber
                 if opcode == "__call__":                                         # Absorber
                     va = opcodeAuto(); vk = opcodeAuto()                         # Absorber
@@ -703,8 +713,18 @@ but much faster, suitable for high performance tasks. Example::
                         values[varname] = v                                      # Absorber
                         ss = jitOpcodes[opcode](ss, varname)                     # Absorber
                 else: ss = jitOpcodes[opcode](ss)                                # Absorber
-            return eval(compile(f"lambda x: {ss}", "", "eval"), values)          # Absorber
+            return [f"lambda {x}: {ss}", values]                                 # Absorber
         except Exception as e: pass                                              # Absorber
+    def ab_fastF(self):                                                          # Absorber
+        """Returns a function that operates on the input (just like :meth:`ab_operate`),
+but much faster, suitable for high performance tasks. Example::
+
+    f = (k1lib.Absorber() * 2).ab_fastF()
+    # returns 6
+    f(3)"""                                                                      # Absorber
+        s = self._ab_steps; l = len(s)                                           # Absorber
+        res = self.ab_fastFS() # jit compilation, compressing multiple steps to a single simple expression # Absorber
+        if res: fn, values = res; return eval(compile(fn, "", "eval"), values)   # Absorber
         if l == 0: return lambda x: x                                            # Absorber
         if l == 1: return s[0][1]                                                # Absorber
         if l == 2:                                                               # Absorber
@@ -889,7 +909,9 @@ or_patch = Settings()\
     .add("numpy", True, "whether to patch numpy arrays")\
     .add("dict", True, "whether to patch Python dict keys and items")\
     .add("pandas", True, "whether to patch pandas series")                       # oschdir
-startup = Settings().add("init_ray", True, "whether to connect to ray's cluster accessible locally automatically").add("or_patch", or_patch, "whether to patch __or__() method for several C-extension datatypes (numpy array, pandas data frame/series, etc). This would make cli operations with them a lot more pleasant, but might cause strange bugs. Haven't met them myself though") # oschdir
+startup = Settings().add("init_ray", True, "whether to connect to ray's cluster accessible locally automatically")\
+    .add("import_optionals", True, "whether to try to import optional dependencies automatically or not. Set this to False if you want a faster load time, but with reduced functionalities")\
+    .add("or_patch", or_patch, "whether to patch __or__() method for several C-extension datatypes (numpy array, pandas data frame/series, etc). This would make cli operations with them a lot more pleasant, but might cause strange bugs. Haven't met them myself though") # oschdir
 settings.add("startup", startup, "these settings have to be applied like this: `import k1lib; k1lib.settings.startup.or_patch = False; from k1lib.imports import *` to ensure that the values are set") # oschdir
 settings.add("pushNotificationKey", os.getenv("k1lib_pushNotificationKey", None), "API key for `k1lib.pushNotification()`. See docs of that for more info") # oschdir
 def sign(v): return 1 if v > 0 else -1                                           # sign
@@ -900,16 +922,20 @@ def roundOff(a, b):                                                             
     factor = 10**(sign(dec) * math.floor(abs(dec)+1e-7)+1)                       # roundOff
     return factor*round(m/factor)                                                # roundOff
 def toPrecision(num, sig=1):                                                     # toPrecision
-    if num == 0: return 0                                                        # toPrecision
-    s = sign(num); num = abs(num)                                                # toPrecision
-    fac = 10**(-math.floor(math.log10(num))+sig-1)                               # toPrecision
-    return s*round(num*fac)/fac                                                  # toPrecision
+    try:                                                                         # toPrecision
+        if num == 0: return 0                                                    # toPrecision
+        s = sign(num); num = abs(num)                                            # toPrecision
+        fac = 10**(-math.floor(math.log10(num))+sig-1)                           # toPrecision
+        return s*round(num*fac)/fac                                              # toPrecision
+    except: return num                                                           # toPrecision
 def niceUS(mean, std):                                                           # niceUS
-    if std < 1e-12: return mean, std                                             # niceUS
-    pres = 2 if std/10**math.floor(math.log10(std)) < 2 else 1                   # niceUS
-    std = toPrecision(std, pres)                                                 # niceUS
-    fac = 10**(-math.floor(math.log10(std))+pres-1)                              # niceUS
-    return round(mean*fac)/fac, std                                              # niceUS
+    try:                                                                         # niceUS
+        if std < 1e-12: return mean, std                                         # niceUS
+        pres = 2 if std/10**math.floor(math.log10(std)) < 2 else 1               # niceUS
+        std2 = toPrecision(std, pres)                                            # niceUS
+        fac = 10**(-math.floor(math.log10(std2))+pres-1)                         # niceUS
+        return round(mean*fac)/fac, std2                                         # niceUS
+    except: return mean, std                                                     # niceUS
 def removeOutliers(t, fraction=0.01):                                            # removeOutliers
     b = int(len(t)*fraction/2)                                                   # removeOutliers
     return t.sort().values[b:-b]                                                 # removeOutliers
@@ -1144,6 +1170,7 @@ will not actually reflect the action of combining UValues together::
             return UValue(m, math.sqrt((m2*m/m1)**2*s1**2 + (math.log(m1)*m)**2*s2**2)) # _US
         def __abs__(self): return self.f(lambda a: abs(a)) # can't convert to pure math that makes sense # _US
         def __neg__(self): return 0 - self                                       # _US
+        def __str__(self): mean, std = niceUS(self.mean, self.std); return f"{mean} ± {std}" # _US
         def __repr__(self):                                                      # _US
             mean, std = niceUS(self.mean, self.std)                              # _US
             return f"UValue(mean={toPrecision(self.mean, 5)}, std={toPrecision(self.std, 5)}) -> {mean} ± {std}" # _US

@@ -60,7 +60,7 @@ def generic_model(maxTokens=100): # returns correct function capable of passing 
             conf = transformers.GenerationConfig(max_new_tokens=maxTokens); cuda_ = cuda() # generic_model
             # if cuda_: model = model.cuda()                                     # generic_model
             def inner(it):                                                       # generic_model
-                inputs = tokenizer(list(it), return_tensors="pt").input_ids      # generic_model
+                inputs = tokenizer(list(it), return_tensors="pt", padding=True).input_ids # generic_model
                 if cuda_: inputs = inputs.cuda()                                 # generic_model
                 return (tokenizer.decode(line) for line in model.generate(inputs, conf)) # generic_model
             generic_models()[modelName] = inner                                  # generic_model
@@ -85,9 +85,10 @@ Can change model type by doing ``settings.cli.models.generic.model = "google/fla
     def __ror__(self, it):                                                       # complete
         arrMode = not isinstance(it, str); prompt = self.prompt                  # complete
         it = (list(it) if arrMode else [it]) | cli.apply(lambda x: f"{x}\n\n\n{prompt}: ") | cli.deref() # complete
-        ans = self.model(it) | cli.apply(lambda x: x.replace("<pad>", "").replace("</s>", "").strip()) # complete
+        ans = self.model(it) | cli.apply(lambda x: x.replace("<pad>", "").replace("<unk>", "").replace("</s>", "").strip()) # complete
         return ans if arrMode else ans | cli.item()                              # complete
-    def _all_opt(self, it:List[str]): return it | cli.batched(settings.generic.bs, True) | cli.apply(self.__ror__) | cli.joinStreams() # complete
+    def _all_opt(self, it:List[str]):                                            # complete
+        return it | cli.batched(settings.generic.bs, True) | cli.apply(self.__ror__) | cli.joinStreams() # complete
 skclus = k1lib.dep("sklearn.cluster")                                            # complete
 skpre = k1lib.dep("sklearn.preprocessing")                                       # complete
 skmet = k1lib.dep("sklearn.metrics")                                             # complete

@@ -366,6 +366,14 @@ normal clis like so::
 So you might want to use these vanilla versions initially if you're having a hard time with this,
 but I wouldn't recommend using vanilla in the long term.
 
+JS transpiler
+-------------
+
+.. toctree::
+   :maxdepth: 1
+
+   js_transpiler
+
 Philosophy
 ----------
 
@@ -619,10 +627,34 @@ inp module
 
    .. automethod:: k1lib.cli.inp.cat.pickle
 
-kcsv module
+kapi module
 -------------------------
 
-.. automodule:: k1lib.cli.kcsv
+.. automodule:: k1lib.cli.kapi
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+kgv module
+-------------------------
+
+.. automodule:: k1lib.cli.kgv
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+kjs module
+-------------------------
+
+.. automodule:: k1lib.cli.kjs
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+ktree module
+-------------------------
+
+.. automodule:: k1lib.cli.ktree
    :members:
    :undoc-members:
    :show-inheritance:

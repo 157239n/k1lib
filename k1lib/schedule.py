@@ -9,7 +9,8 @@ This is exposed automatically with::
    schedule.Fn # exposed
 """
 import math, k1lib; import k1lib.cli as cli
-import matplotlib.pyplot as plt, numpy as np
+plt = k1lib.dep("matplotlib.pyplot")
+import numpy as np
 from itertools import accumulate
 from k1lib.callbacks import Cbs, Callback
 from typing import List, Callable, Union

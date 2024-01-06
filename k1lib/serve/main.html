@@ -341,7 +341,7 @@
         padding: 5px;
       }
       
-      pre {
+      .pre {
         border: 1px solid black;
         padding: 10px;
         overflow-x: auto
@@ -349,14 +349,22 @@
     </style>
   </head>
   <body>
+    <div id="k1lib_serve_apiKey" style="display:none"></div>
     <div id="wrapper">
       <h1>TITLE</h1>
       <h2>Intro</h2>
-      <div id="intro"></div>
+      <div id="intro">INTRO</div>
       <div style="display: flex; flex-direction: row; align-items: center; margin-left: 10px; overflow-x: auto">
         <div style="margin-right: 10px">
-          <input id="autoUpdateInp" type="checkbox" name="check" oninput="autoRunToggle()" />
-          <label for="autoUpdateInp" style="font-size: 1em">Auto run</label>
+          <label for="autoRun_dropdown" style="font-size: 1em">Auto run</label>
+          <select id="autoRun_dropdown" onchange="autoRunUpdate()" style="margin-left: 8px">
+            <option value="0" selected>Off</option>
+            <option value="-1">On param changed</option>
+            <option value="1">Every 1s</option>
+            <option value="3">Every 3s</option>
+            <option value="10">Every 10s</option>
+            <option value="30">Every 30s</option>
+          </select>
         </div>
         <div class="btn" onclick="run()">Run</div>
         <div class="scan" id="scan">
@@ -375,12 +383,12 @@
           flex-wrap: wrap;
         "
       ></div>
-      <h2>Result</h2>
+      <h2>Result<span id="resType"></span></h2>
       <div id="result">(none yet)</div>
       <h2>Sample api request</h2>
       <div id="apiRequest"></div>
       <h2>Source code</h2>
-      <div id="sourceCode"></div>
+      <div id="sourceCode">SOURCE_CODE</div>
     </div>
     <div id="toast"></div>
   </body>
@@ -407,21 +415,31 @@
 
     /** @type {Toast} toast */ const toast = new Toast();
     
-    let meta = META_JSON;
+    let meta = JSON.parse(atob("META_JSON"));
+    document.querySelector("#resType").innerHTML = ` - ${meta.annos.return}`;
     let prefix = "SERVER_PREFIX";
     let [values, idxToArg] = [{}, {}]; // Dict[arg, value], Dict[idx, arg]
     for (let arg of meta.args) values[arg] = null;
-    let [autoInc, autoRun] = [1, false];
-    let [requests, newRequest, nRequests, requestLastSent] = [[], false, 0, 0];
-    setInterval(() => { // to rate limit the requests
+    let [autoInc, autoRun] = [1, 0]; // autoRun can take on these values: 0 (off), -1 (on param change), 1 (every 1s), 3 (every 3s), and so on
+    let [requests, newRequest, nRequests, requestLastSent] = [[], false, 0, 0]; // 'newRequest' is set to true whenever any part of the system wants to trigger an update. The debounce mechanism will auto schedule the right moment to send the request
+    setInterval(() => { // to rate limit the requests & debouncing
       if (!nRequests && newRequest && Date.now() / 1000 - requestLastSent > 0.2) {
         run(); newRequest = false;
         requestLastSent = Date.now() / 1000;
       }
     }, 100);
-    const updated = () => (autoRun ? (newRequest = true) : 0);
-    const autoRunToggle = () => {autoRun = !autoRun; updated();};
-    let currentRequests = 0;
+    const updated = () => (autoRun === -1 ? (newRequest = true) : 0);
+    autoRun_setInterval_handle = null;
+    const autoRunUpdate = () => {
+      autoRun = parseInt(document.querySelector("#autoRun_dropdown").value);
+      if (autoRun_setInterval_handle) {
+        clearInterval(autoRun_setInterval_handle);
+        autoRun_setInterval_handle = null;
+      }
+      if (autoRun > 0.1) { autoRun_setInterval_handle = setInterval(() => { newRequest = true; }, autoRun*1000); }
+      updated();
+    }
+    // const autoRunToggle = () => {autoRun = !autoRun; updated();};
     function base64ToArrayBuffer(base64) {
         var binaryString = window.atob(base64);
         var binaryLen = binaryString.length;
@@ -432,70 +450,117 @@
         }
         return bytes;
     }
-    function saveByteArray(byte) {
+    function saveByteArray(byte) { // download to user's disk
         var blob = new Blob([byte], {type: "application/octet-stream"});
         var link = document.createElement('a');
         link.href = window.URL.createObjectURL(blob);
         link.download = "data";
         link.click();
     };
+    const escapeHtml = (unsafe) => {
+      return unsafe.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
+    }
     async function run() {
-      console.log("Sent request");
-      nRequests++;
+      nRequests+=2;
       idle.innerHTML = "Executing...";
+      // trying to inject the api key from the chrome extension
+      const a = meta.args.filter((arg) => meta.annos[arg] === "apiKey");
+      if (a.length > 0) values[a[0]] = values[a[0]] || document.querySelector("#k1lib_serve_apiKey").innerHTML;
+      // console.log(`Request body:`, values);
       const res = await fetch(prefix, {
         method: "POST",
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify(values),
       });
+      console.log("Sent request");
       nRequests--;
-      const text = await res.text();
-      const anno = meta.annos.return;
-      if (["int", "float", "text", "checkbox"].includes(anno)) {
-        const a = `${text}`.replace("&", "&quot;").replace("<", "&lt;").replace(">", "&gt;");
-        result.innerHTML = `<pre>${a}</pre>`;
-      } else if (anno === "bytes") {
-        const _byte = base64ToArrayBuffer(text)
-        const href = window.URL.createObjectURL(new Blob([_byte], {type: "application/octet-stream"}))
-        result.innerHTML = `<a href="${href}" download="data.bin">Download data (size: ${_byte.length/1000} kB)</a>`
-      } else if (anno === "html") {
-        const scriptEl = document.createRange().createContextualFragment(atob(text));
-        result.innerHTML = "";
-        result.append(scriptEl);
-        //result.innerHTML = atob(text);
-      } else if (anno === "image") result.innerHTML = `<div style="overflow: auto;"><img style="width: 100%; object-fit: cover;" src="data:image/jpg;base64, ${text}" alt="Result image" /></div>`
-      else throw new Error("Return value not recognized");
+      try {
+        const obj = await res.json();
+        if (obj.success) {
+          const text = obj.data;
+          const anno = meta.annos.return;
+          if (["int", "float", "text", "checkbox"].includes(anno)) {
+            const a = `${text}`.replace("&", "&quot;").replace("<", "&lt;").replace(">", "&gt;");
+            result.innerHTML = `<pre class="pre">${a}</pre>`;
+          } else if (["bytes", "serialized"].includes(anno)) {
+            const _byte = base64ToArrayBuffer(text)
+            const href = window.URL.createObjectURL(new Blob([_byte], {type: "application/octet-stream"}))
+            result.innerHTML = `<a href="${href}" download="data.bin">Download data (size: ${_byte.length/1000} kB)</a>`
+          } else if (anno === "json") {
+            result.innerHTML = `<pre class="pre">${JSON.stringify(text, null, 2)}</pre>`
+          } else if (anno === "html") {
+            const scriptEl = document.createRange().createContextualFragment(atob(text));
+            result.innerHTML = "";
+            result.append(scriptEl);
+            //result.innerHTML = atob(text);
+          } else if (anno === "image") result.innerHTML = `<div style="overflow: auto;"><img style="width: 100%; object-fit: cover;" src="data:image/jpg;base64, ${text}" alt="Result image" /></div>`
+          else throw new Error(`Return value '${anno}' not recognized`);
+          nRequests--;
+        } else { result.innerHTML = `<pre class="pre">${obj.reason}</pre>`; nRequests--; }
+      } catch (e) { nRequests--; result.innerHTML = `<pre class="pre">Failed on JS side:\n${escapeHtml(e.stack)}</pre>`; }
     }
     setInterval(() => {
-      idle.innerHTML = nRequests ? "Executing..." : "Idle";
+      idle.innerHTML = nRequests > 1.9 ? "Executing..." : (nRequests > 0.9 ? "Executed, displaying..." : "Idle");
     }, 100)
 
-    function textBox(arg, doc, anno, def) {
-      const i = ++autoInc; setTimeout(() => cb_textBox(i), 0); idxToArg[i] = arg;
+    const text_transforms = {};
+    function textBox(arg, doc, anno, def, transformF=((x) => x)) {
+      const i = ++autoInc; setTimeout(() => cb_textBox(i), 0); idxToArg[i] = arg; text_transforms[i] = transformF;
+      setTimeout(() => { const e = document.querySelector(`#textBox_${i}`); e.value = def[0]; e.dispatchEvent(new Event("input")); }, 0);
       if (def[1]) return `
         <div class="block">
           <div>${arg} (${anno}): ${doc || "(no docs)"}</div>
-          <textarea id="textBox_${i}" rows="7" oninput="cb_textBox(${i})">${def[0]}</textarea>
+          <textarea id="textBox_${i}" rows="7" oninput="cb_textBox(${i})"></textarea>
         </div>`;
       if (def[2]) return `
         <div class="block">
           <div>${arg} (${anno}): ${doc || "(no docs)"}</div>
-          <input id="textBox_${i}" type="password" value="${def[0]}" oninput="cb_textBox(${i})" />
+          <input id="textBox_${i}" type="password" oninput="cb_textBox(${i})" />
         </div>`;
       return `
         <div class="block">
           <div>${arg} (${anno}): ${doc || "(no docs)"}</div>
-          <input id="textBox_${i}" type="text" value="${def[0]}" oninput="cb_textBox(${i})" />
+          <input id="textBox_${i}" type="text" oninput="cb_textBox(${i})" />
         </div>`;
     }
 
     function cb_textBox(i) {
-      values[idxToArg[i]] = document.querySelector(`#textBox_${i}`).value;
-      updated();
+      const value = document.querySelector(`#textBox_${i}`).value;
+      try {
+        values[idxToArg[i]] = text_transforms[i](value); updated();
+      } catch (e) {
+        result.innerHTML = `<pre class="pre">Failed on JS side on update textbox ${i}:\n${escapeHtml(e.stack)}\n\nContent:\n'${value}'</pre>`;
+      }
     }
 
+    function dateBox(arg, doc, anno, def) {
+      const i = ++autoInc; idxToArg[i] = arg
+      let [value, minDate, maxDate] = def;
+      setTimeout(() => cb_dateBox(i), 0);
+      value = value ? `value="${value}" ` : "";
+      minDate = minDate ? `min="${minDate}" ` : "";
+      maxDate = maxDate ? `max="${maxDate}" ` : "";
+      return `
+        <div class="block">
+          <div>${arg} (${anno}): ${doc || "(no docs)"}</div>
+          <input
+            id="dateBox_${i}"
+            type="datetime-local"
+            ${value} ${minDate} ${maxDate}
+            oninput="cb_dateBox(${i})"
+          />
+        </div>`;
+      return `
+      `;
+    }
+
+    function cb_dateBox(i) {
+      values[idxToArg[i]] = document.querySelector(`#dateBox_${i}`).value; updated();
+    }
+
+
     function slider(arg, doc, anno, def) {
-      const i = ++autoInc; idxToArg[i] = arg; let start, stop, step;
+      const i = ++autoInc; idxToArg[i] = arg; let value, start, stop, step;
       [value, start, stop, step] = def
       setTimeout(() => cb_slider(i), 0);
       return `
@@ -608,40 +673,64 @@
     for (let arg of meta.args) {
       let anno = meta.annos[arg]; let def = meta.defaults[arg]; let doc = meta.docs[arg];
       if (anno === "int" || anno === "float" || anno === "text") blocksHtml += textBox(arg, doc, anno, def);
+      if (anno === "apiKey") blocksHtml += textBox(arg, doc, anno, def);
+      if (anno === "date") blocksHtml += dateBox(arg, doc, anno, def);
+      if (anno === "json") blocksHtml += textBox(arg, doc, anno, [JSON.stringify(def[0], null, 2), def[1]], (x) => {return x ? JSON.parse(x) : ""});
       if (anno === "checkbox") blocksHtml += checkBox(arg, doc, anno, def);
       if (anno === "slider") blocksHtml += slider(arg, doc, anno, def);
-      if (anno === "bytes" || anno === "image") blocksHtml += fileUpload(arg, doc, anno, def);
+      if (anno === "bytes" || anno === "image" || anno === "serialized") blocksHtml += fileUpload(arg, doc, anno, def);
       if (anno === "dropdown") blocksHtml += dropdown(arg, doc, anno, def);
     }
     blocks.innerHTML = blocksHtml;
-    intro.innerHTML = `${meta.mainDoc}`;
-    document.querySelector("#sourceCode").innerHTML = `<pre>${meta.source}</pre>`;
+    document.querySelector("#k1lib_serve_apiKey").innerHTML = "some key";
+    // intro.innerHTML = `${meta.mainDoc}`.replace("\n", "<br>");
+    // document.querySelector("#sourceCode").innerHTML = `<pre class="pre">${escapeHtml(meta.source)}</pre>`;
 
     setTimeout(() => {
-      let reqBody = "";
+      let jsReqBody = ""; let pyReqBody = "";
       for (let arg of meta.args) {
-        const anno = meta.annos[arg]; let s = `${values[arg]}`.split("\n")[0];
-        s = (s.length > 23) ? s.slice(0, 20) + "..." : s; reqBody += `    "${arg}": "${s}",\n`;
+        const anno = meta.annos[arg];
+        if (anno === "json") {
+          const s = `    "${arg}": ${JSON.stringify(values[arg])},\n`; jsReqBody += s; pyReqBody += s;
+        } else if (anno === "int" || anno === "float" || anno === "slider") {
+          const s = `    "${arg}": ${values[arg]},\n`; jsReqBody += s; pyReqBody += s;
+        } else if (anno === "checkbox") {
+          jsReqBody += `    "${arg}": ${values[arg] ? 'true' : 'false'},\n`;
+          pyReqBody += `    "${arg}": ${values[arg] ? 'True' : 'False'},\n`;
+        } else {
+          let s = `${values[arg]}`.split("\n")[0];
+          s = (s.length > 23) ? s.slice(0, 20) + "..." : s
+          jsReqBody += `    "${arg}": \`${s}\`,\n`;
+          pyReqBody += `    "${arg}": """${s}""",\n`;
+        }
       }
+      const base64_js = meta.annos.return === "html" || meta.annos.return === "bytes";
+      const base64_py = meta.annos.return === "html" || meta.annos.return === "bytes" || meta.annos.return === "image";
       document.querySelector("#apiRequest").innerHTML = `
 <h3>Javascript</h3>
-<pre>
-let result = await (await fetch("${prefix}", {
+<pre class="pre">
+let result = ${base64_js ? 'atob(' : ''}(await (await fetch("${prefix}", {
   method: "POST",
   body: JSON.stringify({
-${reqBody}
+${jsReqBody.trimEnd()}
   }),
   headers: {
     "Content-Type": "application/json",
   }
-})).text()
-</pre>
+})).json()).data${base64_js ? ')' : ''};</pre>
 <h3>Python</h3>
-<pre>
-import requests
-result = requests.post("${prefix}", json={
-${reqBody}
-}).text
+<pre class="pre">
+import requests${base64_py ? ', base64' : ''}
+result = ${base64_py ? 'base64.b64decode(' : ''}requests.post("${prefix}", json={
+${pyReqBody.trimEnd()}
+}).json()["data"]${base64_py ? ').decode()' : ''}
+</pre>
+<h3>Python - k1lib</h3>
+<pre class="pre">
+from k1lib.imports import *
+{
+${pyReqBody.trimEnd()}
+} | kapi.post("${prefix}") | aS(json.loads) | op()["data"]${base64_py ? ' | aS(base64.b64decode) | op().decode()' : ''}
 </pre>`;
     }, 0);
   </script>

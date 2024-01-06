@@ -4,13 +4,13 @@ For operations that feel like the termination of operations
 """
 from collections import defaultdict
 from typing import Iterator, Any
-from k1lib.cli.init import BaseCli
-import numbers, numpy as np, k1lib, tempfile, os, sys, time, math
+from k1lib.cli.init import BaseCli; import k1lib.cli.init as init
+import numbers, numpy as np, k1lib, tempfile, os, sys, time, math, json, re
 from k1lib import cli; from k1lib.cli.typehint import *
-import matplotlib.pyplot as plt
+plt = k1lib.dep("matplotlib.pyplot")
 try: import torch; hasTorch = True
 except: hasTorch = False
-__all__ = ["stdout", "tee", "file", "pretty", "display", "headOut",
+__all__ = ["stdout", "tee", "file", "pretty", "unpretty", "display", "headOut",
            "intercept", "plotImgs"]
 settings = k1lib.settings.cli
 class stdout(BaseCli):                                                           # stdout
@@ -38,7 +38,7 @@ class tee(BaseCli):                                                             
         """Like the Linux ``tee`` command, this prints the elements to another
 specified stream, while yielding the elements. Example::
 
-    # prints "0\\n1\\n2\\n3\\n4\\n" and returns [0, 1, 4, 9, 16]
+    # prints "0) 0\\n1) 1\\n2) 2\\n3) 3\\n4) 4\\n" and returns [0, 1, 4, 9, 16]
     range(5) | tee() | apply(op() ** 2) | deref()
 
 See also: :class:`~k1lib.cli.modifier.consume`
@@ -56,7 +56,7 @@ This cli is not exactly well-thoughout and is a little janky
         lastTime = 0                                                             # tee
         for i, e in enumerate(it):                                               # tee
             if i % every == 0 and time.time()-lastTime > delay:                  # tee
-                print(f(e), end="", file=s); lastTime = time.time()              # tee
+                print(f"     \r{i}) {f(e)}", end="", file=s); lastTime = time.time() # tee
             yield e                                                              # tee
     def cr(self):                                                                # tee
         """Tee, but replaces the previous line. "cr" stands for carriage return.
@@ -65,7 +65,7 @@ Example::
     # prints "4" and returns [0, 1, 4, 9, 16]. Does print all the numbers in the middle, but is overriden
     range(5) | tee().cr() | apply(op() ** 2) | deref()"""                        # tee
         f = (lambda x: x) if self.f == _defaultTeeF else self.f                  # tee
-        self.f = lambda s: f"\r{f(s)}"; return self                              # tee
+        self.f = lambda s: f"{f(s)}"; return self                                # tee
     def crt(self):                                                               # tee
         """Like :meth:`tee.cr`, but includes an elapsed time text at the end.
 Example::
@@ -73,12 +73,12 @@ Example::
     range(5) | tee().cr() | apply(op() ** 2) | deref()"""                        # tee
         beginTime = time.time()                                                  # tee
         f = (lambda x: x) if self.f == _defaultTeeF else self.f                  # tee
-        self.f = lambda s: f"\r{f(s)}, {int(time.time() - beginTime)}s elapsed"; return self # tee
+        self.f = lambda s: f"{f(s)}, {int(time.time() - beginTime)}s elapsed"; return self # tee
     def autoInc(self):                                                           # tee
         """Like :meth:`tee.crt`, but instead of printing the object, just print
 the current index and time"""                                                    # tee
         beginTime = time.time(); autoInc = k1lib.AutoIncrement()                 # tee
-        self.f = lambda s: f"\r{autoInc()}, {int(time.time()-beginTime)}s elapsed"; return self # tee
+        self.f = lambda s: f"{autoInc()}, {int(time.time()-beginTime)}s elapsed"; return self # tee
 try:                                                                             # tee
     import PIL; hasPIL = True                                                    # tee
 except: hasPIL = False                                                           # tee
@@ -183,7 +183,7 @@ You can also append to file with the ">>" operator::
         """File name of this :class:`file`"""                                    # file
         return self.fileName                                                     # file
 class pretty(BaseCli):                                                           # pretty
-    def __init__(self, delim=""):                                                # pretty
+    def __init__(self, delim="", left=True):                                     # pretty
         """Pretty-formats a table, or a list of tables.
 Example::
 
@@ -209,11 +209,11 @@ This will print::
 
 :param delim: delimiter between elements within a row. You might want
     to set it to "|" to create an artificial border or sth
-"""                                                                              # pretty
-        self.delim = delim; self.inverted = False                                # pretty
+:param left: whether to left or right-align each element"""                      # pretty
+        self.delim = delim; self.inverted = False; self.left = left              # pretty
     def _typehint(self, inp): return tIter(str)                                  # pretty
     def __ror__(self, it) -> Iterator[str]:                                      # pretty
-        inv = self.inverted; delim = self.delim                                  # pretty
+        inv = self.inverted; delim = self.delim; left = self.left                # pretty
         if inv: tables = [[list(i1) for i1 in i2] for i2 in it]                  # pretty
         else: tables = [[list(i1) for i1 in it]]                                 # pretty
         widths = defaultdict(lambda: 0)                                          # pretty
@@ -223,11 +223,16 @@ This will print::
                     e = f"{e}"; row[i] = e                                       # pretty
                     widths[i] = max(len(e), widths[i])                           # pretty
         def gen(table):                                                          # pretty
-            for row in table:                                                    # pretty
-                yield delim.join(e.rstrip(" ").ljust(w+3) for w, e in zip(widths.values(), row)) # pretty
+            if left:                                                             # pretty
+                for row in table: yield delim.join(e.rstrip(" ").ljust(w+3) for w, e in zip(widths.values(), row)) # pretty
+            else:                                                                # pretty
+                for row in table: yield delim.join(e.rstrip(" ").rjust(w+3) for w, e in zip(widths.values(), row)) # pretty
         if inv: return tables | cli.apply(gen)                                   # pretty
         else: return gen(tables[0])                                              # pretty
     def __invert__(self): self.inverted = not self.inverted; return self         # pretty
+    def _jsF(self, meta):                                                        # pretty
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # pretty
+        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.pretty({json.dumps(self.delim)}, {cli.kjs.v(self.inverted)})", fIdx # pretty
 def display(lines:int=10):                                                       # display
     """Convenience method for displaying a table.
 Pretty much equivalent to ``head() | pretty() | stdout()``.
@@ -240,6 +245,52 @@ def headOut(lines:int=10):                                                      
     """Convenience method for head() | stdout()"""                               # headOut
     if lines is None: return stdout()                                            # headOut
     else: return cli.head(lines) | stdout()                                      # headOut
+class unpretty(BaseCli):                                                         # unpretty
+    def __init__(self, ncols:int=None, left=True, headers=None):                 # unpretty
+        """Takes in a stream of strings, assumes it's a table, and tries to
+split every line into multiple columns. Example::
+
+    # returns ['0   1   2   ', '3   4   5   ', '6   7   8   ']
+    a = range(10) | batched(3) | pretty() | deref()
+    # returns [['0   ', '1   ', '2   '], ['3   ', '4   ', '5   '], ['6   ', '7   ', '8   ']]
+    a | unpretty(3) | deref()
+
+This cli will take the number of columns requested and try to split into a table by analyzing
+at what character column does it transition from a space to a non-space (left align), or from
+a non-space to a space (right align). Then the first ``ncols`` most popular transitions are
+selected.
+
+Sometimes this is not robust enough, may be some of your columns have lots of empty elements,
+then the transition counts will be skewed, making it split up at strange places. In those cases,
+you can specify the headers directly, like this::
+
+    # returns ['a   b   c    ', '3   5   11   ', '4   6   7    ']
+    a = [["a", 3, 4], ["b", 5, 6], ["c", 11, 7]] | transpose() | pretty() | deref()
+    # returns [['a   ', 'b   ', 'c    '], ['3   ', '5   ', '11   '], ['4   ', '6   ', '7    ']]
+    a | unpretty(headers=["a", "b", "c"]) | deref()
+
+:param ncols: number of columns
+:param left: whether the data is left or right aligned
+:param header:"""                                                                # unpretty
+        self.ncols = ncols; self.left = left; self.headers = headers             # unpretty
+        self.pat = re.compile(" [^ ]+") if left else re.compile("[^ ]+ ")        # unpretty
+    def __ror__(self, it):                                                       # unpretty
+        ncols = self.ncols; left = self.left; pat = self.pat; headers = self.headers # unpretty
+        if headers is not None: ncols = len(headers)                             # unpretty
+        if ncols < 1: raise Exception(f"Does not make sense to unpretty() into {ncols} columns") # unpretty
+        if ncols == 1: return it                                                 # unpretty
+        if headers is None:                                                      # unpretty
+            try: len(it)                                                         # unpretty
+            except: it = list(it)                                                # unpretty
+            splits = it | cli.head(10000) | (cli.apply(lambda x: (m.start()+1 for m in re.finditer(pat, x))) if left else cli.apply(lambda x: (m.end()-1 for m in re.finditer(pat, x))))\
+                | cli.joinSt() | cli.count() | ~cli.sort() | cli.cut(1) | cli.head(ncols-1) | cli.sort(None) | cli.aS(list) # unpretty
+        else:                                                                    # unpretty
+            firstRow, it = it | cli.peek()                                       # unpretty
+            if it == []: return []                                               # unpretty
+            splits = sorted([firstRow.find(h) for h in headers])[1:]             # unpretty
+        if ncols == 2: c = splits[0]; return ([row[:c],row[c:]] for row in it)   # unpretty
+        a,*r,b = splits; s = splits | cli.window(2) | ~cli.apply(lambda x,y: f"x[{x}:{y}], ") | cli.join("") # unpretty
+        f = eval(f"lambda x: [x[:{a}], {s}x[{b}:]]"); return (f(row) for row in it) # unpretty
 def tab(text, pad="    "):                                                       # tab
     return "\n".join([pad + line for line in text.split("\n")])                  # tab
 class intercept(BaseCli):                                                        # intercept
@@ -295,7 +346,7 @@ analyses.
             axes = axes.flatten() if isinstance(axes, np.ndarray) else [axes]    # plotImgs
             for ax, im in zip(axes, imgs):                                       # plotImgs
                 plt.sca(ax)                                                      # plotImgs
-                if isinstance(im, list): plt.imshow(im[0]); plt.title(im[1])     # plotImgs
+                if isinstance(im, (list, tuple)): plt.imshow(im[0]); plt.title(im[1]) # plotImgs
                 else: plt.imshow(im)                                             # plotImgs
                 if not self.axis: ax.axis("off")                                 # plotImgs
             for i in range(len(imgs), len(axes)): axes[i].remove() # removing leftover axes # plotImgs
@@ -306,7 +357,7 @@ analyses.
             for rAx, rIm in zip(axes, imgs):                                     # plotImgs
                 for cAx, cIm in zip(rAx, rIm):                                   # plotImgs
                     plt.sca(cAx)                                                 # plotImgs
-                    if isinstance(cIm, list): plt.imshow(cIm[0]); plt.title(cIm[1]) # plotImgs
+                    if isinstance(cIm, (list, tuple)): plt.imshow(cIm[0]); plt.title(cIm[1]) # plotImgs
                     else: plt.imshow(cIm)                                        # plotImgs
                     if not self.axis: cAx.axis("off")                            # plotImgs
                 for i in range(len(rIm), len(rAx)): rAx[i].remove() # removing leftover axes # plotImgs

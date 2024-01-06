@@ -14,6 +14,7 @@ import os
 import sys
 import datetime
 from k1lib.imports import *
+sys.path.insert(0, os.path.abspath('./'))
 sys.path.insert(0, os.path.abspath('../k1lib'))
 
 
@@ -28,12 +29,15 @@ author = 'Quang Ho'
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
+sys.path.append(os.path.abspath("./_ext"))
 extensions = [
     "sphinx.ext.autodoc",
     "sphinx_autorun",
     "sphinx_toolbox.collapse",
     'sphinx.ext.intersphinx',
     'sphinx.ext.viewcode',
+    'custom_directive',
+    'todo',
 ]
 
 autodoc_member_order = 'bysource'
@@ -94,6 +98,10 @@ with open("literals/settings.rst", "w") as f:
     f.write(".. code-block:: text\n\n" +
             "\n".join([f"   {e}" for e in out.value]))
 
+# executing some Python code and injecting the results in
+
+
+
 # --- cli tables
 
 
@@ -131,7 +139,7 @@ toCliTable = apply("k1lib.cli." + op())\
     | apply(~aS(lambda x, m, zs: [x, *zs | apply(lambda z: f":class:`~{x}.{z}`" if inspect.isclass(getattr(m, z)) else f":meth:`~{x}.{z}`")]))\
     | batched(5, True) | apply(combineColumns) | apply(insert("", begin=False)) | joinStreams()
 
-["filt", "conv", "grep", "init", "inp", "kcsv", "kxml", "modifier", "nb", "output",
+["filt", "conv", "grep", "init", "inp", "kxml", "modifier", "nb", "output",
     "structural", "trace", "utils", "typehint", "optimizations"] | toCliTable | file("literals/cli-tables.rst")
 ["bio", "cif", "mgi", "gb", "sam"] | toCliTable | file(
     "literals/cli-bio-tables.rst")

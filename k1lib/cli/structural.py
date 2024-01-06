@@ -6,17 +6,17 @@ structure in a dramatic way. They're the core transformations
 from typing import List, Union, Iterator, Callable, Any, Tuple, Dict
 from collections import defaultdict, Counter, deque
 from k1lib.cli.init import patchDefaultDelim, BaseCli, oneToMany, fastF, yieldT
-import k1lib.cli as cli; from k1lib.cli.typehint import *
-import itertools, numpy as np, k1lib, math; import matplotlib.pyplot as plt
+import k1lib.cli as cli; import k1lib.cli.init as init; from k1lib.cli.typehint import *
+import itertools, numpy as np, k1lib, math, json; plt = k1lib.dep("matplotlib.pyplot")
 try: import torch; hasTorch = True
 except: torch = k1lib.Object().withAutoDeclare(lambda: type("RandomClass", (object, ), {})); hasTorch = True
 __all__ = ["transpose", "T", "reshape", "insert", "splitW", "splitC",
            "joinStreams", "joinSt", "joinStreamsRandom", "activeSamples",
-           "table", "batched", "window", "groupBy", "ungroup",
-           "insertColumn", "insertIdColumn",
-           "expandE", "unsqueeze",
+           "table", "batched", "batchedTrigger", "window", "groupBy", "ungroup",
+           "insertColumn", "insertIdColumn", "insId",
+           "unsqueeze",
            "count", "hist", "permute", "AA_", "peek", "peekF",
-           "repeat", "repeatF", "repeatFrom", "oneHot"]
+           "repeat", "repeatF", "repeatFrom", "oneHot", "latch"]
 settings = k1lib.settings.cli
 class transpose(BaseCli):                                                        # transpose
     def __init__(self, dim1:int=0, dim2:int=1, fill=None):                       # transpose
@@ -107,6 +107,10 @@ The example given is sort of to demonstrate this only. Most of the time, just us
 access to a column, so this is how you can do it."""                             # transpose
         if not isinstance(f, BaseCli): f = cli.applyS(f)                         # transpose
         return transpose(dim1, dim2, fill) | f | transpose(dim1, dim2, fill)     # transpose
+    def _jsF(self, meta):                                                        # transpose
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # transpose
+        if self.d1 != 0 or self.d2 != 1: raise Exception(f"transpose._jsF() doesn't allow complex transpose across many dimensions yet") # transpose
+        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.transpose({cli.kjs.v(self.fill)})", fIdx # transpose
 #tOpt.clearPasses()                                                              # transpose
 def oTranspose1(cs, ts, metadata): # `transpose() | transpose().all()` to `transpose() | apply(aS(torch.stack) | transpose())` # oTranspose1
     tr, ap = cs; t = ts[0]                                                       # oTranspose1
@@ -171,6 +175,9 @@ Example::
         element = self.element; it = iter(it)                                    # insert
         if self.begin: yield element; yield from it                              # insert
         else: yield from it; yield element                                       # insert
+    def _jsF(self, meta):                                                        # insert
+        fIdx = init._jsFAuto(); elemIdx = init._jsDAuto(); dataIdx = init._jsDAuto() # insert
+        return f"const {elemIdx} = {json.dumps(self.element)}; const {fIdx} = ({dataIdx}) => {dataIdx}.insert({elemIdx}, {cli.kjs.v(self.begin)})", fIdx # insert
 class splitW(BaseCli):                                                           # splitW
     def __init__(self, *weights:List[float]):                                    # splitW
         """Splits elements into multiple weighted lists. If no weights are provided,
@@ -195,6 +202,9 @@ See also: :class:`splitC`"""                                                    
         ws = self.weights; c = 0; ws = (ws * len(it) / ws.sum()).astype(int)     # splitW
         for w in ws[:-1]: yield it[c:c+w]; c += w                                # splitW
         yield it[c:]                                                             # splitW
+    def _jsF(self, meta):                                                        # splitW
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # splitW
+        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.splitW({cli.kjs.vs(self.weights) | cli.join(', ')})", fIdx # splitW
 class splitC(BaseCli):                                                           # splitC
     def __init__(self, *checkpoints:List[float]):                                # splitC
         """Splits elements into multiple checkpoint-delimited lists.
@@ -228,6 +238,9 @@ out :class:`splitW`"""                                                          
         cs = sorted(cs); yield it[:cs[0]]                                        # splitC
         for i in range(len(cs)-1): yield it[cs[i]:cs[i+1]]                       # splitC
         yield it[cs[-1]:]                                                        # splitC
+    def _jsF(self, meta):                                                        # splitC
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # splitC
+        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.splitC({cli.kjs.vs(self.checkpoints) | cli.join(', ')})", fIdx # splitC
 class joinStreams(BaseCli):                                                      # joinStreams
     def __init__(self, dims=1):                                                  # joinStreams
         """Joins multiple streams.
@@ -269,6 +282,9 @@ If "joinStreams" is too unintuitive to remember, there's also an alias called
                 for stream in streams: yield from stream                         # joinStreams
             return gen()                                                         # joinStreams
         else: return streams                                                     # joinStreams
+    def _jsF(self, meta):                                                        # joinStreams
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # joinStreams
+        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.joinSt({cli.kjs.v(self.dims)})", fIdx # joinStreams
 joinSt = joinStreams                                                             # joinStreams
 def probScale(ps, t): # t from 0 -> 1, for typical usage                         # probScale
     l = np.log(ps); avg = l.mean()                                               # probScale
@@ -329,6 +345,10 @@ be of any number::
                 o = next(streams[streamIdx])                                     # joinStreamsRandom
                 if not o is yieldT: yield o # "not is" to fix numpy `==`         # joinStreamsRandom
         except StopIteration: pass                                               # joinStreamsRandom
+    def _jsF(self, meta):                                                        # joinStreamsRandom
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # joinStreamsRandom
+        if self.alpha != 0 and not self.ps is None: raise Exception("joinStreamsRandom._jsF() doesn't allow custom alpha and ps yet") # joinStreamsRandom
+        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.joinStreamsRandom()", fIdx # joinStreamsRandom
 class activeSamples(BaseCli):                                                    # activeSamples
     def __init__(self, limit:int=100, p:float=0.95):                             # activeSamples
         """Yields active learning samples.
@@ -386,32 +406,41 @@ quite a lot in bioinformatics. Example::
     # returns [['a', 'bd'], ['1', '2', '3']]
     ["a|bd", "1|2|3"] | table("|") | deref()"""                                  # table
     return cli.op().split(patchDefaultDelim(delim)).all()                        # table
-def _batch(it, bs, includeLast):                                                 # _batch
-    l = []; it = iter(it)                                                        # _batch
+def _batch(it, bs, includeLast, incl):                                           # _batch
+    l = []; it = iter(it); sentinel = object(); last = sentinel                  # _batch
     try:                                                                         # _batch
-        while True:                                                              # _batch
-            for i in range(bs): l.append(next(it))                               # _batch
-            yield l; l = []                                                      # _batch
+        if incl:                                                                 # _batch
+            while True:                                                          # _batch
+                if last is not sentinel: l.append(last)                          # _batch
+                for i in range(bs): l.append(next(it))                           # _batch
+                last = next(it); l.append(last)                                  # _batch
+                yield l; l = []                                                  # _batch
+        else:                                                                    # _batch
+            while True:                                                          # _batch
+                for i in range(bs): l.append(next(it))                           # _batch
+                yield l; l = []                                                  # _batch
+            pass                                                                 # _batch
     except StopIteration:                                                        # _batch
         if includeLast and len(l) > 0: yield l                                   # _batch
-def _batchRange(it, bs, includeLast):                                            # _batchRange
+def _batchRange(it, bs, includeLast, incl):                                      # _batchRange
     start, stop, step = it.start, it.stop, it.step                               # _batchRange
     lastCur = start; cur = lastCur + bs*step                                     # _batchRange
-    while cur <= stop:                                                           # _batchRange
-        yield range(lastCur, cur, step)                                          # _batchRange
-        lastCur = cur; cur += bs*step                                            # _batchRange
-    if includeLast and lastCur < stop:                                           # _batchRange
-        yield range(lastCur, stop, step)                                         # _batchRange
-def _batchSliceable(it, bs, includeLast):                                        # _batchSliceable
+    if incl:                                                                     # _batchRange
+        while cur <= stop: yield range(lastCur, min(cur+1, stop), step); lastCur = cur; cur += bs*step # _batchRange
+    else:                                                                        # _batchRange
+        while cur <= stop: yield range(lastCur, cur, step); lastCur = cur; cur += bs*step # _batchRange
+    if includeLast and lastCur < stop: yield range(lastCur, stop, step)          # _batchRange
+def _batchSliceable(it, bs, includeLast, incl):                                  # _batchSliceable
     cur = 0; n = len(it)                                                         # _batchSliceable
-    while (cur+1)*bs <= n:                                                       # _batchSliceable
-        yield it[cur*bs:(cur+1)*bs]                                              # _batchSliceable
-        cur += 1                                                                 # _batchSliceable
+    if incl:                                                                     # _batchSliceable
+        while (cur+1)*bs <= n: yield it[cur*bs:(cur+1)*bs+1]; cur += 1           # _batchSliceable
+    else:                                                                        # _batchSliceable
+        while (cur+1)*bs <= n: yield it[cur*bs:(cur+1)*bs]; cur += 1             # _batchSliceable
     if includeLast:                                                              # _batchSliceable
         ans = it[cur*bs:(cur+1)*bs]                                              # _batchSliceable
         if len(ans) > 0: yield ans                                               # _batchSliceable
 class batched(BaseCli):                                                          # batched
-    def __init__(self, bs=32, includeLast=False):                                # batched
+    def __init__(self, bs=32, includeLast=False, incl=False):                    # batched
         """Batches the input stream.
 Example::
 
@@ -424,6 +453,11 @@ Example::
     # returns []
     range(5) | batched(float("inf"), False) | deref()
 
+    # returns [[0, 1, 2, 3], [3, 4, 5, 6], [6, 7, 8, 9]], includes the first element of the next batch!
+    range(11) | batched(3, incl=True) | deref()
+    # returns [[0, 1, 2, 3], [3, 4, 5, 6], [6, 7, 8, 9], [9, 10]]
+    range(11) | batched(3, True, incl=True) | deref()
+
 Can work well and fast with :class:`torch.Tensor` and :class:`numpy.ndarray`::
 
     # both returns torch.Tensor of shape (2, 3, 4, 5)
@@ -435,21 +469,174 @@ ranges will be returned, instead of a bunch of lists, for performance::
 
     # returns [range(0, 3), range(3, 6), range(6, 9)]
     range(11) | batched(3) | toList()
-"""                                                                              # batched
-        super().__init__(); self.bs = bs; self.includeLast = includeLast         # batched
+
+See also: :class:`window`, :class:`batchedTrigger`
+
+:param bs: batch size
+:param includeLast: whether to include the last incomplete batch or not
+:param incl: whether to have inclusive bounds or not"""                          # batched
+        super().__init__(); self.bs = bs; self.includeLast = includeLast; self.incl = incl # batched
     def _all_array_opt(self, it, level):                                         # batched
         if self.includeLast: return NotImplemented                               # batched
         bs = self.bs; a = [slice(None, None, None)]*level; n = it.shape[level] // bs; it = it[(*a, slice(None, n*bs))] # batched
         return it.reshape(*it.shape[:level], n, bs, *it.shape[level+1:])         # batched
     def __ror__(self, it):                                                       # batched
-        bs = self.bs; includeLast = self.includeLast                             # batched
+        bs = self.bs; includeLast = self.includeLast; incl = self.incl           # batched
         if bs == float("inf"): return [it] if includeLast else []                # batched
-        if isinstance(it, k1lib.settings.cli.arrayTypes):                        # batched
+        if not incl and isinstance(it, k1lib.settings.cli.arrayTypes):           # batched
             if (not includeLast) or (it.shape[0]%bs == 0): n = it.shape[0] // bs; it = it[:n*bs]; return it.reshape(n, bs, *it.shape[1:]) # batched
-        if isinstance(it, range): return _batchRange(it, bs, includeLast)        # batched
-        try: it[0]; len(it); return _batchSliceable(it, bs, includeLast)         # batched
-        except: return _batch(it, bs, includeLast)                               # batched
-nothing = object()                                                               # batched
+        if not incl and isinstance(it, range): return _batchRange(it, bs, includeLast, incl) # batched
+        try: it[0]; len(it); return _batchSliceable(it, bs, includeLast, incl)   # batched
+        except: return _batch(it, bs, includeLast, incl)                         # batched
+    def _jsF(self, meta):                                                        # batched
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # batched
+        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.batched({cli.kjs.v(self.bs)}, {cli.kjs.v(self.includeLast)})", fIdx # batched
+class batchedTrigger(BaseCli): # batched the data using a trigger column         # batchedTrigger
+    def __init__(self, col:int=None, value:"any"=None, delta:float=None, adj:bool=True): # value is to only yield segments that have the specified value # batchedTrigger
+        """Like :class:`batched`, will batch rows/elements up but based on
+a trigger value instead. See :class:`~k1lib.cli.filt.trigger` for more
+discussion. Normal mode::
+
+    data = [[1, "a"], [1, "b"], [2, "c"], [3, "d"], [3, "e"], [1, "f"]]
+    # returns [[1, 1], [2], [3, 3], [1]]
+    [1, 1, 2, 3, 3, 1] | batchedTrigger()  | deref()
+    # throws error, does not make sense to invert search. Can only invert if .value is specified
+    [1, 1, 2, 3, 3, 1] | ~batchedTrigger() | deref()
+    # returns [[[1, 'a'], [1, 'b']], [[2, 'c']], [[3, 'd'], [3, 'e']], [[1, 'f']]]
+    data | batchedTrigger(0) | deref()
+
+In this mode, elements of the specified column that have the same value consecutively
+will be grouped together into a batch. Note the difference between this and :class:`groupBy`.
+Specific-value mode::
+
+    # returns [[1, 1], [1]]
+    [1, 1, 2, 3, 3, 1] | batchedTrigger(value=1)  | deref()
+    # returns [[2], [3, 3]], essentially only yield the batches that don't match the specified value
+    [1, 1, 2, 3, 3, 1] | ~batchedTrigger(value=1) | deref()
+    # returns [[[1, 'a'], [1, 'b']], [[1, 'f']]]
+    data | batchedTrigger(0, value=1) | deref()
+
+This mode is pretty much the same as previously, but will only return
+the batches whose specified columns match (or not match) a specific value.
+Finally, the delta mode::
+
+    # returns [[1, 1.1, 1.2], [2], [3], [3.55, 3.8, 3.9, 4.1], [6], [10]]
+    [1, 1.1, 1.2, 2, 3, 3.55, 3.8, 3.9, 4.1, 6, 10] | batchedTrigger(delta=0.5) | deref()
+    # returns [[1, 1.1, 1.2], [2], [3], [3.55, 3.8, 3.9], [4.1], [6], [10]]
+    [1, 1.1, 1.2, 2, 3, 3.55, 3.8, 3.9, 4.1, 6, 10] | batchedTrigger(delta=0.5, adj=False) | deref()
+    # .col also works here, but it's too long to fit here
+
+In contrast to the previous 2 modes, this does not rely on exact values. Instead,
+2 consecutive elements are considered to be in the same batch if their difference
+is less than the provided ``delta`` value. Within delta mode, there's the parameter
+.adj as well. If this is true, then it will measure the delta between the last (3.9)
+and current element (4.1), while if .adj=False, then it will measure the delta between
+the first element in the group (3.55) and the current element (4.1, which exceeds
+delta, which splits into a new batched).
+
+See also: :class:`~k1lib.cli.filt.trigger`
+
+:param col: column of the trigger value. Can be None, int, or list[int]
+:param value: if trigger value equals to this, then yields the batch
+:param delta: if trigger value changes more than this, then yields the batch
+:param adj: "adjacent", only makes sense if ``delta != None``. See example above""" # batchedTrigger
+        self.col = col; self.value = value; self.delta = delta; self.adj = adj; self.inverted = False # batchedTrigger
+        if value is not None and delta is not None: raise Exception(f"Can't specify precise value and fuzzy values (by specifying delta) at the same time. Does not make sense! Leave either .value or .delta empty") # batchedTrigger
+    def __invert__(self):                                                        # batchedTrigger
+        if self.value is None: raise Exception("batchedTrigger().value is None! Inverting it would not make sense!") # batchedTrigger
+        res = batchedTrigger(self.col, self.value); res.inverted = not self.inverted; return res # batchedTrigger
+    def __ror__(self, it):                                                       # batchedTrigger
+        col = self.col; value = self.value; delta = self.delta; adj = self.adj; inv = self.inverted # batchedTrigger
+        arr = []; lastE = object() # sentinel                                    # batchedTrigger
+        # also, the reason for so many if statements because I don't want to have the ifs inside the for loops, cause that's gonna be slow # batchedTrigger
+        if value is None and delta is None: # normal mode                        # batchedTrigger
+            if col is None:                                                      # batchedTrigger
+                for e in it:                                                     # batchedTrigger
+                    if e == lastE: arr.append(e)                                 # batchedTrigger
+                    else:                                                        # batchedTrigger
+                        if len(arr): yield arr                                   # batchedTrigger
+                        arr = [e]                                                # batchedTrigger
+                    lastE = e                                                    # batchedTrigger
+            elif isinstance(col, int):                                           # batchedTrigger
+                for row in it:                                                   # batchedTrigger
+                    e = row[col]                                                 # batchedTrigger
+                    if e == lastE: arr.append(row)                               # batchedTrigger
+                    else:                                                        # batchedTrigger
+                        if len(arr): yield arr                                   # batchedTrigger
+                        arr = [row]                                              # batchedTrigger
+                    lastE = e                                                    # batchedTrigger
+            else:                                                                # batchedTrigger
+                for row in it:                                                   # batchedTrigger
+                    e = tuple([row[x] for x in col])                             # batchedTrigger
+                    if e == lastE: arr.append(row)                               # batchedTrigger
+                    else:                                                        # batchedTrigger
+                        if len(arr): yield arr                                   # batchedTrigger
+                        arr = [row]                                              # batchedTrigger
+                    lastE = e                                                    # batchedTrigger
+            if len(arr): yield arr                                               # batchedTrigger
+        elif value is not None: # normal mode, but only returns specified value  # batchedTrigger
+            if col is None:                                                      # batchedTrigger
+                for e in it:                                                     # batchedTrigger
+                    if e == lastE: arr.append(e)                                 # batchedTrigger
+                    else:                                                        # batchedTrigger
+                        if len(arr) and (lastE == value) ^ inv: yield arr        # batchedTrigger
+                        arr = [e]                                                # batchedTrigger
+                    lastE = e                                                    # batchedTrigger
+            elif isinstance(col, int):                                           # batchedTrigger
+                for row in it:                                                   # batchedTrigger
+                    e = row[col]                                                 # batchedTrigger
+                    if e == lastE: arr.append(row)                               # batchedTrigger
+                    else:                                                        # batchedTrigger
+                        if len(arr) and (lastE == value) ^ inv: yield arr        # batchedTrigger
+                        arr = [row]                                              # batchedTrigger
+                    lastE = e                                                    # batchedTrigger
+            else:                                                                # batchedTrigger
+                value = tuple(value)                                             # batchedTrigger
+                for row in it:                                                   # batchedTrigger
+                    e = tuple([row[x] for x in col])                             # batchedTrigger
+                    if e == lastE: arr.append(row)                               # batchedTrigger
+                    else:                                                        # batchedTrigger
+                        if len(arr) and (lastE == value) ^ inv: yield arr        # batchedTrigger
+                        arr = [row]                                              # batchedTrigger
+                    lastE = e                                                    # batchedTrigger
+            if len(arr) and (lastE == value) ^ inv: yield arr                    # batchedTrigger
+        elif delta is not None: # delta mode                                     # batchedTrigger
+            lastE = float("-inf"); arr = []                                      # batchedTrigger
+            if adj:                                                              # batchedTrigger
+                if col is None:                                                  # batchedTrigger
+                    for e in it:                                                 # batchedTrigger
+                        if abs(e-lastE) < delta: arr.append(e)                   # batchedTrigger
+                        else:                                                    # batchedTrigger
+                            if len(arr): yield arr                               # batchedTrigger
+                            arr = [e]                                            # batchedTrigger
+                        lastE = e                                                # batchedTrigger
+                elif isinstance(col, int):                                       # batchedTrigger
+                    for row in it:                                               # batchedTrigger
+                        e = row[col]                                             # batchedTrigger
+                        if abs(e-lastE) < delta: arr.append(row)                 # batchedTrigger
+                        else:                                                    # batchedTrigger
+                            if len(arr): yield arr                               # batchedTrigger
+                            arr = [row]                                          # batchedTrigger
+                        lastE = e                                                # batchedTrigger
+                else: raise Exception("Multiple columns not supported in delta mode, as it doesn't make any sense") # batchedTrigger
+            else:                                                                # batchedTrigger
+                if col is None:                                                  # batchedTrigger
+                    for e in it:                                                 # batchedTrigger
+                        if abs(e-lastE) < delta: arr.append(e)                   # batchedTrigger
+                        else:                                                    # batchedTrigger
+                            if len(arr): yield arr                               # batchedTrigger
+                            arr = [e]; lastE = e                                 # batchedTrigger
+                elif isinstance(col, int):                                       # batchedTrigger
+                    for row in it:                                               # batchedTrigger
+                        e = row[col]                                             # batchedTrigger
+                        if abs(e-lastE) < delta: arr.append(row)                 # batchedTrigger
+                        else:                                                    # batchedTrigger
+                            if len(arr): yield arr                               # batchedTrigger
+                            arr = [row]; lastE = e                               # batchedTrigger
+                else: raise Exception("Multiple columns not supported in delta mode, as it doesn't make any sense") # batchedTrigger
+            if len(arr): yield arr                                               # batchedTrigger
+        else: raise Exception("Unreachable")                                     # batchedTrigger
+nothing = object()                                                               # batchedTrigger
 class window(BaseCli):                                                           # window
     def __init__(self, n, newList=False, pad=nothing):                           # window
         """Slides window of size n forward and yields the windows.
@@ -472,6 +659,8 @@ allocation, which will be slower::
     # takes 48ms, because of allocating lists
     range(100000) | window(100) | ignore()
 
+See also: :class:`~batched`
+
 :param n: size of the window
 :param newList: whether to create a new list out of every window or
     not. If False (default), less robust but faster. If True, more
@@ -487,6 +676,10 @@ allocation, which will be slower::
             if len(q) == n: yield listF(q); q.popleft()                          # window
         if self.padBool:                                                         # window
             for i in range(n-1): q.append(pad); yield listF(q); q.popleft()      # window
+    def _jsF(self, meta):                                                        # window
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # window
+        if self.padBool: raise Exception("window._jsF() doesn't support custom pad value yet") # window
+        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.window({cli.kjs.v(self.n)})", fIdx # window
 class groupBy(BaseCli):                                                          # groupBy
     def __init__(self, column:int, separate:bool=False, removeCol:bool=None):    # groupBy
         """Groups table by some column.
@@ -538,7 +731,7 @@ after doing all the transformations you want, sometimes it's necessary to flatte
 it again, which :class:`ungroup` does.
 
 If you want to group text lines by some pattern im them, :class:`~k1lib.cli.grep.grep`
-might be better for you.
+with ``sep=True`` might be better for you.
 
 :param column: which column to group by
 :param separate: whether to separate out the column to sort of form a dict or not. See example
@@ -563,6 +756,9 @@ might be better for you.
             if len(a) > 0:                                                       # groupBy
                 if removeCol: a = a | ~cli.cut(c)                                # groupBy
                 yield [v, a] if separate else a                                  # groupBy
+    def _jsF(self, meta):                                                        # groupBy
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # groupBy
+        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.groupBy({cli.kjs.v(self.column)}, {cli.kjs.v(self.separate)}, {cli.kjs.v(self.removeCol)})", fIdx # groupBy
 class ungroup(BaseCli):                                                          # ungroup
     def __init__(self, single=True, begin=True, insertCol:bool=True):            # ungroup
         """Ungroups things that were grouped using a specific mode of
@@ -580,11 +776,14 @@ structure into a flat dataframe so that you can plug into pandas. Example::
 :param begin: whether to insert the column at the beginning or at the end.
     Only works if ``insertCol`` is True
 :param insertCol: whether to insert the column into the table or not"""          # ungroup
-        self.insertCol = insertCol; self.single = single; self.begin = begin     # ungroup
+        self.single = single; self.begin = begin; self.insertCol = insertCol     # ungroup
     def __ror__(self, it):                                                       # ungroup
         preprocess = cli.apply(cli.wrapList().all(), 1) if self.single else cli.iden(); begin = self.begin # ungroup
         if self.insertCol: return it | preprocess | ~cli.apply(lambda x, arr: arr | cli.insert(x, begin).all()) | cli.joinStreams() # ungroup
         else: return it | preprocess | cli.cut(1) | cli.joinStreams()            # ungroup
+    def _jsF(self, meta):                                                        # ungroup
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # ungroup
+        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.ungroup({cli.kjs.v(self.single)}, {cli.kjs.v(self.begin)}, {cli.kjs.v(self.insertCol)})", fIdx # ungroup
 class insertColumn(BaseCli):                                                     # insertColumn
     def __init__(self, column:List[Any], begin=True, fill=""):                   # insertColumn
         """Inserts a column at beginning or end.
@@ -595,9 +794,12 @@ Example::
     # returns [[1, 2, 'a'], [3, 4, 'b']]
     [[1, 2], [3, 4]] | insertColumn(["a", "b"], begin=False) | deref()"""        # insertColumn
         self.column = column; self.begin = begin; self.fill = fill               # insertColumn
-    def __ror__(self, it): return it | transpose(fill=self.fill) | insert(self.column, begin=self.begin) | transpose(fill=self.fill) # insertColumn
-def insertIdColumn(table=False, begin=True):                                     # insertIdColumn
-    """Inserts an id column at the beginning (or end).
+        self._f = transpose.wrap(insert(column, begin=begin), fill=fill)         # insertColumn
+    def __ror__(self, it): return it | self._f                                   # insertColumn
+    def _jsF(self, meta): return self._f._jsF(meta)                              # insertColumn
+class insertIdColumn(BaseCli):                                                   # insertIdColumn
+    def __init__(self, table=False, begin=True):                                 # insertIdColumn
+        """Inserts an id column at the beginning (or end).
 Example::
 
     # returns [[0, 'a', 2], [1, 'b', 4]]
@@ -605,33 +807,22 @@ Example::
     # returns [[0, 'a'], [1, 'b']]
     "ab" | insertIdColumn()
 
+This has a shorter alias called :class:`insId`
+
 :param table: if False, then insert column to an Iterator[str], else treat
     input as a full fledged table"""                                             # insertIdColumn
-    def a(it):                                                                   # insertIdColumn
-        if table:                                                                # insertIdColumn
-            if begin: return ([i, *e] for i, e in enumerate(it))                 # insertIdColumn
+        self.table = table; self.begin = begin                                   # insertIdColumn
+    def __ror__(self, it):                                                       # insertIdColumn
+        if self.table:                                                           # insertIdColumn
+            if self.begin: return ([i, *e] for i, e in enumerate(it))            # insertIdColumn
             else: return ([*e, i] for i, e in enumerate(it))                     # insertIdColumn
         else:                                                                    # insertIdColumn
-            if begin: return ([i, e] for i, e in enumerate(it))                  # insertIdColumn
+            if self.begin: return ([i, e] for i, e in enumerate(it))             # insertIdColumn
             else: return ([e, i] for i, e in enumerate(it))                      # insertIdColumn
-    return cli.aS(a)                                                             # insertIdColumn
-class expandE(BaseCli):                                                          # expandE
-    def __init__(self, f:Callable[[Any], List[Any]], column:int):                # expandE
-        """Expands table element to multiple columns.
-Example::
-
-    # returns [['abc', 3, -2], ['de', 2, -5]]
-    [["abc", -2], ["de", -5]] | expandE(lambda e: (e, len(e)), 0) | deref()
-
-:param f: Function that transforms 1 row element to multiple elements"""         # expandE
-        super().__init__(fs=[f]); self.f = f; self.column = column               # expandE
-    def __ror__(self, it):                                                       # expandE
-        f = self.f; c = self.column                                              # expandE
-        def gen(row):                                                            # expandE
-            for i, e in enumerate(row):                                          # expandE
-                if i == c: yield from f(e)                                       # expandE
-                else: yield e                                                    # expandE
-        return (gen(row) for row in it)                                          # expandE
+    def _jsF(self, meta):                                                        # insertIdColumn
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # insertIdColumn
+        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.insertIdColumn({cli.kjs.v(self.table)}, {cli.kjs.v(self.begin)})", fIdx # insertIdColumn
+insId = insertIdColumn                                                           # insertIdColumn
 def unsqueeze(dim:int=0):                                                        # unsqueeze
     """Unsqueeze input iterator.
 Example::
@@ -664,20 +855,25 @@ def oUnsqueeze(cs, ts, metadata): # reminder: if change this then also change th
     else: return [cli.aS(lambda x: x.unsqueeze(i)).hint(t)]                      # oUnsqueeze
 tOpt.addPass(oUnsqueeze, [cli.apply], 4)                                         # oUnsqueeze
 class count(BaseCli):                                                            # count
-    def __init__(self):                                                          # count
+    def __init__(self, max=False):                                               # count
         """Finds unique elements and returns a table with [frequency, value, percent]
 columns. Example::
 
     # returns [[1, 'a', '33%'], [2, 'b', '67%']]
-    ['a', 'b', 'b'] | count() | deref()"""                                       # count
-        super().__init__()                                                       # count
+    ['a', 'b', 'b'] | count() | deref()
+    # returns [[1, 'a', '50%'], [2, 'b', '100%']]
+    ['a', 'b', 'b'] | count(max=True) | deref()
+
+:param max: if True, percentages are of the max value, else they're of the sum
+"""                                                                              # count
+        super().__init__(); self._max = max                                      # count
     def _typehint(self, inp):                                                    # count
         i = tAny()                                                               # count
         if isinstance(inp, tListIterSet): i = inp.child                          # count
         return tIter(tCollection(int, i, str))                                   # count
     def __ror__(self, it:Iterator[str]):                                         # count
         it = it | cli.apply(lambda row: (tuple(row) if isinstance(row, list) else row)) # count
-        c = Counter(it); s = sum(c.values())                                     # count
+        c = Counter(it); s = max(c.values()) if self._max else sum(c.values())   # count
         return [[v, k, f"{round(100*v/s)}%"] for k, v in c.items()] # has to scan through the entire thing anyway, which is long enough already, so just turn it into a list # count
     @staticmethod                                                                # count
     def join():                                                                  # count
@@ -697,8 +893,11 @@ This is useful when you want to get the count of a really long list/iterator usi
             s = values.values() | cli.toSum()                                    # count
             return [[v, k, f"{round(100*v/s)}%"] for k, v in values.items()]     # count
         return cli.applyS(inner)                                                 # count
+    def _jsF(self, meta):                                                        # count
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # count
+        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.count()", fIdx          # count
 class hist(BaseCli):                                                             # hist
-    def __init__(self, bins:int=30):                                             # hist
+    def __init__(self, bins:int=30, dropZero:bool=False):                        # hist
         """Bins a long 1d array. Effectively creating a historgram, without
 actually plotting it. Example::
 
@@ -734,12 +933,14 @@ manageable with current hardware. So the data transfer cost is not a lot at all.
 histogram merging part also executes relatively fast, as it only creates an internal
 array of 3M length. See over :meth:`hist.join` for param details
 
-:params bins: how many bins should the histogram has?"""                         # hist
-        self.bins = bins                                                         # hist
+:param bins: how many bins should the histogram has?
+:param dropZero: if True, will eliminate buckets that has no element in them"""  # hist
+        self.bins = bins; self.dropZero = dropZero                               # hist
     def __ror__(self, it):                                                       # hist
         if not isinstance(it, settings.arrayTypes): it = list(it)                # hist
         y, x = np.histogram(it, bins=self.bins)                                  # hist
         delta = x[1] - x[0]; x = (x[1:] + x[:-1])/2                              # hist
+        if self.dropZero: idx = y > 0; return x[idx], y[idx], delta              # hist
         return x, y, delta                                                       # hist
     @staticmethod                                                                # hist
     def join(scale:float=1e4, bins:int=None, log:bool=True, xlog:bool=False):    # hist
@@ -827,6 +1028,9 @@ Example::
     def __ror__(self, it:Iterator[str]):                                         # permute
         p = self.permutations                                                    # permute
         for row in it: yield _permuteGen(row, p)                                 # permute
+    def _jsF(self, meta):                                                        # permute
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # permute
+        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.permute({cli.kjs.vs(self.permutations) | cli.join(', ')})", fIdx # permute
 class AA_(BaseCli):                                                              # AA_
     def __init__(self, *idxs:List[int], wraps=False):                            # AA_
         """Returns 2 streams, one that has the selected element, and the other
@@ -885,7 +1089,7 @@ row, and thus there aren't any left when you try to call ``next(it)``."""       
         super().__init__()                                                       # peek
     def __ror__(self, it:Iterator[Any]) -> Tuple[Any, Iterator[Any]]:            # peek
         it = iter(it); sentinel = object(); row = next(it, sentinel)             # peek
-        if row == sentinel: return None, []                                      # peek
+        if row is sentinel: return None, []                                      # peek
         def gen(): yield row; yield from it                                      # peek
         return row, gen()                                                        # peek
 class peekF(BaseCli):                                                            # peekF
@@ -901,7 +1105,7 @@ return the input Iterator, which is not tampered. Example::
         super().__init__(fs=[f]); self.f = f                                     # peekF
     def __ror__(self, it:Iterator[Any]) -> Iterator[Any]:                        # peekF
         it = iter(it); sentinel = object(); row = next(it, sentinel)             # peekF
-        if row == sentinel: return []                                            # peekF
+        if row is sentinel: return []                                            # peekF
         def gen(): yield row; yield from it                                      # peekF
         self.f(row); return gen()                                                # peekF
 settings.add("repeat", k1lib.Settings().add("infBs", 100, "if dealing with infinite lists, how many elements at a time should be processed?"), "settings related to repeat() and repeatFrom()") # peekF
@@ -948,6 +1152,10 @@ See also: :meth:`repeatF`
                 yield o                                                          # repeat
         if limit < float("inf"): return self._all_array_opt(o, 0) if isinstance(o, settings.arrayTypes) else (gen() | ser) # repeat
         return (gen() | ser) if len(self.capturedClis) == 0 else gen() | cli.batched(settings.repeat.infBs) | cli.apply(ser) | cli.joinStreams() # repeat
+    def _jsF(self, meta):                                                        # repeat
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # repeat
+        if self.limit is None: raise Exception("repeat._jsF() can't repeat the input array infinitely many times, as there's no iterator concept in JS") # repeat
+        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.repeat({cli.kjs.v(self.limit)})", fIdx # repeat
 class _repeatF(BaseCli):                                                         # _repeatF
     def __init__(self, limit, kwargs): super().__init__(capture=True); self.limit = limit; self.kwargs = kwargs # _repeatF
     def __ror__(self, f):                                                        # _repeatF
@@ -1062,6 +1270,10 @@ See :class:`repeat` for a discussion on how to deal with infinite iterators
                 yield from it                                                    # repeatFrom
         if limit < float("inf"): return self._all_array_opt(it, 0) if isinstance(it, settings.arrayTypes) else (gen(it) | ser) # repeatFrom
         return (gen(it) | ser) if len(self.capturedClis) == 0 else gen(it) | cli.batched(settings.repeat.infBs) | cli.apply(ser) | cli.joinStreams() # repeatFrom
+    def _jsF(self, meta):                                                        # repeatFrom
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # repeatFrom
+        if self.limit is None: raise Exception(f"repeatFrom._jsF() can't repeat the input array infinitely many times, as there's no iterator concept in JS") # repeatFrom
+        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.repeatFrom({cli.kjs.v(self.limit)})", fIdx # repeatFrom
 def oneHotRow(i, n): ans = [0]*n; ans[i] = 1; return ans                         # oneHotRow
 class oneHot(BaseCli):                                                           # oneHot
     _groups = {}                                                                 # oneHot
@@ -1149,3 +1361,64 @@ right?
         _d = it | cli.cut(c) | cli.aS(set) | cli.sort(None, False) | cli.deref(); n = len(_d) # oneHot
         _d = _d | insertIdColumn(begin=False) | cli.apply(cli.aS(oneHotRow, n), 1) | transpose() | cli.toDict() # oneHot
         for row in it: yield [*row[:c], *_d[row[c]], *row[c+1:]]                 # oneHot
+class latch(BaseCli):                                                            # latch
+    def __init__(self, timeline, before=True, startTok=None, endTok=None):       # latch
+        """Latches 1 timeline (B) onto another timeline (A).
+Example::
+
+    a = [[1, "a"], [2, "b"], [3, "c"], [4, "d"], [5, "e"], [6, "f"], [7, "g"], [8, "h"], [9, "i"]]
+    b = [[2.1, "2.1"], [3.1, "3.1"]]
+    c = [[4.5, "4.5"], [7.3, "7.3"]]
+
+    a[:5] | latch(b)        | deref() # returns [[1, 'a', None], [2, 'b', None], [3, 'c', '2.1'], [4, 'd', '3.1'], [5, 'e', '3.1']]
+    a[:5] | latch(b, False) | deref() # returns [[1, 'a', '2.1'], [2, 'b', '2.1'], [3, 'c', '3.1'], [4, 'd', None], [5, 'e', None]]
+    b     | latch(a)        | deref() # returns [[2.1, '2.1', 'b'], [3.1, '3.1', 'c']]
+    b     | latch(a, False) | deref() # returns [[2.1, '2.1', 'c'], [3.1, '3.1', 'd']]
+
+    # latching timelines that don't overlap
+    b | latch(c)        | deref() # returns [[2.1, '2.1', None], [3.1, '3.1', None]]
+    b | latch(c, False) | deref() # returns [[2.1, '2.1', '4.5'], [3.1, '3.1', '4.5']]
+    c | latch(b)        | deref() # returns [[4.5, '4.5', '3.1'], [7.3, '7.3', '3.1']]
+    c | latch(b, False) | deref() # returns [[4.5, '4.5', None], [7.3, '7.3', None]]
+
+    # multiple latches also work fine
+    a | latch(b) | latch(c) | deref()
+
+Final command returns this::
+
+    [[1, 'a', None, None],
+     [2, 'b', None, None],
+     [3, 'c', '2.1', None],
+     [4, 'd', '3.1', None],
+     [5, 'e', '3.1', '4.5'],
+     [6, 'f', '3.1', '4.5'],
+     [7, 'g', '3.1', '4.5'],
+     [8, 'h', '3.1', '7.3'],
+     [9, 'i', '3.1', '7.3']]
+
+So essentially, there're 2 timelines, "a" and "b". "a" is usually more densely
+packed than "b". The goal is to merge these 2 timelines together, trying to insert
+b's data points at various points inside a. Try to figure out the pattern and
+behavior from the example.
+
+This cli makes several assumptions:
+
+- All timelines inside the argument (if ``a | latch(b)``, then I'm talking about b) have only 2 columns: (time, data)
+- Timelines piped into (if ``a | latch(b)``, then I'm talking about a) can have multiple columns. First column has to be time
+- All timelines are sorted by time already, to avoid resorting
+
+See also: :class:`~k1lib.cli.utils.syncStepper`
+
+:param timeline: sparser timeline
+:param before: whether to use the timeline B's point before or after timeline A's point
+:param startTok: token to use for A's samples where B has not gone into the picture yet
+:param endTok: token to use for A's samples where B has yielded all elements"""  # latch
+        self.timeline = timeline; self.before = before; self.startTok = startTok; self.endTok = endTok # latch
+    def __ror__(self, it):                                                       # latch
+        timeline = [[[-float("inf"), self.startTok]], self.timeline, [[float("inf"), self.endTok]]] | cli.joinSt() # latch
+        before = self.before; lastT, lastT_desc = next(timeline); t, t_desc = next(timeline) # latch
+        for row in it:                                                           # latch
+            while row[0] > t:                                                    # latch
+                lastT = t; lastT_desc = t_desc                                   # latch
+                t, t_desc = next(timeline)                                       # latch
+            yield [*row, lastT_desc if before else t_desc]                       # latch

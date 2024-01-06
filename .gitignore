@@ -11,3 +11,7 @@ dist
 .vscode
 githubPages
 **.pth
+dist.zip
+nohup.out
+
+

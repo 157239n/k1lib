@@ -4,10 +4,11 @@
 
     from k1lib.imports import *
     nb.execute("file.ipynb")"""
-__all__ = ["cells", "pretty", "execute"]
+__all__ = ["cells", "grabTags", "executeTags", "pretty", "execute"]
 from k1lib.cli import BaseCli; import k1lib.cli as cli
 import json, k1lib, os, traceback; from typing import List
-import matplotlib.pyplot as plt
+from collections import defaultdict
+plt = k1lib.dep("matplotlib.pyplot")
 def _cells(fileName, outputs=False):                                             # _cells
     js = json.loads(cli.cat(fileName) | cli.join("\n"))                          # _cells
     cells = []; fields = set(["cell_type", "source"])                            # _cells
@@ -20,6 +21,30 @@ def cells(fileName=None, outputs=False):                                        
     nb.cells("file.ipynb")"""                                                    # cells
     if fileName is None: return cli.aS(_cells, outputs)                          # cells
     else: return _cells(fileName, outputs)                                       # cells
+def _tagHandler(*a,**kw): pass                                                   # _tagHandler
+def grabTags(s:str):                                                             # grabTags
+    """Gets the tags included in a cell.
+Example::
+
+    nb.grabTags("# serve(node='mint-6.l'), abc") # returns ["serve", "abc"]
+"""                                                                              # grabTags
+    t = defaultdict(lambda: _tagHandler)                                         # grabTags
+    s = s.strip("#").strip()                                                     # grabTags
+    try: eval(f'[{s}]', t)                                                       # grabTags
+    except: return [e.split("(")[0].strip() for e in s.split(",")]               # grabTags
+    return [e for e in t.keys() if not (e.startswith("__") and e.endswith("__"))] # grabTags
+def executeTags(s:str, funcs:dict):                                              # executeTags
+    """Executes the tags included in a cell.
+Example::
+
+    d = []
+    def serve(node): d.append(node)
+    nb.executeTags("# serve(node='mint-6.l'), abc", {"serve": serve, "abc": 123})
+
+    d # now is ["mint-6.l"]
+"""                                                                              # executeTags
+    try: s = s.strip("#").strip(); eval(f'[{s}]', dict(funcs))                   # executeTags
+    except: pass                                                                 # executeTags
 class pretty(BaseCli):                                                           # pretty
     def __init__(self, magics:bool=False, whitelist:List[str]=[], blacklist:List[str]=[]): # pretty
         """Makes the cells prettier.
@@ -51,7 +76,7 @@ Code::
             lines = cell["source"]                                               # pretty
             if not magics: lines = [line.rstrip() for line in lines if not line.startswith("!") and not line.startswith("%%")] # pretty
             if len(lines) == 0: continue                                         # pretty
-            if lines[0].startswith("#"): props = set([e.strip() for e in lines[0].lstrip("#").split(",")]) # pretty
+            if lines[0].startswith("#"): props = set(grabTags(lines[0]))         # pretty
             else: props = set()                                                  # pretty
             if len(wl) > 0 and not any([e in props for e in wl]): continue       # pretty
             if len(bl) > 0 and any([e in props for e in bl]): continue           # pretty
