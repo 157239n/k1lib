@@ -7,7 +7,7 @@ from typing import Iterator, Any
 from k1lib.cli.init import BaseCli; import k1lib.cli.init as init
 import numbers, numpy as np, k1lib, tempfile, os, sys, time, math, json, re
 from k1lib import cli; from k1lib.cli.typehint import *
-plt = k1lib.dep("matplotlib.pyplot")
+plt = k1lib.dep.plt
 try: import torch; hasTorch = True
 except: hasTorch = False
 __all__ = ["stdout", "tee", "file", "pretty", "unpretty", "display", "headOut",
@@ -54,7 +54,7 @@ This cli is not exactly well-thoughout and is a little janky
     def __ror__(self, it):                                                       # tee
         s = self.s; f = self.f; every = self.every; delay = self.delay           # tee
         lastTime = 0                                                             # tee
-        for i, e in enumerate(it):                                               # tee
+        for i, e in enumerate(init.dfGuard(it)):                                 # tee
             if i % every == 0 and time.time()-lastTime > delay:                  # tee
                 print(f"     \r{i}) {f(e)}", end="", file=s); lastTime = time.time() # tee
             yield e                                                              # tee
@@ -71,14 +71,14 @@ Example::
 Example::
 
     range(5) | tee().cr() | apply(op() ** 2) | deref()"""                        # tee
-        beginTime = time.time()                                                  # tee
+        beginTime = time.time(); every = self.every; autoInc = k1lib.AutoIncrement() # tee
         f = (lambda x: x) if self.f == _defaultTeeF else self.f                  # tee
-        self.f = lambda s: f"{f(s)}, {int(time.time() - beginTime)}s elapsed"; return self # tee
+        self.f = lambda s: f"{f(s)}, {int(time.time() - beginTime)}s elapsed, throughput: {k1lib.fmt.throughput(autoInc()*every/(time.time() - beginTime))}"; return self # tee
     def autoInc(self):                                                           # tee
         """Like :meth:`tee.crt`, but instead of printing the object, just print
 the current index and time"""                                                    # tee
-        beginTime = time.time(); autoInc = k1lib.AutoIncrement()                 # tee
-        self.f = lambda s: f"{autoInc()}, {int(time.time()-beginTime)}s elapsed"; return self # tee
+        beginTime = time.time(); autoInc = k1lib.AutoIncrement(); every = self.every # tee
+        self.f = lambda s: f"{autoInc()}, {int(time.time()-beginTime)}s elapsed, throughput: {k1lib.fmt.throughput(autoInc.value*every/(time.time() - beginTime))}"; return self # tee
 try:                                                                             # tee
     import PIL; hasPIL = True                                                    # tee
 except: hasPIL = False                                                           # tee
@@ -213,7 +213,7 @@ This will print::
         self.delim = delim; self.inverted = False; self.left = left              # pretty
     def _typehint(self, inp): return tIter(str)                                  # pretty
     def __ror__(self, it) -> Iterator[str]:                                      # pretty
-        inv = self.inverted; delim = self.delim; left = self.left                # pretty
+        inv = self.inverted; delim = self.delim; left = self.left; it = init.dfGuard(it) # pretty
         if inv: tables = [[list(i1) for i1 in i2] for i2 in it]                  # pretty
         else: tables = [[list(i1) for i1 in it]]                                 # pretty
         widths = defaultdict(lambda: 0)                                          # pretty
@@ -232,7 +232,7 @@ This will print::
     def __invert__(self): self.inverted = not self.inverted; return self         # pretty
     def _jsF(self, meta):                                                        # pretty
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # pretty
-        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.pretty({json.dumps(self.delim)}, {cli.kjs.v(self.inverted)})", fIdx # pretty
+        return f"{fIdx} = ({dataIdx}) => {dataIdx}.pretty({json.dumps(self.delim)}, {cli.kjs.v(self.inverted)})", fIdx # pretty
 def display(lines:int=10):                                                       # display
     """Convenience method for displaying a table.
 Pretty much equivalent to ``head() | pretty() | stdout()``.
@@ -294,18 +294,28 @@ you can specify the headers directly, like this::
 def tab(text, pad="    "):                                                       # tab
     return "\n".join([pad + line for line in text.split("\n")])                  # tab
 class intercept(BaseCli):                                                        # intercept
-    def __init__(self, f=None, raiseError:bool=True):                            # intercept
-        """Intercept flow at a particular point, analyze the object piped in, and
-raises error to stop flow. Example::
+    def __init__(self, f=None, raiseError:bool=True, delay=0):                   # intercept
+        """Intercept flow at a particular point, analyze the object piped in using the specified
+function "f", and raises error to stop flow. Example::
 
     3 | intercept()
 
-:param f: prints out the object transformed by this function
-:param raiseError: whether to raise error when executed or not."""               # intercept
-        self.f = f or cli.shape(); self.raiseError = raiseError                  # intercept
+This is useful to diagnose what happens inside a mess of clis::
+
+    ... | apply(A | B | intercept())                             | ... # intercepts flow by throwing an error. Prints shape of element
+    ... | apply(A | B | intercept(deref()))                      | ... # intercepts flow by throwing an error. Prints actual element
+    ... | apply(A | B | intercept(deref() | aS(pprint.pformat))) | ... # intercepts flow by throwing an error. Prints actual element, but pretty-formatted
+    ... | apply(A | B | intercept(deref(), delay=3))             | ... # intercepts flow by throwing an error. Prints actual element after intercept().__ror__ has been called 3 times
+
+:param f: prints out the object transformed by this function. By default it's :class:`~k1lib.cli.utils.shape`
+:param raiseError: whether to raise error when executed or not
+:param delay: won't do anything after this has been called this number of times""" # intercept
+        self.f = f or cli.shape(); self.raiseError = raiseError; self.delay = delay; self.count = 0 # intercept
     def __ror__(self, s):                                                        # intercept
-        print(type(s)); print(self.f(s))                                         # intercept
-        if self.raiseError: raise RuntimeError("intercepted")                    # intercept
+        self.count += 1                                                          # intercept
+        if self.count > self.delay:                                              # intercept
+            print(type(s)); print(self.f(s))                                     # intercept
+            if self.raiseError: raise RuntimeError("intercepted")                # intercept
         return s                                                                 # intercept
 class plotImgs(BaseCli):                                                         # plotImgs
     def __init__(self, col=5, aspect=1, fac=2, axis=False, table=False, im=False): # plotImgs

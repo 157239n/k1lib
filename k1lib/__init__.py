@@ -10,28 +10,34 @@ from . import cli
 from ._higher import *
 from ._monkey import *
 
-from . import fmt;      #fmt      = wrapMod(fmt)
-from . import knn;      #knn      = wrapMod(knn)
-from . import selector; #selector = wrapMod(selector)
+from . import fmt;      fmt      = wrapMod(fmt)
+from . import knn;      knn      = wrapMod(knn)
+from . import selector; selector = wrapMod(selector)
 from .callbacks import Callback, Callbacks, Cbs
 from . import callbacks
 from ._learner import *
-from . import schedule; #schedule = wrapMod(schedule)
-from . import viz;      #viz      = wrapMod(viz)
+from . import schedule; schedule = wrapMod(schedule)
+from . import viz;      viz      = wrapMod(viz)
 from . import _k1a;
-from . import k1ui;     #k1ui     = wrapMod(k1ui)
+from . import k1ui;     k1ui     = wrapMod(k1ui)
 from . import serve;
-from . import p5;
-from . import selen;
-from . import kws;
-from . import kast;
-from . import serpent;
+from . import p5;       p5       = wrapMod(p5)
+from . import selen;    selen    = wrapMod(selen)
+from . import kws;      kws      = wrapMod(kws)
+from . import kast;     kast     = wrapMod(kast)
+from . import serpent;  serpent  = wrapMod(serpent)
+from . import trans;
+from . import kcom;     kcom     = wrapMod(kcom)
+from . import kop;      kop      = wrapMod(kop)
+from . import kph;      kph      = wrapMod(kph)
+from . import kstr;     kstr     = wrapMod(kstr)
+
 
 #from . import gE
-from . import eqn;      #eqn      = wrapMod(eqn)
+from . import eqn;      eqn      = wrapMod(eqn)
 
 from ._advanced import *
-from . import zircon;
+from . import zircon;   zircon   = wrapMod(zircon)
 
 class _Mo(wrapMod):
     def __init__(self, mod): super().__init__(mod); self._MoWrap_dirs = ["registerSubstance"]

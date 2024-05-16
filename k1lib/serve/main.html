@@ -546,7 +546,7 @@
           <input
             id="dateBox_${i}"
             type="datetime-local"
-            ${value} ${minDate} ${maxDate}
+            ${value} ${minDate} ${maxDate} step=1
             oninput="cb_dateBox(${i})"
           />
         </div>`;
@@ -574,7 +574,7 @@
     }
 
     function cb_slider(i) {
-      values[idxToArg[i]] = document.querySelector(`#slider_${i}`).value;
+      values[idxToArg[i]] = parseFloat(document.querySelector(`#slider_${i}`).value);
       document.querySelector(`#slider_${i}_value`).innerHTML = values[idxToArg[i]];
       updated();
     }
@@ -672,7 +672,9 @@
     let blocksHtml = "";
     for (let arg of meta.args) {
       let anno = meta.annos[arg]; let def = meta.defaults[arg]; let doc = meta.docs[arg];
-      if (anno === "int" || anno === "float" || anno === "text") blocksHtml += textBox(arg, doc, anno, def);
+      if (anno === "int") blocksHtml += textBox(arg, doc, anno, def, (x) => parseInt(x));
+      if (anno === "float") blocksHtml += textBox(arg, doc, anno, def, (x) => parseFloat(x));
+      if (anno === "text") blocksHtml += textBox(arg, doc, anno, def);
       if (anno === "apiKey") blocksHtml += textBox(arg, doc, anno, def);
       if (anno === "date") blocksHtml += dateBox(arg, doc, anno, def);
       if (anno === "json") blocksHtml += textBox(arg, doc, anno, [JSON.stringify(def[0], null, 2), def[1]], (x) => {return x ? JSON.parse(x) : ""});
@@ -687,51 +689,10 @@
     // document.querySelector("#sourceCode").innerHTML = `<pre class="pre">${escapeHtml(meta.source)}</pre>`;
 
     setTimeout(() => {
-      let jsReqBody = ""; let pyReqBody = "";
-      for (let arg of meta.args) {
-        const anno = meta.annos[arg];
-        if (anno === "json") {
-          const s = `    "${arg}": ${JSON.stringify(values[arg])},\n`; jsReqBody += s; pyReqBody += s;
-        } else if (anno === "int" || anno === "float" || anno === "slider") {
-          const s = `    "${arg}": ${values[arg]},\n`; jsReqBody += s; pyReqBody += s;
-        } else if (anno === "checkbox") {
-          jsReqBody += `    "${arg}": ${values[arg] ? 'true' : 'false'},\n`;
-          pyReqBody += `    "${arg}": ${values[arg] ? 'True' : 'False'},\n`;
-        } else {
-          let s = `${values[arg]}`.split("\n")[0];
-          s = (s.length > 23) ? s.slice(0, 20) + "..." : s
-          jsReqBody += `    "${arg}": \`${s}\`,\n`;
-          pyReqBody += `    "${arg}": """${s}""",\n`;
-        }
-      }
-      const base64_js = meta.annos.return === "html" || meta.annos.return === "bytes";
-      const base64_py = meta.annos.return === "html" || meta.annos.return === "bytes" || meta.annos.return === "image";
       document.querySelector("#apiRequest").innerHTML = `
-<h3>Javascript</h3>
-<pre class="pre">
-let result = ${base64_js ? 'atob(' : ''}(await (await fetch("${prefix}", {
-  method: "POST",
-  body: JSON.stringify({
-${jsReqBody.trimEnd()}
-  }),
-  headers: {
-    "Content-Type": "application/json",
-  }
-})).json()).data${base64_js ? ')' : ''};</pre>
-<h3>Python</h3>
-<pre class="pre">
-import requests${base64_py ? ', base64' : ''}
-result = ${base64_py ? 'base64.b64decode(' : ''}requests.post("${prefix}", json={
-${pyReqBody.trimEnd()}
-}).json()["data"]${base64_py ? ').decode()' : ''}
-</pre>
-<h3>Python - k1lib</h3>
-<pre class="pre">
-from k1lib.imports import *
-{
-${pyReqBody.trimEnd()}
-} | kapi.post("${prefix}") | aS(json.loads) | op()["data"]${base64_py ? ' | aS(base64.b64decode) | op().decode()' : ''}
-</pre>`;
+<h3>Javascript</h3>${meta.fetch.js}
+<h3>Python</h3>${meta.fetch.py}
+<h3>Python - k1lib</h3>${meta.fetch.k1}`;
     }, 0);
   </script>
 </html>

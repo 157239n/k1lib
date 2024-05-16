@@ -6,10 +6,10 @@ from collections import deque
 from k1lib.cli import BaseCli, init; import k1lib.cli as cli
 from k1lib.cli.typehint import *
 from contextlib import contextmanager
-requests = k1lib.dep("requests")
+requests = k1lib.dep.requests
 try: import minio; hasMinio = True
 except: hasMinio = False
-__all__ = ["cat", "catPickle", "splitSeek", "refineSeek", "wget", "ls", "cmd", "walk", "requireCli", "urlPath", "kzip", "kunzip", "unzip"]
+__all__ = ["cat", "catPickle", "splitSeek", "refineSeek", "wget", "ls", "cmd", "walk", "urlPath", "kzip", "kunzip", "unzip"]
 settings = k1lib.settings.cli
 class NoPartialContent(Exception): pass                                          # NoPartialContent
 def getChunk(url:str, sB:int, eB:int, timeout:float, retries:int) -> bytes: # start inclusive, end exclusive # getChunk
@@ -224,7 +224,7 @@ class _cat(BaseCli):                                                            
         header, _fIdx, _async = k1lib.kast.asyncGuard(self.capturedSerial._jsF(meta)) # _cat
         return f"""\
 {header}
-const {fIdx} = async ({dataIdx}) => {{
+{fIdx} = async ({dataIdx}) => {{
     if (typeof({dataIdx}) === "string") {{
         const res = await fetch({dataIdx}, {{ method: "GET" }})
         if (res.ok) return {'await ' if _async else ''}{_fIdx}(await res.text());
@@ -412,7 +412,7 @@ See also: :meth:`ls`
     f = _cat(text, chunks, sB, eB)                                               # cat
     if profile: f = f | Profile(text)                                            # cat
     return f if fileName is None else fileName | f                               # cat
-k1lib.settings.cli.cat.add("pickle", k1lib.Settings().add("safetyFactor", 2, "for when using `fn | (cat.pickle() | tail())` operation. Check out more docs at inp.catPickle() class"), "inp.cat.pickle() settings") # cat
+k1lib.settings.cli.cat.add("pickle", k1lib.Settings(), "inp.cat.pickle() settings") # cat
 class catPickle(BaseCli):                                                        # catPickle
     def __init__(self, pickleModule=None):                                       # catPickle
         """Reads a file as a series of pickled objects.
@@ -453,13 +453,6 @@ objects to a single file and it would still work as usual::
     and grab the object's size in bytes. This info is used to make guesses as to where
     it should start reading the file from, which is ``endByte - tail.n * object_size * 2``
 
-    That factor ``2`` is the safety factor, which should be a nice tradeoff between
-    being airtight and being fast, configurable using ``settings.cli.cat.pickle.safetyFactor = 2``.
-    This assumes that your objects are roughly similar in sizes. This of course, might
-    be broken by you and thus, you might see only 5 results returned when you asked for
-    10. In these scenarios, either increase the safetyFactor, or just don't use the
-    optimized version by getting rid of the parenthesis: ``fn | cat.pickle() | tail(10)``
-
     Also, this optimization has only been tested on :mod:`dill` and :mod:`pickle`.
     :mod:`cloudpickle` has been tested to not work (magic numbers are a little different).
     I can potentially add in a mechanism for you to specify magic numbers for any pickler
@@ -478,10 +471,15 @@ objects to a single file and it would still work as usual::
                 except EOFError: pass                                            # catPickle
         if len(self.capturedClis) >= 1:                                          # catPickle
             c0 = self.capturedClis[0]; s = os.path.getsize(fn)                   # catPickle
-            if isinstance(c0, cli.tail) and s > 1e6 and isinstance(c0.n, int) and c0.n > 0: # if less than 1MB then it's not worth optimizing! # catPickle
+            if isinstance(c0, cli.tail) and s > 1e4 and isinstance(c0.n, int) and c0.n > 0: # if less than 10kB then it's not worth optimizing! # catPickle
                 # figures out the size of the first element to guage the relative steps we need to take! # catPickle
-                with open(os.path.expanduser(fn), "rb") as f: s1 = len(pm.dumps(pm.load(f)))*k1lib.settings.cli.cat.pickle.safetyFactor # multiply by 2 for safety factor, to make sure we've included all the data required by tail()! # catPickle
-                return g((fn | cli.splitSeek(c=b"\x80\x04\x95", ws=[s-c0.n*s1, c0.n*s1]))[1] - 1) | self.capturedSerial # then execute the rest of the pipeline # catPickle
+                factor = 1.5                                                     # catPickle
+                while True:                                                      # catPickle
+                    with open(os.path.expanduser(fn), "rb") as f:                # catPickle
+                        s1 = len(pm.dumps(pm.load(f)))*factor                    # catPickle
+                    arr = list(g((fn | cli.splitSeek(c=b"\x80\x04\x95", ws=[s-c0.n*s1, c0.n*s1]))[1] - 1)) # catPickle
+                    if c0.n < len(arr): return arr | self.capturedSerial # then execute the rest of the pipeline # catPickle
+                    factor *= 1.5 # if guess too conservatively, then try again with a bigger factor! # catPickle
         return g() | self.capturedSerial                                         # catPickle
 def _catPickle(fileName=None, pickleModule=dill):                                # _catPickle
     """Reads a file as a series of pickled objects. See :class:`catPickle`"""    # _catPickle
@@ -781,6 +779,7 @@ found, else do nothing"""                                                       
     a = cmd(cliTool); None | a;                                                  # requireCli
     if len(a.err) > 0: raise ImportError(f"""Can't find cli tool {cliTool}. Please install it first.""") # requireCli
 class cmd(BaseCli):                                                              # cmd
+    _forked_num_mode3 = 0                                                        # cmd
     def __init__(self, cmd:str, mode:int=1, text=True, block=False): # 0: return (stdout, stderr). 1: return stdout, 2: return stderr # cmd
         """Runs a command, and returns the output line by line. Can pipe in some
 inputs. If no inputs then have to pipe in :data:`None`. Example::
@@ -855,7 +854,8 @@ Settings:
 - cli.quiet: if True, won't display errors in mode 1
 
 :param mode: if 0, returns ``(stdout, stderr)``. If 1, returns ``stdout`` and prints
-    ``stderr`` if there are any errors. If 2, returns ``stderr``
+    ``stderr`` if there are any errors. If 2, returns ``stderr``. If 3, daemonize
+    the process, returns nothing
 :param text: whether to decode the outputs into :class:`str` or return raw :class:`bytes`
 :param block: whether to wait for the task to finish before returning to Python or not""" # cmd
         super().__init__(); self.cmd = cmd; self.mode = mode                     # cmd
@@ -867,18 +867,20 @@ Settings:
     def __ror__(self, it:Union[None, str, bytes, Iterator[Any]]) -> Iterator[Union[str, bytes]]: # cmd
         """Pipes in lines of input, or if there's nothing to
 pass, then pass None"""                                                          # cmd
-        if not self.ro.done(): self.p, self.out, self.err = executeCmd(self.cmd, it, self.text); mode = self.mode # cmd
-        if self.block:                                                           # cmd
-            self.out = self.out | cli.deref()                                    # cmd
-            self.err = self.err | cli.deref()                                    # cmd
-        if mode == 0: return (self.out, self.err)                                # cmd
-        elif mode == 1:                                                          # cmd
-            threading.Thread(target=lambda: printStderr(self.err)).start()       # cmd
-            return self.out                                                      # cmd
-        elif mode == 2: return self.err                                          # cmd
+        if self.mode == 3: # this need so much time to get right, damn           # cmd
+            if it != None: raise Exception("cmd() has .mode = 3, which means it's executed as daemon, so it should not take in any input from stdin. Do `None | cmd(..., mode=3)` instead") # cmd
+            cwd = k1lib.settings.wd                                              # cmd
+            if os.fork() == 0:                                                   # cmd
+                with k1lib.ignoreWarnings(): subprocess.Popen(f"{self.cmd} >/dev/null 2>&1", shell=True, cwd=cwd, close_fds=True, preexec_fn=os.setpgrp).wait()#; subprocess.Popen(f'disown {p.pid}', shell=True) # cmd
+            else: cmd._forked_num_mode3 += 1; return None                        # cmd
+        else:                                                                    # cmd
+            if not self.ro.done(): mode = self.mode; self.p, self.out, self.err = executeCmd(self.cmd, it, self.text) # cmd
+            if self.block: self.out = self.out | cli.deref(); self.err = self.err | cli.deref() # cmd
+            if mode == 0: return (self.out, self.err)                            # cmd
+            elif mode == 1: threading.Thread(target=lambda: printStderr(self.err)).start(); return self.out # cmd
+            elif mode == 2: return self.err                                      # cmd
     def __gt__(self, it): return None | self | it                                # cmd
-    def __repr__(self):                                                          # cmd
-        return (None | self).__repr__()                                          # cmd
+    def __repr__(self): return (None | self).__repr__()                          # cmd
 class walk(BaseCli):                                                             # walk
     def __init__(self, **kwargs):                                                # walk
         """Recursively get all files inside a dictionary.
@@ -966,7 +968,7 @@ https://stackoverflow.com/questions/76452480/pythons-zlib-doesnt-work-on-commonc
             yield o.decompress(left + got); left = b''                           # decompressobj
             if o.eof: left = o.unused_data; o = zlib.decompressobj(zlib.MAX_WBITS|32) if gz else bz2.BZ2Decompressor() # decompressobj
             if len(got) == 0 and len(left) == 0: break                           # decompressobj
-stream_unzip = k1lib.dep("stream_unzip")                                         # decompressobj
+stream_unzip = k1lib.dep("stream_unzip", url="https://pypi.org/project/stream-unzip/") # decompressobj
 class decompressobjZip: # .zip files                                             # decompressobjZip
     def __ror__(self, it):                                                       # decompressobjZip
         for a, b, c in stream_unzip.stream_unzip(it): yield from c; return       # decompressobjZip
@@ -1029,7 +1031,7 @@ See also: :class:`kzip`.
         def gen(it): # generates a stream of bytes                               # kunzip
             it = iter(it); e = next(it)                                          # kunzip
             if e[:2] == b"\x1f\x8b": o = decompressobj(True) # .gz               # kunzip
-            elif e[:3] == b"BZh": o = decompressobj(False)    # .bz2             # kunzip
+            elif e[:3] == b"BZh": o = decompressobj(False)   # .bz2              # kunzip
             elif e[:2] == b"PK": o = decompressobjZip()      # .zip              # kunzip
             else: raise Exception("Can't infer the file type (whether gz or bz2) of this file") # kunzip
             yield from [[e], it] | cli.joinStreams() | o                         # kunzip

@@ -172,7 +172,7 @@ works. Example::
         ans = self._clone(); f = self._f; ans._f = lambda s: not f(s)            # grep
         ans.preInvGrep = self; ans.inverted = True; return ans                   # grep
     def _clone(self):                                                            # grep
-        answer = grep(self._f, self.before, self.after, self.N, self.sep, self.col) # grep
+        answer = grep(self.pattern, self.before, self.after, self.N, self.sep, self.col) # grep
         answer._tillF = self._tillF; answer.tillAfter = self.tillAfter; return answer # grep
     def _jsF(self, meta):                                                        # grep
         jsfGuard(self.before != 0, "before");  jsfGuard(self.after != 0, "after") # grep
@@ -182,7 +182,7 @@ works. Example::
         if not isinstance(self.pattern, str): raise Exception(f"grep._jsF() does not support pattern that's not a string") # grep
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto(); argIdx = init._jsDAuto(); p = self.pattern # grep
         for x,y in self.pattern | grep("\ue157", sep=True).till("\ue239") | cli.apply(cli.join("")) | cli.filt("x") | cli.apply(lambda x: [x, x.replace("\ue157", "${").replace("\ue239", "}")]): p = p.replace(x, y) # grep
-        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.grep(`{p}`, {{col: {cli.kjs.v(self.col)}, inv: {json.dumps(inverted)}}})", fIdx # grep
+        return f"{fIdx} = ({dataIdx}) => {dataIdx}.grep(`{p}`, {{col: {cli.kjs.v(self.col)}, inv: {json.dumps(inverted)}}})", fIdx # grep
 class grepTemplate(BaseCli):                                                     # grepTemplate
     def __init__(self, pattern:str, template:str):                               # grepTemplate
         """Searches over all lines, pick out the match, and expands

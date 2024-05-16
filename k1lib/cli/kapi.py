@@ -16,10 +16,12 @@ I can really focus on serving things well and make it performant. For example::
 
 
 """
-__all__ = ["status", "segment", "demo", "embed", "embeds", "complete", "ocr", "txt2im", "caption", "speech", "summarize", "post"]
+__all__ = ["status", "segment", "demo", "embed", "embeds", "complete",
+           "ocr", "Ocr", "OcrBox", "tess",
+           "txt2im", "caption", "speech", "summarize", "post"]
 from k1lib.cli.init import BaseCli; import k1lib.cli.init as init
 import k1lib.cli as cli, k1lib, base64, html, json
-requests = k1lib.dep("requests"); k1 = k1lib
+requests = k1lib.dep.requests; k1 = k1lib
 settings = k1lib.settings.cli
 s = k1lib.Settings(); settings.add("kapi", s, "cli.kapi settings")
 s.add("local", False, "whether to use local url instead of remote url. This only has relevance to me though, as the services are running on localhost")
@@ -32,7 +34,9 @@ Example::
 
 :param idx: index of the service, like "kapi/1-embed" """                        # get
     url = "http://localhost:9000" if s.local else "https://local.mlexps.com"     # get
-    res = requests.post(f"{url}/routeServer/{idx.replace('/', '_')}", json=json).json() # get
+    res = requests.post(f"{url}/routeServer/{idx.replace('/', '_')}", json=json) # get
+    if not res.ok: raise Exception(f"{res.status_code} - {res.reason}")          # get
+    res = res.json()                                                             # get
     if not res["success"]: raise Exception(res["reason"])                        # get
     return res["data"]                                                           # get
 def jsF_get(idx, dataIdx):                                                       # jsF_get
@@ -68,11 +72,16 @@ Example::
 
     # returns 21.0
     {"a": 3} | kapi.demo("demos/1-arith")
+    # builds js interface that displays 21.0
+    {"a": 3} | (toJsFunc() | kapi.demo("demos/1-arith")) | op().interface("jsone")
+    # same as above, but the dictionary is formed in JS instead of Python
+    3 | (toJsFunc() | aS("{'a': x}") | demo("demos/1-arith")) | op().interface("jsone")
 
-You don't have to specify all params, just the ones you want to deviate from the defaults
-"""                                                                              # demo
+You don't have to specify all params, just the ones you want to deviate from the defaults""" # demo
         prefix = prefix.replace(*"/_"); self.prefix = prefix                     # demo
-        if prefix not in metas: metas[prefix] = json.loads(requests.get(f"https://mlexps.com/{prefix.replace(*'_/')}/demo_meta.json").text) # demo
+        res = requests.get(f"https://mlexps.com/{prefix.replace(*'_/')}/demo_meta.json") # demo
+        if not res.ok: raise Exception(f"Demo {prefix.replace(*'_/')} not found!") # demo
+        if prefix not in metas: metas[prefix] = json.loads(res.text)             # demo
     def __ror__(self, d):                                                        # demo
         prefix = self.prefix; meta = metas[prefix]; kw = {}                      # demo
         for arg in meta["args"]:                                                 # demo
@@ -92,6 +101,31 @@ You don't have to specify all params, just the ones you want to deviate from the
         else: raise Exception(res["reason"])                                     # demo
     def __repr__(self): return f"<demo prefix='{self.prefix}'>"                  # demo
     def _repr_html_(self): s = html.escape(f"{self}"); return f"{s}{metas[self.prefix]['mainDoc']}" # demo
+    def _jsF(self, meta):                                                        # demo
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto(); prefix = self.prefix; prefixSlash = prefix.replace(*"_/") # demo
+        try: apiKey = k1lib.apiKey                                               # demo
+        except: apiKey = ''                                                      # demo
+        return f"""\
+{fIdx} = async ({dataIdx}) => {{
+    const meta = await (await fetch("https://mlexps.com/{prefixSlash}/demo_meta.json")).json();
+    const kw = {{}};
+    for (const arg of meta.args) {{
+        let a = meta.defaults[arg]; anno = meta.annos[arg];
+        if (["checkbox", "bytes", "image", "serialized"].includes(anno)) a = a;
+        else if (anno === "dropdown") a = a[1][a[0]];
+        else if (anno === "apiKey") a = "{apiKey}";
+        else a = a[0];
+        kw[arg] = a
+    }}
+    for (const [k,v] of Object.entries({dataIdx})) {{ kw[k] = v; }}
+    let res = await (await fetch("https://local.mlexps.com/routeServer/{prefix}", {{ method: "POST", headers: {{ "Content-Type": "application/json" }}, "body": JSON.stringify(kw) }})).text();
+    try {{ res = JSON.parse(res); }} catch (e) {{ throw new Error(`Can't decode json of '${{res}}'`); }}
+    if (!res.success) throw new Error(`Request failed: '${{res.reason}}'`);
+    let data = res.data;
+    if (meta.annos.return === "html") return atob(data);
+    if (meta.annos.return === "image") return `<img src="data:image;base64,${{data}}">`
+    return data;
+}}""", fIdx                                                                      # demo
 class embed(BaseCli):                                                            # embed
     def __init__(self):                                                          # embed
         """Gets an embedding vector for every sentence piped into this using `all-MiniLM-L6-v2`.
@@ -108,7 +142,7 @@ Example::
 See also: :class:`~k1lib.cli.models.embed`"""                                    # embed
         pass                                                                     # embed
     def __ror__(self, it): return self._all_opt([it]) | cli.item()               # embed
-    def _all_opt(self, it:list[str]):                                            # embed
+    def _all_opt(self, it:"list[str]"):                                          # embed
         for b in it | cli.batched(1024, True):                                   # embed
             yield from get("kapi/1-embed", {"lines": k1lib.encode(b)}) | cli.aS(k1lib.decode) # embed
 class embeds(BaseCli):                                                           # embeds
@@ -123,7 +157,7 @@ and then embeds each segment using :class:`embed`
 """                                                                              # embeds
         pass                                                                     # embeds
     def __ror__(self, it): return self._all_opt([it]) | cli.item()               # embeds
-    def _all_opt(self, it:list[str]): return it | cli.apply(segment(700) | cli.iden() & embed().all() | cli.transpose()) | cli.deref() # embeds
+    def _all_opt(self, it:"list[str]"): return it | cli.apply(segment(700) | cli.iden() & embed().all() | cli.transpose()) | cli.deref() # embeds
 class complete(BaseCli):                                                         # complete
     def __init__(self, prompt:str=None, maxTokens:int=200):                      # complete
         """Generates text from predefined prompts using `Llama 2`.
@@ -144,7 +178,7 @@ Example::
 See :class:`~k1lib.cli.models.complete`. That one is an older version using Google Flan T5 instead of llama 2""" # complete
         self.prompt = prompt; self.maxTokens = maxTokens                         # complete
     def __ror__(self, it): return self._all_opt([it]) | cli.item()               # complete
-    def _all_opt(self, it:list[str]):                                            # complete
+    def _all_opt(self, it:"list[str]"):                                          # complete
         if self.prompt: it = it | cli.apply(lambda x: f"{x}\n\n\n{self.prompt}: ") | cli.deref() # complete
         if not (isinstance(it, (list, tuple)) and isinstance(it[0], str)):       # complete
             raise Exception("You might have forgot to use .all(), like ['str1', 'str2'] | kapi.complete().all()") # complete
@@ -154,47 +188,58 @@ See :class:`~k1lib.cli.models.complete`. That one is an older version using Goog
         fIdx = cli.init._jsFAuto(); dataIdx = cli.init._jsDAuto()                # complete
         body = f"{{ prompts: JSON.stringify([{dataIdx}].map((x) => [`${{x}}\\n\\n\\n{self.prompt or ''}`, {cli.kjs.v(self.maxTokens)}])) }}" # complete
         return f"""
-const {fIdx} = async ({dataIdx}) => {{
+{fIdx} = async ({dataIdx}) => {{
     const res = {jsF_get('kapi/2-complete', body)}
     return res[0]
 }}""", fIdx                                                                      # complete
 tf = k1.dep("torchvision.transforms")                                            # complete
 class ocr(BaseCli):                                                              # ocr
-    def __init__(self, paragraph:bool=False, resize=True):                       # ocr
+    def __init__(self, paragraph:bool=False, resize=True, bs:int=10):            # ocr
         """Do OCR (optical character recognition) on some image.
 Example::
 
     o = "some_image.png" | toImg() | kapi.ocr() # loads image and do OCR on them
-    o.result
+    o     # run this in a separate notebook cell for an overview of where the boxes are
+    o.res # see raw results received from the OCR service
 
 That returns something like this::
 
-    [[[686, 718, 4, 12], 'palng', 0.037828799456428475],
-     [[53, 89, 9, 29], '150', 0.9862767603969035],
-     [[146, 208, 6, 30], '51,340', 0.8688367610346406],
-     [[695, 723, 13, 33], '83', 0.9999892947172615],
-     [[783, 855, 13, 29], 'UPGRADes', 0.6299456305919845],
-     [[783, 855, 47, 61], 'Monkey Ace', 0.7461469463088448],
-     [[827, 863, 117, 133], '5350', 0.9847457394951422],
-     [[775, 809, 181, 195], '6325', 0.9660267233848572],
-     [[827, 863, 181, 195], 's500', 0.24643410742282867],
-     [[773, 811, 243, 259], '5800', 0.5125586986541748],
-     [[823, 869, 243, 259], '01600', 0.22119118148432848],
-     [[775, 809, 303, 321], '5750', 0.7384281754493713],
-     [[827, 861, 305, 321], '5850', 0.6789041403197309]]
+    [[[771, 5, 813, 17], 'round', 0.7996242908503107],
+     [[58, 10, 100, 34], '150', 0.883547306060791],
+     [[166, 8, 234, 34], '51,340', 0.9991665158446097],
+     [[782, 14, 814, 38], '83', 0.9999995785315409],
+     [[879, 13, 963, 33], 'UPGRADes', 0.7625563055298393],
+     [[881, 53, 963, 69], 'Monkey Ace', 0.9171751588707685],
+     [[933, 133, 971, 149], '5350', 0.9001984000205994],
+     [[873, 203, 911, 219], '5325', 0.481669545173645],
+     [[931, 203, 971, 219], '5500', 0.7656491994857788],
+     [[869, 271, 913, 291], 'G800', 0.31933730840682983],
+     [[925, 271, 977, 291], '64600', 0.14578145924474253],
+     [[871, 341, 911, 361], '5750', 0.5966295003890991],
+     [[929, 341, 971, 361], '5850', 0.9974847435951233]]
 
-This is the main way to use this tool. But you might want to have a quick glance
-to judge the performance of the OCR, then you can do ``img | kapi.ocr(True)``,
-which returns a PIL image with highlighted bounding boxes.
+First column is the bounding box (x1, y1, x2, y2), second column is the text,
+and third column is the confidence, from 0 to 1.
+
+Internally, this uses EasyOCR for the recognition. However, from my experience,
+this doesn't always get it right. It's particularly bad at symbols like dollar
+signs (it thinks it's "S", or "5" instead), periods or commads. So, you can refine
+each of the bounding boxes like this::
+
+    ocr = someImg | kapi.ocr()
+    ocr[4] | toImg() | kapi.tess() # returns string, uses tesseract OCR instead of EasyOCR for more accuracy for a less complex scene
+
+See also: :class:`Ocr`
 
 - VRAM: 1GB
-- Throughput: depends heavily on image resolution
+- Throughput: depends heavily on image resolution, but for 1000x750 images, should be 3-4 images/s
 
 :param paragraph: whether to try to combine boxes together or not
-:param resize: whether to resize the images to a reasonable size before sending it over or not. Runs faster if true""" # ocr
-        self.paragraph = paragraph; self.resize = resize                         # ocr
+:param resize: whether to resize the images to a reasonable size before sending it over or not. Runs faster if true
+:param bs: how many images should this group together and send to the server at once?""" # ocr
+        self.paragraph = paragraph; self.resize = resize; self.bs = bs           # ocr
     def __ror__(self, it): return self._all_opt([it]) | cli.item()               # ocr
-    def _all_opt(self, it:list["PIL"]):                                          # ocr
+    def _all_opt(self, it:"list[PIL.Image.Image]"):                              # ocr
         def resize(it): # resizing if they're too big                            # ocr
             for img in it:                                                       # ocr
                 w, h = img | cli.shape()                                         # ocr
@@ -203,23 +248,81 @@ which returns a PIL image with highlighted bounding boxes.
                 else:                                                            # ocr
                     if h > 1000: frac = 1000/h; img = img | tf.Resize([int(h*frac), int(w*frac)]) # ocr
                 yield img, self.paragraph                                        # ocr
-        return (resize(it) if self.resize else it | cli.apply(lambda img: [img, self.paragraph])) | cli.batched(10, True)\
+        return (resize(it) if self.resize else it | cli.apply(lambda img: [img, self.paragraph])) | cli.batched(self.bs, True)\
             | cli.apply(lambda imgParas: [imgParas, get("kapi/3-ocr", {"data": k1.encode(imgParas | cli.apply(cli.toBytes(), 0) | cli.deref())}) | cli.aS(k1.decode)] | cli.transpose()) | cli.joinSt() | ~cli.apply(Ocr) # ocr
 class Ocr:                                                                       # Ocr
     def __init__(self, imgPara, res):                                            # Ocr
-        """Ocr result object. Stores raw results from model in ``.result`` field and has many more functionalities""" # Ocr
-        self.img, self.para = imgPara; self.res = res                            # Ocr
-    @property                                                                    # Ocr
-    def result(self): return self.res                                            # Ocr
+        """Ocr result object. Stores raw results from model in ``.res`` field and has many
+more functionalities. Not intended to be instantiated by the end user. Example::
+
+    ocr = someImg | kapi.ocr() # ocr is an object of type Ocr
+    ocrBox = ocr[3] # grabs the 3rd detected bounding box
+
+    ocrBox.coords     # grabs coordinates
+    ocrBox.text       # grabs recognized text
+    ocrBox.confidence # grabs confidence
+
+    ocrBox | toImg()               # grabs image cutout
+    ocrBox | toNdArray()           # grabs numpy array cutout
+    ocrBox | toImg() | kapi.tess() # returns string, pass the image through tesseract OCR, to get more reliable results
+
+See also: :class:`OcrBox`"""                                                     # Ocr
+        self.img, self.para = imgPara; self._npImg = None; self.res = res | cli.apply(~cli.aS(lambda x1,x2,y1,y2: [x1,y1,x2,y2]), 0) | cli.deref() # Ocr
+    def npImg(self):                                                             # Ocr
+        """Grabs the numpy array of the image, shape (C, H, W)"""                # Ocr
+        if self._npImg is None: self._npImg = self.img | cli.toNdArray()         # Ocr
+        return self._npImg                                                       # Ocr
     def __repr__(self): return f"<Ocr shape={self.img | cli.shape()}>"           # Ocr
     def _overlay(self) -> "PIL":                                                 # Ocr
         img = self.img; res = self.res; p5 = k1.p5; w, h = img | cli.shape(); p5.newSketch(*img | cli.shape()); p5.background(255); p5.fill(255, 0) # Ocr
-        res | cli.cut(0) | ~cli.apply(lambda x1,x2,y1,y2: [x1,h-y2,x2-x1,y2-y1]) | ~cli.apply(p5.rect) | cli.deref() # Ocr
-        res | cli.cut(0, 1) | ~cli.apply(lambda x1,x2,y1,y2: [min(x1,x2), h-max(y1,y2)], 0) | ~cli.apply(lambda xy,s: [s,*xy]) | ~cli.apply(p5.text) | cli.deref() # Ocr
+        res | cli.cut(0) | ~cli.apply(lambda x1,y1,x2,y2: [x1,h-y2,x2-x1,y2-y1]) | ~cli.apply(p5.rect) | cli.deref() # Ocr
+        res | cli.cut(0, 1) | ~cli.apply(lambda x1,y1,x2,y2: [min(x1,x2), h-max(y1,y2)], 0) | ~cli.apply(lambda xy,s: [s,*xy]) | ~cli.apply(p5.text) | cli.deref() # Ocr
         im2 = p5.img(); alpha = 0.3; return [img, im2] | cli.apply(cli.toTensor() | cli.op()[:3]) | ~cli.aS(lambda x,y: x*alpha+y*(1-alpha)) | cli.op().to(int) | cli.op().permute(1, 2, 0) | cli.toImg() # Ocr
     def _repr_html_(self): s = html.escape(f"{self}"); return f"<pre>{s}</pre><img src='data:image/jpeg;base64, {base64.b64encode(self._overlay() | cli.toBytes()).decode()}' />" # Ocr
-    def __getstate__(self): d = {**self.__dict__}; d["img"] = self.img | cli.toBytes(); return d # better compression due to converting to jpg # Ocr
-    def __setstate__(self, d): self.__dict__.update(d); self.img = self.img | cli.toImg() # Ocr
+    def __getitem__(self, s):                                                    # Ocr
+        if isinstance(s, slice): return [OcrBox(self, i) for i in range(len(self.res))[s]] # Ocr
+        return OcrBox(self, s)                                                   # Ocr
+    def __len__(self): return len(self.res)                                      # Ocr
+    def __getstate__(self): d = {**self.__dict__}; d["img"] = self.img | cli.toBytes(); d["_npImg"] = None; return d # better compression due to converting to jpg # Ocr
+    def __setstate__(self, d): self.__dict__.update(d); self.img = self.img | cli.toImg(); self._npImg = None # Ocr
+class OcrBox:                                                                    # OcrBox
+    def __init__(self, ocr, i):                                                  # OcrBox
+        """1 bounding box of the ocr-ed image. Not intended to be instantiated by the end user.
+Example::
+
+    ocr = someImg | kapi.ocr()
+    ocrBox = ocr[3] # grabs the 3rd detected bounding box
+
+See also: :class:`Ocr`"""                                                        # OcrBox
+        self.ocr = ocr; self.i = i                                               # OcrBox
+    @property                                                                    # OcrBox
+    def coords(self): return self.ocr.res[self.i][0]                             # OcrBox
+    @property                                                                    # OcrBox
+    def text(self): return self.ocr.res[self.i][1]                               # OcrBox
+    @property                                                                    # OcrBox
+    def confidence(self): return self.ocr.res[self.i][2]                         # OcrBox
+    def _toNdArray(self):                                                        # OcrBox
+        x1,y1,x2,y2 = self.ocr.res[self.i][0]                                    # OcrBox
+        return self.ocr.npImg()[:,y1:y2,x1:x2]                                   # OcrBox
+    def _toImg(self, **kwargs): return self._toNdArray().transpose((1, 2, 0)) | cli.toImg() # OcrBox
+    def __repr__(self): return f"<OcrBox i={self.i} coords={self.coords} confidence={round(self.confidence, 3)} text='{self.text}' />" # OcrBox
+    def _repr_html_(self): s = html.escape(f"{self}"); return f"<pre>{s}</pre><img src='data:image/jpeg;base64, {base64.b64encode(self | cli.toImg() | cli.toBytes()).decode()}' />" # OcrBox
+init.addAtomic(Ocr); init.addAtomic(OcrBox)                                      # OcrBox
+class tess(BaseCli):                                                             # tess
+    def __init__(self):                                                          # tess
+        """Do OCR using tesseract, instead of easyocr. This is meant for simple images only,
+preferably sections cut off from :class:`ocr`. For complex bounding box detection, still
+use :class:`ocr`. Example::
+
+    # returns "some text"
+    image | kapi.tess()
+
+For small texts, can reach throughput up to 75/s"""                              # tess
+        pass                                                                     # tess
+    def __ror__(self, it): return self._all_opt([it]) | cli.item()               # tess
+    def _all_opt(self, it:"list[str]"):                                          # tess
+        for b in it | cli.batched(75, True):                                     # tess
+            yield from get("kapi/12-tess", {"imgs": k1lib.encode(b)})            # tess
 class txt2im(BaseCli):                                                           # txt2im
     def __init__(self, num_inference_steps=10):                                  # txt2im
         """Generates images from text descriptions, using stable diffusion v2.
@@ -245,7 +348,7 @@ Example::
 """                                                                              # caption
         pass                                                                     # caption
     def __ror__(self, it): return self._all_opt([it]) | cli.item()               # caption
-    def _all_opt(self, it:list["PIL"]): return get("kapi/5-caption", {"images": k1lib.encode(it)}) | cli.aS(k1lib.decode) # caption
+    def _all_opt(self, it:"list[PIL.Image.Image]"): return it | cli.batched(5, True) | cli.apply(lambda imgs: get("kapi/5-caption", {"images": k1lib.encode(imgs)}) | cli.aS(k1lib.decode)) | cli.joinSt() # caption
 class speech(BaseCli):                                                           # speech
     def __init__(self, sep=False):                                               # speech
         """Converts English speech to text using whisper-large-v2.
@@ -321,7 +424,7 @@ directly, as get requests don't have a body::
     def _jsF(self, meta):                                                        # post
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # post
         return f"""\
-const {fIdx} = async ({dataIdx}) => {{
+{fIdx} = async ({dataIdx}) => {{
     const res = await fetch({json.dumps(self.url)}, {{ method: "POST", headers: {{ "Content-Type": "application/json" }}, body: JSON.stringify({dataIdx}) }});
     if (res.ok) return await res.text();
     throw new Error(`Can't send POST request to '{self.url}': ${{res.status}} - ${{res.statusText}}`);

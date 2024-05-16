@@ -106,7 +106,11 @@ Submodules
    graphEqn
    imports
    mo
+   kast
+   kcom
    knn
+   kop
+   kws
    p5
    schedule
    selector
@@ -114,6 +118,7 @@ Submodules
    serpent
    serve
    viz
+   zircon
 
 .. toctree::
    :hidden:

@@ -8,9 +8,11 @@ automatically with::
 """
 import k1lib, math, re; from k1lib import cli
 from typing import Dict, Iterator, Tuple
-pygments = k1lib.dep("pygments")
-__all__ = ["generic", "metricPrefixes", "size", "fromSize", "sizeOf",
-           "comp", "compRate", "time", "item", "throughput", "txt", "code", "h", "pre", "row", "col", "colors", "rmAnsi"]
+pygments = k1lib.dep.pygments; bs4 = k1lib.dep.bs4
+__all__ = ["generic", "metricPrefixes", "size", "fromSize", "scale", "fromScale", "dollar", "sizeOf",
+           "comp", "compRate", "time", "item", "throughput", "txt",
+           "js", "py", "html", "sql", "cpp", "java", "php", "ruby",
+           "h", "pre", "row", "col", "colors", "rmAnsi"]
 k1lib.settings.add("fmt", k1lib.Settings().add("separator", True, "whether to have a space between the number and the unit"), "from k1lib.fmt module");
 settings = k1lib.settings.fmt
 metricPrefixes = {-8:"y",-7:"z",-6:"a",-5:"f",-4:"p",-3:"n",-2:"u",-1:"m",0:"",1:"k",2:"M",3:"G",4:"T",5:"P",6:"E",7:"Z",8:"Y"}
@@ -22,7 +24,19 @@ def generic(x, units:Dict[int, str]):                                           
         if abs(x) < upperBound:                                                  # generic
             return f"{round(1e3*x/upperBound, 2)}{c}{unit}"                      # generic
     return (f"{round(1e3*x/upperBound, 2)}{c}{unit}").strip()                    # generic
-sizes = {i: f"{p}B" for i, p in metricPrefixes.items() if i >= 0}; #sizes[0] = "bytes" # generic
+def _jsF_generic(units):                                                         # _jsF_generic
+    def inner(meta):                                                             # _jsF_generic
+        fIdx = cli.init._jsFAuto(); dataIdx = cli.init._jsDAuto(); unitsIdx = cli.init._jsDAuto() # _jsF_generic
+        return f"""
+{unitsIdx} = {[list(x) for x in units.items()]};
+{fIdx} = ({dataIdx}) => {{
+    for (const e of {unitsIdx}) {{
+        const upperBound = 1000 * 1000**e[0];
+        if (Math.abs({dataIdx}) < upperBound) return `${{Math.round(1e3*{dataIdx}/upperBound*100)/100}}{' ' if settings.separator else ''}${{e[1]}}`;
+    }}
+}}""", fIdx                                                                      # _jsF_generic
+    return inner                                                                 # _jsF_generic
+sizes = {i: f"{p}B" for i, p in metricPrefixes.items() if i >= 0}; #sizes[0] = "bytes" # _jsF_generic
 def size(_bytes=0):                                                              # size
     """Formats disk size.
 Example::
@@ -33,17 +47,53 @@ Example::
     fmt.size(1.2e7)
 """                                                                              # size
     return generic(_bytes, sizes)                                                # size
+k1lib.settings.cli.kjs.jsF[size] = _jsF_generic(sizes)                           # size
 sizeInv = {"k": 1e3, "m": 1e6, "g": 1e9, "t": 1e12, "p": 1e15, "e": 1e18, "z": 1e21, "y": 1e24} # size
 def fromSize(s:str) -> int: # this is ugly I know, doesn't fit well into others. But making a generalized version seems hard, and I just need this right now # fromSize
     """Grabs size from string representation.
 Example::
 
-    fromSize("31.5k") # returns 31500
-    fromSize("31.5kB") # also returns 31500
+    fmt.fromSize("31.5k") # returns 31500
+    fmt.fromSize("31.5kB") # also returns 31500
 """                                                                              # fromSize
     s = s.lower().replace(" ", "").rstrip("b"); ch = s[-1]                       # fromSize
     if ch in sizeInv: return int(float(s[:-1])*sizeInv[ch])                      # fromSize
     return int(s)                                                                # fromSize
+scalePostfixes = {0: '', 1: 'thousand', 2: 'million', 3: 'billion', 4: 'trillion', 5: 'quadrillion', 6: 'quintillion', 7: 'sextillion', 8: 'septillion', 9: 'octillion', 10: 'nonillion', 11: 'decillion', 12: 'undecillion', 13: 'duodecillion', 14: 'tredecillion', 15: 'quattuordecillion', 16: 'quindecillion', 17: 'sexdecillion', 18: 'septendecillion', 19: 'octodecillion', 20: 'novemdecillion', 21: 'vigintillion', 22: 'unvigintillion', 23: 'duovigintillion', 24: 'trevigintillion', 25: 'quattuorvigintillion', 26: 'quinvigintillion', 27: 'sexvigintillion', 28: 'septenvigintillion', 29: 'octovigintillion', 30: 'novemvigintillion', 31: 'trigintillion', 32: 'untrigintillion', 33: 'duotrigintillion'} # fromSize
+def scale(n:0):                                                                  # scale
+    """Formats regular number with 'thousands', 'millions' and so on.
+Example::
+
+    fmt.scale(13_500) # returns '13.5 thousand'
+
+This works from 10^0 to 10^99"""                                                 # scale
+    return generic(n, scalePostfixes)                                            # scale
+scaleInv = {x:10**(x*3.0) for x in scalePostfixes.keys()}                        # scale
+def fromScale(s:str):                                                            # fromScale
+    """Grab number from string representation.
+Example::
+
+    fmt.fromScale("13.5 thousand") # returns 13500.0
+
+This works from 10^0 to 10^99"""                                                 # fromScale
+    s = s.lower()                                                                # fromScale
+    for x,y in reversed(scalePostfixes.items()):                                 # fromScale
+        if y in s: return float(s.replace(y, ""))*scaleInv[x]                    # fromScale
+    return float(s)                                                              # fromScale
+dollars = {i: f"{p}$" for i, p in metricPrefixes.items() if i >= 0}; #sizes[0] = "bytes" # fromScale
+def dollar(_dollar=0):                                                           # dollar
+    """Formats dollar.
+Example::
+
+    # returns '50.0 $'
+    fmt.dollar(50)
+    # returns '12.0 M$'
+    fmt.dollar(1.2e7)
+
+I know this format looks kinda terrible, instead of "million" or "billion"
+written out loud, but that's long, so let's still do the short metric prefix"""  # dollar
+    return generic(_dollar, dollars)                                             # dollar
+k1lib.settings.cli.kjs.jsF[dollar] = _jsF_generic(dollars)                       # dollar
 def sizeOf(l:Iterator[float]) -> Tuple[str, Iterator[float]]:                    # sizeOf
     """Figures out appropriate scale, scales back the Iterator, and return both.
 Example::
@@ -68,6 +118,7 @@ Example::
     fmt.computation(5e7)
 """                                                                              # comp
     return generic(flop, computations)                                           # comp
+k1lib.settings.cli.kjs.jsF[comp] = _jsF_generic(computations)                    # comp
 computationRates = {i: f"{p}FLOPS" for i, p in metricPrefixes.items() if i >= 0} # comp
 def compRate(flops=0):                                                           # compRate
     """Formats computation rate.
@@ -79,6 +130,7 @@ Example::
     fmt.computationRate(5e7)
 """                                                                              # compRate
     return generic(flops, computationRates)                                      # compRate
+k1lib.settings.cli.kjs.jsF[compRate] = _jsF_generic(computationRates)            # compRate
 times = {i:f"{p}s" for i, p in metricPrefixes.items() if i <= 0}                 # compRate
 def time(seconds=0):                                                             # time
     """Formats small times.
@@ -90,6 +142,7 @@ Example::
     fmt.time(1e-5) # returns "10.0 us"
 """                                                                              # time
     return generic(seconds, times)                                               # time
+k1lib.settings.cli.kjs.jsF[time] = _jsF_generic(times)                           # time
 items = {0: "", 1: "k", 2: "M", 3: "B", 4: "T"}                                  # time
 def item(n=0):                                                                   # item
     """Formats generic item.
@@ -101,6 +154,7 @@ Example::
     fmt.item(5e5)
 """                                                                              # item
     return generic(n, items)                                                     # item
+k1lib.settings.cli.kjs.jsF[item] = _jsF_generic(items)                           # item
 def throughput(n, unit=""):                                                      # throughput
     """Formats item throughput.
 Example::
@@ -157,19 +211,32 @@ Example::
     def underline(s:str): return f"{_esc}4m{s}{_end}"                            # txt
     @staticmethod                                                                # txt
     def identity(s:str):  return f"{s}"                                          # txt
-class code:                                                                      # code
-    def python(code:str):                                                        # code
-        """Formats Python code.
-Example::
-
-    fmt.code.python(\"\"\"
-    def f(x:int):
-        return x + 3
-    \"\"\") | aS(IPython.display.HTML)
-"""                                                                              # code
-        a = "<style>" + pygments.formatters.HtmlFormatter().get_style_defs(".highlight") + "</style>" # code
-        b = pygments.highlight(code, pygments.lexers.PythonLexer(), pygments.formatters.HtmlFormatter()) # code
-        return a + b                                                             # code
+def pygmentsCss(): return "<style>" + pygments.formatters.HtmlFormatter().get_style_defs(".highlight") + "</style>" # pygmentsCss
+def js(s:str) -> str:                                                            # js
+    """Makes javascript code pretty, returns html"""                             # js
+    return k1lib.viz.Html(pygmentsCss() + pygments.highlight(s, pygments.lexers.JavascriptLexer(), pygments.formatters.HtmlFormatter())) # js
+def py(s:str) -> str:                                                            # py
+    """Makes python code pretty, returns html"""                                 # py
+    return k1lib.viz.Html(pygmentsCss() + pygments.highlight(s, pygments.lexers.PythonLexer(), pygments.formatters.HtmlFormatter())) # py
+def html(s:str) -> str:                                                          # html
+    """Makes html code pretty, returns html"""                                   # html
+    s = bs4.BeautifulSoup(s, 'html.parser').prettify()                           # html
+    return k1lib.viz.Html(pygmentsCss() + pygments.highlight(s, pygments.lexers.HtmlLexer(), pygments.formatters.HtmlFormatter())) # html
+def sql(s:str) -> str:                                                           # sql
+    """Makes sql code pretty, returns html"""                                    # sql
+    return k1lib.viz.Html(pygmentsCss() + pygments.highlight(s, pygments.lexers.SqlLexer(), pygments.formatters.HtmlFormatter())) # sql
+def cpp(s:str) -> str:                                                           # cpp
+    """Makes cpp code pretty, returns html"""                                    # cpp
+    return k1lib.viz.Html(pygmentsCss() + pygments.highlight(s, pygments.lexers.CLexer(), pygments.formatters.HtmlFormatter())) # cpp
+def java(s:str) -> str:                                                          # java
+    """Makes java code pretty, returns html"""                                   # java
+    return k1lib.viz.Html(pygmentsCss() + pygments.highlight(s, pygments.lexers.JavaLexer(), pygments.formatters.HtmlFormatter())) # java
+def php(s:str) -> str:                                                           # php
+    """Makes php code pretty, returns html"""                                    # php
+    return k1lib.viz.Html(pygmentsCss() + pygments.highlight(s, pygments.lexers.PhpLexer(), pygments.formatters.HtmlFormatter())) # php
+def ruby(s:str) -> str:                                                          # ruby
+    """Makes ruby code pretty, returns html"""                                   # ruby
+    return k1lib.viz.Html(pygmentsCss() + pygments.highlight(s, pygments.lexers.RubyLexer(), pygments.formatters.HtmlFormatter())) # ruby
 def h(code:str, level:int=1) -> str:                                             # h
     """Wraps content inside a 'h' html tag.
 Example::
@@ -180,7 +247,7 @@ Example::
     return f"<h{level}>{code}</h{level}>"                                        # h
 def _jsF_h(meta, level=3):                                                       # _jsF_h
     fIdx = cli.init._jsFAuto(); dataIdx = cli.init._jsDAuto()                    # _jsF_h
-    return f"const {fIdx} = ({dataIdx}) => `<h{level}>${{{dataIdx}}}</h{level}>`", fIdx # _jsF_h
+    return f"{fIdx} = ({dataIdx}) => `<h{level}>${{{dataIdx}}}</h{level}>`", fIdx # _jsF_h
 k1lib.settings.cli.kjs.jsF[h] = _jsF_h                                           # _jsF_h
 def pre(code:str, extras:str="") -> str:                                         # pre
     """Wraps content inside a 'pre' html tag.
@@ -191,7 +258,7 @@ Example::
     return f"<pre style='font-family: monospace' {extras} >{code}</pre>"         # pre
 def _jsF_pre(meta):                                                              # _jsF_pre
     fIdx = cli.init._jsFAuto(); dataIdx = cli.init._jsDAuto()                    # _jsF_pre
-    return f"const {fIdx} = ({dataIdx}) => `<pre style='font-family: monospace'>${{{dataIdx}}}</pre>`", fIdx # _jsF_pre
+    return f"{fIdx} = ({dataIdx}) => `<pre style='font-family: monospace'>${{{dataIdx}}}</pre>`", fIdx # _jsF_pre
 k1lib.settings.cli.kjs.jsF[pre] = _jsF_pre                                       # _jsF_pre
 def col(args, margin=10):                                                        # col
     """Creates a html col of all the elements.
@@ -204,8 +271,8 @@ def _jsF_col(meta, margin=10):                                                  
     fIdx = cli.init._jsFAuto(); dataIdx = cli.init._jsDAuto()                    # _jsF_col
     fIdx2 = cli.init._jsFAuto(); dataIdx2 = cli.init._jsDAuto()                  # _jsF_col
     return f"""
-const {fIdx2} = ({dataIdx2}) => `<div style='margin: {margin}px'>${{{dataIdx2}}}</div>`
-const {fIdx}  = ({dataIdx})  => `<div style='display: flex; flex-direction: column'>${{{dataIdx}.map({fIdx2}).join('')}}</div>`
+{fIdx2} = ({dataIdx2}) => `<div style='margin: {margin}px'>${{{dataIdx2}}}</div>`
+{fIdx}  = ({dataIdx})  => `<div style='display: flex; flex-direction: column'>${{{dataIdx}.map({fIdx2}).join('')}}</div>`
     """, fIdx                                                                    # _jsF_col
 k1lib.settings.cli.kjs.jsF[col] = _jsF_col                                       # _jsF_col
 def row(args, margin=10):                                                        # row
@@ -219,8 +286,8 @@ def _jsF_row(meta, margin=10):                                                  
     fIdx = cli.init._jsFAuto(); dataIdx = cli.init._jsDAuto()                    # _jsF_row
     fIdx2 = cli.init._jsFAuto(); dataIdx2 = cli.init._jsDAuto()                  # _jsF_row
     return f"""
-const {fIdx2} = ({dataIdx2}) => `<div style='margin: {margin}px'>${{{dataIdx2}}}</div>`
-const {fIdx}  = ({dataIdx})  => `<div style='display: flex; flex-direction: row'>${{{dataIdx}.map({fIdx2}).join('')}}</div>`
+{fIdx2} = ({dataIdx2}) => `<div style='margin: {margin}px'>${{{dataIdx2}}}</div>`
+{fIdx}  = ({dataIdx})  => `<div style='display: flex; flex-direction: row'>${{{dataIdx}.map({fIdx2}).join('')}}</div>`
     """, fIdx                                                                    # _jsF_row
 k1lib.settings.cli.kjs.jsF[row] = _jsF_row                                       # _jsF_row
 settings.add("colors", ["#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#80b1d3", "#fdb462", "#b3de69", "#fccde5", "#d9d9d9", "#bc80bd", "#ccebc5", "#ffed6f"], "List of colors to cycle through in fmt.colors()") # _jsF_row

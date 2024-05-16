@@ -4,8 +4,8 @@
 """
 from typing import Callable, Iterator, Tuple, Union, Dict, Any, List
 from k1lib import isNumeric; import k1lib, contextlib, warnings
-import random, math, sys, io, os, numpy as np
-plt = k1lib.dep("matplotlib.pyplot")
+import random, math, sys, io, os, numpy as np, functools
+plt = k1lib.dep.plt
 try: import torch; hasTorch = True
 except: hasTorch = False
 __all__ = ["Object", "Range", "Domain", "AutoIncrement", "Wrapper", "Every",
@@ -419,7 +419,7 @@ it gets incremented by 1 automatically. Example::
     @staticmethod                                                                # AutoIncrement
     def random() -> "AutoIncrement":                                             # AutoIncrement
         """Creates a new AutoIncrement object that has a random integer initial value""" # AutoIncrement
-        return AutoIncrement(random.randint(0, 1e9))                             # AutoIncrement
+        return AutoIncrement(random.randint(0, int(1e9)))                        # AutoIncrement
     @property                                                                    # AutoIncrement
     def value(self):                                                             # AutoIncrement
         """Get the value as-is, without auto incrementing it"""                  # AutoIncrement
@@ -470,7 +470,7 @@ You can also pipe into it like this:
 """                                                                              # Wrapper
         self.value = value                                                       # Wrapper
     def __call__(self): return self.value                                        # Wrapper
-    def __ror__(self, it): self.value = it; return self                          # Wrapper
+    def __ror__(self, it): return Wrapper(it)                                    # Wrapper
 class Every:                                                                     # Every
     def __init__(self, n):                                                       # Every
         """Returns True every interval.
@@ -702,16 +702,14 @@ absorbed. Example::
             ss = x; values = {}                                                  # Absorber
             for (opcode, *o), *_ in s:                                           # Absorber
                 if opcode == "__call__":                                         # Absorber
-                    va = opcodeAuto(); vk = opcodeAuto()                         # Absorber
-                    values[va], values[vk] = o[0]                                # Absorber
-                    ss = f"({ss}(*{va}, **{vk}))"                                # Absorber
+                    va = opcodeAuto(); hasArgs = len(o[0][0]) > 0; vk = opcodeAuto(); hasKwargs = len(o[0][1]) > 0 # Absorber
+                    if hasArgs: values[va] = o[0][0] # if don't have args or kwargs, then don't include it in the compiled expression. This is important for the js transpiler in kjs # Absorber
+                    if hasKwargs: values[vk] = o[0][1]                           # Absorber
+                    _a = ", ".join([*([f"*{va}"] if hasArgs else []), *([f"**{vk}"] if hasKwargs else [])]); ss = f"({ss}({_a}))" # Absorber
                 elif len(o) > 0:                                                 # Absorber
                     varname = opcodeAuto(); v = o[0]                             # Absorber
-                    if isinstance(v, (int, float)):                              # Absorber
-                        ss = jitOpcodes[opcode](ss, v)                           # Absorber
-                    else:                                                        # Absorber
-                        values[varname] = v                                      # Absorber
-                        ss = jitOpcodes[opcode](ss, varname)                     # Absorber
+                    if isinstance(v, (int, float)): ss = jitOpcodes[opcode](ss, v) # Absorber
+                    else: values[varname] = v; ss = jitOpcodes[opcode](ss, varname) # Absorber
                 else: ss = jitOpcodes[opcode](ss)                                # Absorber
             return [f"lambda {x}: {ss}", values]                                 # Absorber
         except Exception as e: pass                                              # Absorber
@@ -837,7 +835,7 @@ Example::
     print(s) # prints nested settings nicely"""                                  # Settings
         self._setattr_sentinel = True                                            # Settings
         for k, v in kwargs.items(): setattr(self, k, v)                          # Settings
-        self._docs = dict(); self._cbs = dict()                                  # Settings
+        self._docs = dict(); self._cbs = dict(); self._sensitives = dict(); self._envs = dict() # Settings
         self._setattr_sentinel = False                                           # Settings
     @contextlib.contextmanager                                                   # Settings
     def context(self, **kwargs):                                                 # Settings
@@ -863,7 +861,7 @@ to all sub-settings. Example::
                 yield                                                            # Settings
         finally:                                                                 # Settings
             for k, v in oldValues.items(): setattr(self, k, v)                   # Settings
-    def add(self, k:str, v:Any, docs:str="", cb:Callable[["Settings", Any], None]=None) -> "Settings": # Settings
+    def add(self, k:str, v:Any, docs:str="", cb:Callable[["Settings", Any], None]=None, sensitive:bool=False, env:str=None) -> "Settings": # Settings
         """Long way to add a variable. Advantage of this is that you can slip in extra
 documentation for the variable. Example::
 
@@ -871,11 +869,28 @@ documentation for the variable. Example::
     s.add("a", 3, "some docs")
     print(s) # displays the extra docs
 
-:param cb: callback that takes in (settings, new value) if any property changes""" # Settings
-        setattr(self, k, v); self._docs[k] = docs                                # Settings
-        self._cbs[k] = cb; return self                                           # Settings
-    def _docsOf(self, k:str):                                                    # Settings
-        return f"{self._docs[k]}" if k in self._docs else ""                     # Settings
+You can also specify that a variable should load from the environment variables::
+
+    s = k1lib.Settings()
+    s.add("a", "/this/path/will:/be/overridden", env="PATH")
+    s.a # will returns a string that might look like "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games"
+
+You can specify a transform function if you want to::
+
+    s = k1lib.Settings()
+    s.add("a", ["/this/path/will", "/be/overridden"], env=("PATH", lambda x: x.split(":")))
+    s.a # returns a list that might look like ['/usr/local/sbin', '/usr/local/bin', '/usr/sbin', '/usr/bin', '/sbin', '/bin', '/usr/games', '/usr/local/games']
+
+:param cb: callback that takes in (settings, new value) if any property changes
+:param sensitive: if True, won't display the value when displaying the whole Settings object
+:param env: if specified, will try to load up the value from environment variables if it's available""" # Settings
+        if env is not None:                                                      # Settings
+            s, f = (env, lambda x: x) if isinstance(env, str) else env; res = os.environ.get(s); self._envs[k] = s # Settings
+            if res is not None: v = f(res)                                       # Settings
+        setattr(self, k, v); self._docs[k] = docs; self._cbs[k] = cb             # Settings
+        self._sensitives[k] = sensitive; return self                             # Settings
+    def _docsOf(self, k:str): return f"{self._docs[k]}" if k in self._docs else "" # Settings
+    def _envsOf(self, k:str): return f"env: {self._envs[k]}" if k in self._envs else "" # Settings
     def _subSettings(self) -> List[Tuple[str, "Settings"]]:                      # Settings
         return [(k, v) for k, v in self.__dict__.items() if isinstance(v, Settings) and not k.startswith("_")] # Settings
     def _simpleSettings(self) -> List[Tuple[str, Any]]:                          # Settings
@@ -889,10 +904,10 @@ documentation for the variable. Example::
         ks = list(k for k in self.__dict__ if not k.startswith("_"))             # Settings
         kSpace = max([1, *(ks | k1lib.cli.shape(0).all())]); s = "Settings:\n"   # Settings
         for k, v in self._simpleSettings():                                      # Settings
-            s += f"- {k.ljust(kSpace)} = {k1lib.limitChars(str(v), settings.displayCutoff)}{sep}{self._docsOf(k)}\n" # Settings
+            s += f"- {k.ljust(kSpace)} = {k1lib.limitChars('<redacted>' if self._sensitives.get(k, False) else str(v), settings.displayCutoff)}{sep}{self._envsOf(k)}{sep}{self._docsOf(k)}\n" # Settings
         for k, v in self._subSettings():                                         # Settings
             sub = v.__repr__().split("\n")[1:-1] | k1lib.cli.tab("  ") | k1lib.cli.join("\n") # Settings
-            s += f"- {k.ljust(kSpace)} = <Settings>{sep}{self._docsOf(k)}\n" + sub + "\n" # Settings
+            s += f"- {k.ljust(kSpace)} = <Settings>{sep}{self._envsOf(k)}{sep}{self._docsOf(k)}\n" + sub + "\n" # Settings
         return s.split("\n") | k1lib.cli.op().split(sep).all() | k1lib.cli.pretty(sep) | k1lib.cli.join("\n") # Settings
 _settings = Settings().add("test", Settings().add("bio", True, "whether to test bioinformatics clis that involve strange command line tools like samtools and bwa")) # Settings
 _settings.add("packages", Settings(), "which package is available to use?")      # Settings
@@ -907,13 +922,13 @@ settings.add("wd", os.getcwd(), "default working directory, will get from `os.ge
 settings.add("cancelRun_newLine", True, "whether to add a new line character at the end of the cancel run/epoch/batch message") # oschdir
 or_patch = Settings()\
     .add("numpy", True, "whether to patch numpy arrays")\
-    .add("dict", True, "whether to patch Python dict keys and items")\
-    .add("pandas", True, "whether to patch pandas series")                       # oschdir
+    .add("dict", True, "whether to patch Python dict keys and items")            # oschdir
 startup = Settings().add("init_ray", True, "whether to connect to ray's cluster accessible locally automatically")\
     .add("import_optionals", True, "whether to try to import optional dependencies automatically or not. Set this to False if you want a faster load time, but with reduced functionalities")\
-    .add("or_patch", or_patch, "whether to patch __or__() method for several C-extension datatypes (numpy array, pandas data frame/series, etc). This would make cli operations with them a lot more pleasant, but might cause strange bugs. Haven't met them myself though") # oschdir
+    .add("or_patch", or_patch, "whether to patch __or__() method for several C-extension datatypes (numpy array, dict, etc). This would make cli operations with them a lot more pleasant, but might cause strange bugs. Haven't met them myself though") # oschdir
 settings.add("startup", startup, "these settings have to be applied like this: `import k1lib; k1lib.settings.startup.or_patch = False; from k1lib.imports import *` to ensure that the values are set") # oschdir
 settings.add("pushNotificationKey", os.getenv("k1lib_pushNotificationKey", None), "API key for `k1lib.pushNotification()`. See docs of that for more info") # oschdir
+settings.add("cred", Settings(), "general default credentials for other places in the system") # oschdir
 def sign(v): return 1 if v > 0 else -1                                           # sign
 def roundOff(a, b):                                                              # roundOff
     m = (a + b) / 2                                                              # roundOff
@@ -938,12 +953,13 @@ def niceUS(mean, std):                                                          
     except: return mean, std                                                     # niceUS
 def removeOutliers(t, fraction=0.01):                                            # removeOutliers
     b = int(len(t)*fraction/2)                                                   # removeOutliers
-    return t.sort().values[b:-b]                                                 # removeOutliers
+    return np.sort(t)[b:-b]                                                      # removeOutliers
 def _US(v): return [*v] if isinstance(v, UValue) else [v, 0]                     # _US
-if hasTorch:                                                                     # _US
+if True: # used to be a hasTorch condition here, lazy to reindent                # _US
+    @functools.total_ordering                                                    # _US
     class UValue:                                                                # _US
-        _unit = torch.randn(2, 5, 100000)                                        # _US
-        def __init__(self, mean=0, std=1):                                       # _US
+        _unit = np.random.randn(2, 5, 100000)                                    # _US
+        def __init__(self, mean=0, std=1, N=None):                               # _US
             """Creates a new "uncertain value", which has a mean and a standard
 deviation. You can then do math operations on them as normal, and the
 propagation errors will be automatically calculated for you. Make sure to
@@ -955,7 +971,7 @@ a little run-by-run. Example::
 
 You can also instantiate from an existing list/numpy array/pytorch tensor::
 
-    # returns UValue(mean=24.5, std=14.58) object
+    # returns UValue(mean=24.5, std=14.431) object
     k1lib.UValue.fromSeries(range(50))
 
 You can also do arbitrary complex math operations::
@@ -1034,34 +1050,34 @@ There are several caveats however:
 
         a = UValue(10, 1)
         a * 2 # has mean 20, std 2
-        a + a # has mean 20, std 1.4"""                                          # _US
-            if isinstance(mean, torch.Tensor): mean = mean.item()                # _US
-            if isinstance(std, torch.Tensor): std = std.item()                   # _US
-            self.mean = mean; self.std = std                                     # _US
+        a + a # has mean 20, std 1.4
+
+:param N: how many data points in this sample"""                                 # _US
+            if isinstance(mean, k1lib.settings.cli.arrayTypes): mean = mean.item() # _US
+            if isinstance(std, k1lib.settings.cli.arrayTypes): std = std.item()  # _US
+            self.mean = mean; self.std = std; self.N = N                         # _US
         @staticmethod                                                            # _US
         def _sample(mean, std, n=None, _class=0):                                # _US
             t = UValue._unit[_class, random.randint(0, 4)]                       # _US
             if n is not None: t = t[:n]                                          # _US
             return t * std + mean                                                # _US
         def sample(self, n=100, _class=0):                                       # _US
-            """Gets a sample :class:`np.ndarray` representative of this
+            """Gets a sample :class:`numpy.ndarray` representative of this
     uncertain value. Example::
 
         # returns tensor([-5.1095,  3.3117, -2.5759,  ..., -2.5810, -1.8131,  1.8339])
         (k1lib.UValue() * 5).sample()"""                                         # _US
             return UValue._sample(*self, n, _class)                              # _US
         @staticmethod                                                            # _US
-        def fromSeries(series, unbiased=True):                                   # _US
+        def fromSeries(series, ddof=0):                                          # _US
             """Creates a :class:`UValue` from a bunch of numbers
 
 :param series: can be a list of numbers, numpy array or PyTorch tensor
 :param unbiased: if True, Bessel’s correction will be used"""                    # _US
-            if isinstance(series, np.ndarray):                                   # _US
-                series = torch.tensor(series)                                    # _US
-            elif not isinstance(series, torch.Tensor):                           # _US
-                series = torch.tensor(list(series))                              # _US
+            if hasTorch and isinstance(series, torch.Tensor): series = series.numpy() # _US
+            if not isinstance(series, np.ndarray): series = np.array(list(series)) # _US
             series = series * 1.0                                                # _US
-            return UValue(series.mean(), series.std(unbiased=unbiased))          # _US
+            return UValue(series.mean(), np.std(series, ddof=ddof), len(series)) # _US
         @staticmethod                                                            # _US
         def fromBounds(min_, max_):                                              # _US
             """Creates a :class:`UValue` from min and max values.
@@ -1104,7 +1120,7 @@ Example::
             f = func; a1, a2 = self._niceValue(self)                             # _US
             try: return self._postProcess(f(a1), f(a2))                          # _US
             except:                                                              # _US
-                f = lambda xs: torch.tensor([func(x) for x in xs[:10000]])       # _US
+                f = lambda xs: np.array([func(x) for x in xs[:10000]])           # _US
                 return self._postProcess(f(a1), f(a2))                           # _US
         def bounds(self):                                                        # _US
             """Returns (mean-std, mean+std)"""                                   # _US
@@ -1115,7 +1131,7 @@ Example::
             f = func; a1, a2 = self._niceValue(a, 0); b1, b2 = self._niceValue(b, 1) # _US
             try: return self._postProcess(f(a1, b1), f(a2, b2))                  # _US
             except:                                                              # _US
-                f = lambda xs, ys: torch.tensor([func(x, y).item() for x, y in zip(xs[:10000], ys[:10000])]) # _US
+                f = lambda xs, ys: np.array([func(x, y).item() for x, y in zip(xs[:10000], ys[:10000])]) # _US
                 return self._postProcess(f(a1, b1), f(a2, b2))                   # _US
         @staticmethod                                                            # _US
         def combine(*values, samples=1000):                                      # _US
@@ -1136,7 +1152,13 @@ will not actually reflect the action of combining UValues together::
     # returns 6.0 ± 0.7, which is narrower than expected
     (a + b) / 2"""                                                               # _US
             if len(values) == 0: return ~k1lib.cli.aS(UValue.combine)            # _US
-            return UValue.fromSeries(torch.cat([v.sample(1000) for v in values])) # _US
+            n = len([0 for v in values if v.N == None])                          # _US
+            if 0 < n < len(values): raise Exception("Some UValues specified their dataset size (.N variable) and some don't, which makes it impossible to combine these series together. Either specify the dataset size (change .N value) to specific numbers for all of them, or set them all to None, in which case each series importance will be set to the same level") # _US
+            means = [v.mean for v in values]; stds = [v.std for v in values]     # _US
+            Ns = [(v.N or 1) for v in values]; N = sum(Ns)                       # _US
+            mean = sum(m*n for m,n in zip(means, Ns))/N                          # _US
+            std = (sum(n*(s**2 + (m-mean)**2) for m,s,n in zip(means, stds, Ns))/N)**0.5 # _US
+            return UValue(mean, std, N)                                          # _US
         def __add__(self, v):                                                    # _US
             m1, s1 = _US(self); m2, s2 = _US(v)                                  # _US
             return UValue(m1+m2, math.sqrt(s1**2 + s2**2))                       # _US
@@ -1170,6 +1192,10 @@ will not actually reflect the action of combining UValues together::
             return UValue(m, math.sqrt((m2*m/m1)**2*s1**2 + (math.log(m1)*m)**2*s2**2)) # _US
         def __abs__(self): return self.f(lambda a: abs(a)) # can't convert to pure math that makes sense # _US
         def __neg__(self): return 0 - self                                       # _US
+        def __lt__(self, v): return self.mean < v.mean if isinstance(v, UValue) else self.mean < v # _US
+        def __eq__(self, v): return self.mean == v.mean and self.std == v.std and self.N == v.N if isinstance(v, UValue) else self.mean == v # _US
+        def __float__(self): return self.mean                                    # _US
+        def __int__(self): return int(self.mean)                                 # _US
         def __str__(self): mean, std = niceUS(self.mean, self.std); return f"{mean} ± {std}" # _US
         def __repr__(self):                                                      # _US
             mean, std = niceUS(self.mean, self.std)                              # _US
@@ -1179,10 +1205,16 @@ will not actually reflect the action of combining UValues together::
 Possible to plot multiple histograms in 1 plot."""                               # _US
             plt.hist(self.sample(None).numpy(), bins=100, alpha=0.7, label=name) # _US
             if name != None: plt.legend()                                        # _US
-else:                                                                            # _US
-    class UValue:                                                                # _US
-        def __init__(self):                                                      # _US
-            return NotImplemented                                                # _US
+if hasTorch:                                                                     # _US
+    @k1lib.patch(torch.Tensor)                                                   # _US
+    def clearNan(self, value:float=0.0) -> torch.Tensor:                         # _US
+        """Sets all nan values to a specified value.
+Example::
+
+    a = torch.randn(3, 3) * float("nan")
+    a.clearNan() # now full of zeros"""                                          # _US
+        self[self != self] = value                                               # _US
+        return self                                                              # _US
 class ConstantPad:                                                               # ConstantPad
     def __init__(self, left=False):                                              # ConstantPad
         """Adds constant amount of padding to strings.

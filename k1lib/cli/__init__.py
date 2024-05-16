@@ -17,12 +17,13 @@ from .conv import *
 from .utils import *
 from .models import *
 from .lsext import *
+from .kjs import *
 
 # bio/chem specific
 from .bio import *
 from .mol import *
 from . import mgi;  mgi  = _wrapMod(mgi)
-from . import cif;  #cif  = _wrapMod(cif)
+from . import cif;  cif  = _wrapMod(cif)
 from . import kapi; kapi  = _wrapMod(kapi)
 
 # file formats
@@ -33,7 +34,8 @@ from . import gb;    gb    = _wrapMod(gb)
 from . import nb;    nb    = _wrapMod(nb)
 from . import kjs;   kjs   = _wrapMod(kjs)
 from . import kgv;   kgv   = _wrapMod(kgv)
-toJsFunc = kjs.toJsFunc
+from . import kcv;   kcv   = _wrapMod(kcv)
+#toJsFunc = kjs.toJsFunc; executeScriptTags = kjs.executeScriptTags
 
 from .optimizations import *
 from .trace import * # has to be last, to wait for others to load up

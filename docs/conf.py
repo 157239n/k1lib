@@ -78,9 +78,9 @@ html_theme_options = {"navigation_depth": 20}
 #html_static_path = ['_static']
 
 intersphinx_mapping = {
-    'python': ('https://docs.python.org/3', None),
-    'numpy': ('https://numpy.org/doc/stable', None),
-    'torch': ('https://pytorch.org/docs/master/', None),
+    'python': ('https://docs.python.org/3/', None),
+    'numpy': ('https://numpy.org/doc/stable/', None),
+    'torch': ('https://pytorch.org/docs/stable/', None),
     'matplotlib': ('https://matplotlib.org/stable/', None),
     'scipy': ('https://docs.scipy.org/doc/scipy/reference/', None),
     'graphviz': ('https://graphviz.readthedocs.io/en/stable/', None),
@@ -88,6 +88,9 @@ intersphinx_mapping = {
     'pandas': ('https://pandas.pydata.org/docs/', None),
     'websockets': ('https://websockets.readthedocs.io/en/stable/', None),
     'ray': ('https://docs.ray.io/en/latest/', None),
+    'dill': ('https://dill.readthedocs.io/en/latest/', None),
+    'dateutil': ('https://dateutil.readthedocs.io/en/stable/', None),
+    'redis': ('https://redis-py.readthedocs.io/en/stable/', None),
 }
 
 # generating literals
@@ -146,7 +149,7 @@ toCliTable = apply("k1lib.cli." + op())\
 
 # --- cli optimization tables
 
-fns = k1.cli.__dict__.items() | instanceOf(type(k1), 1) | cut(1) | apply(lambda m: m.__all__ | apply("getattr(m, x)") | filt("type(x) == type") | filt("issubclass(x, BaseCli)")) | joinStreams() | aS(set) | deref()
+fns = k1.cli.__dict__.items() | instanceOf(type(k1), 1) | insert(["filt", sys.modules["k1lib.cli.filt"]]) | cut(1) | apply(lambda m: m.__all__ | apply("getattr(m, x)") | filt("type(x) == type") | filt("issubclass(x, BaseCli)")) | joinStreams() | aS(set) | deref()
 hasNpAllOpts = fns | filt(lambda x: len(x._all_array_opt.__code__.co_code) > 4).split() | deref()
 hasNpOpts = fns | iden() & apply(aS("x.__ror__.__code__.co_names") | aS(lambda x: ["np", "torch", "arrayTypes"] | inSet(x) | shape(0))) | transpose() | filt(op()>0, 1).split() | cut(0).all() | deref()
 ".. code-block::\n" | file("literals/cli-accel.rst")

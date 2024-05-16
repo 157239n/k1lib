@@ -25,11 +25,13 @@ before using this module. Example::
 Result:
 
 .. image:: images/p5.png"""
-import k1lib, math, numpy as np, random, base64; import k1lib.cli as cli; from typing import List, Iterator
+import k1lib, math, numpy as np, random, base64, json; import k1lib.cli as cli; from typing import List, Iterator
 from collections import defaultdict, deque
 drawsvg = k1lib.dep("drawsvg", "drawsvg[all]", "https://github.com/cduck/drawSvg")
-__all__ = ["color", "newSketch", "fill", "noFill", "stroke", "noStroke", "ellipse", "rect", "textSize", "text", "background", "img",
-           "Entity", "point_raw", "point_rnd", "point_sym", "point_L", "triangle", "line_2P", "line_2PL", "circle_PR", "circle_2P", "grid", "axes"]
+__all__ = ["color", "newSketch", "fill", "noFill", "stroke", "noStroke", "ellipse", "arc", "rect", "textSize", "text", "background", "img",
+           "Entity", "Point", "point_raw", "point_rnd", "point_sym", "point_L", "triangle",
+           "Line", "line_2P", "line_2PL", "Circle", "circle_PR", "circle_2P", "grid", "axes", "IR",
+           "Sketch"]
 def color(r, g=None, b=None, alpha=255):                                         # color
     """Get hex representation of a color.
 Example::
@@ -52,16 +54,25 @@ def _strokeAlpha(): return int(c.stroke[-2:], 16) if c.stroke else 255          
 def _fillAlpha(): return int(c.fill[-2:], 16) if c.fill else 255                 # _fillAlpha
 def _alpha(): return min(_strokeAlpha(), _fillAlpha())                           # _alpha
 def _cs(): return {"fill": c.fill, "stroke": c.stroke, "fill_opacity": _fillAlpha()/255, "stroke_opacity": _strokeAlpha()/255} # colors shorthand # _cs
-def newSketch(w, h, flip=True):                                                  # newSketch
+def newSketch(w, h, flip=True, pad=0, scale=1, xoff=0, yoff=0):                  # newSketch
     """Creates a new sketch with specified height and width.
 
+If ``pad``, ``scale``, ``xoff`` or ``yoff`` is specified, it will pad the sketch then scale it up with
+that amount. In other words, the true width (in pixels) is going to be ``w*scale + 2*pad``, true height
+is ``h*scale + 2*pad``. Then, all coordinates will be ``(x-xoff)*scale + pad`` and ``(y-yoff)*scale + pad``,
+and any radius/size will be ``r*scale``.
+
 :param flip: if True (default), use mathematical coordinate (y increases from bottom of image to top), else use
-    programming coordinate (y increases from top of image to bottom)
+    programming coordinate (y increases from top of image to bottom). This only affects the y axis,
+    leaving x axis and radiuses alone
+:param xoff: x offset. If specified, along side with yoff, then the sketch will have the
+    point (xoff,yoff) at origin
 """                                                                              # newSketch
-    c.d = drawsvg.Drawing(w, h); c.w = w; c.h = h                                # newSketch
-    c.stroke = color(0); c.fill = color(255); c.fontSize = 12; c.flip = flip     # newSketch
-    if flip: c.yt = lambda y: c.h-y; c.ht = lambda h: -h # y transform and h transform # newSketch
-    else: c.yt = lambda y: y; c.ht = lambda h: h                                 # newSketch
+    c.d = drawsvg.Drawing(w*scale+2*pad, h*scale+2*pad); c.w = w; c.h = h        # newSketch
+    c.stroke = color(0); c.fill = color(255); c.fontSize = 12; c.flip = flip; c.pad = pad; c.scale = scale # newSketch
+    c.xt = lambda x: (x-xoff)*scale+pad; c.rt = lambda r: r*scale                # newSketch
+    if flip: c.yt = lambda y: (h-(y-yoff))*scale+pad; c.ht = lambda h: -h*scale # y transform and h transform # newSketch
+    else: c.yt = lambda y: (y-yoff)*scale+pad; c.ht = lambda h: h*scale          # newSketch
 def fill(*args):                                                                 # fill
     """Sets fill color"""                                                        # fill
     c.fill = color(*args)                                                        # fill
@@ -76,11 +87,22 @@ def noStroke():                                                                 
     c.stroke = color(255, 0)                                                     # noStroke
 def ellipse(x, y, w):                                                            # ellipse
     """Draws a circle at a particular location. Can't truly draw ellipses cause idk how""" # ellipse
-    c.d.append(drawsvg.Circle(x, c.yt(y), w/2, **_cs()))                         # ellipse
+    c.d.append(drawsvg.Circle(c.xt(x), c.yt(y), c.rt(w/2), **_cs()))             # ellipse
+pi = 3.141592653589793                                                           # ellipse
+def arc(x, y, r, startAngle, endAngle):                                          # arc
+    """Draws an arc.
+
+If in mathematical coordinates, will go counter clockwise from startAngle to endAngle.
+If in programming coordinates, will go counter clockwise instead.
+
+If startAngle < endAngle, and the difference between them is also pretty small (say 45deg),
+then the sweep angle will also be small. If startAngle > endAngle, then the sweep angle
+is going to be very big (360-45)"""                                              # arc
+    f = (1-2*c.flip)*180/pi; c.d.append(drawsvg.Arc(c.xt(x), c.yt(y), c.rt(r), startAngle*f, endAngle*f, cw=f>0, **_cs())) # arc
 def line(x1,y1,x2,y2):                                                           # line
     """Draws a line from (x1, y1) to (x2, y2)"""                                 # line
-    c.d.append(drawsvg.Line(x1,c.yt(y1),x2,c.yt(y2),**_cs()))                    # line
-def image(img:"PIL", x, y):                                                      # image
+    c.d.append(drawsvg.Line(c.xt(x1),c.yt(y1),c.xt(x2),c.yt(y2),**_cs()))        # line
+def image(img:"PIL", x, y, w=None, h=None):                                      # image
     """Draws a PIL image at a particular position.
 Example::
 
@@ -93,27 +115,27 @@ You can transform it first using torchvision.transforms before drawing it like t
     img = "image_file.png" | toImg()
     img = img | aS(tf.Resize(200)) # torchvision.transforms is imported as `tf` automatically. Check module `k1lib.imports`
 """                                                                              # image
-    c.d.append(drawsvg.Image(x, c.yt(y), *img | cli.shape(), f'data:image/png;base64,{img | cli.toBytes() | cli.aS(base64.b64encode) | cli.op().decode()}')) # image
+    s = img | cli.shape(); c.d.append(drawsvg.Image(c.xt(x), c.yt(y), c.rt(w or s[0]), c.rt(h or s[1]), f'data:image/png;base64,{img | cli.toBytes() | cli.aS(base64.b64encode) | cli.op().decode()}')) # image
 def rect(x, y, w, h, r=0):                                                       # rect
     """Draws a rectangle.
 
 :param r: border radius"""                                                       # rect
-    if r == 0: c.d.append(drawsvg.Rectangle(x, c.yt(y), w, c.ht(h), **_cs()))    # rect
+    if r == 0: c.d.append(drawsvg.Rectangle(c.xt(x), c.yt(y), c.rt(w), c.ht(h), **_cs())) # rect
     else:                                                                        # rect
         c.d.append(drawsvg.Path(**_cs())                                         # rect
-           .arc(x+r, c.yt(y+r), r, 90, 180)                                      # rect
-           .arc(x+r, c.yt(y+h-r), r, 180, 270, includeL=True)                    # rect
-           .arc(x+w-r, c.yt(y+h-r), r, 270, 0, includeL=True)                    # rect
-           .arc(x+w-r, c.yt(y+r), r, 0, 90, includeL=True).L(x+r, c.yt(y)))      # rect
+           .arc(c.xt(x+r), c.yt(y+r), r, 90, 180)                                # rect
+           .arc(c.xt(x+r), c.yt(y+h-r), r, 180, 270, includeL=True)              # rect
+           .arc(c.xt(x+w-r), c.yt(y+h-r), r, 270, 0, includeL=True)              # rect
+           .arc(c.xt(x+w-r), c.yt(y+r), r, 0, 90, includeL=True).L(x+r, c.yt(y))) # rect
 def textSize(s):                                                                 # textSize
-    """Sets the text size"""                                                     # textSize
+    """Sets the text size. This is affected by the global scaling factor specified in :meth:`newSketch`""" # textSize
     c.fontSize = s                                                               # textSize
 def text(s, x, y):                                                               # text
-    """Draws text at a specific location"""                                      # text
-    c.d.append(drawsvg.Text(s, c.fontSize, x, c.yt(y), **_cs()))                 # text
+    """Draws text at a specific location."""                                     # text
+    c.d.append(drawsvg.Text(s, c.rt(c.fontSize), c.xt(x), c.yt(y), **_cs()))     # text
 def background(*args):                                                           # background
     """Changes the background color"""                                           # background
-    with c.context(stroke=color(*args), fill=color(*args)): rect(0, c.yt(0), c.w, c.ht(c.h)) # background
+    with c.context(stroke=color(*args), fill=color(*args)): c.d.append(drawsvg.Rectangle(0, 0, (c.w+2*c.pad)*c.scale, (c.h+2*c.pad)*c.scale, **_cs())) # background
 def img():                                                                       # img
     """Returns a PIL image of the sketch"""                                      # img
     return c.d.rasterize().png_data | cli.toImg()                                # img
@@ -150,7 +172,9 @@ Finally, you can do :meth:`IR.display`
         self.irL = type(self).init(*args)                                        # Entity
     def __ror__(self, ir): ir = ir or {"def": {}, "meta": None}; ir["def"][self.irL[0]] = self.irL; return ir # Entity
     @classmethod                                                                 # Entity
-    def dependsOn(cls,ir,name:str) -> List["name"]: return []                    # Entity
+    def dependsOn(cls,ir,name:str) -> List[str]:                                 # Entity
+        """Should return List[name]]"""                                          # Entity
+        return []                                                                # Entity
     @classmethod                                                                 # Entity
     def calc(cls,ir,name:str) -> List[float]: return NotImplemented              # Entity
     @classmethod                                                                 # Entity
@@ -354,6 +378,7 @@ class axes(Entity):                                                             
 def vlen(dx,dy): return math.sqrt(dx*dx+dy*dy) # vector length                   # vlen
 entities = [point_raw, point_sym, point_L, line_P, line_2P, line_2PL, circle_PR, circle_2P, grid, axes]; entitiesD = entities | cli.apply(lambda x: [x.__name__, x]) | cli.toDict() # vlen
 class IR:                                                                        # IR
+    """Intermediate representation of a whole graph"""                           # IR
     @staticmethod                                                                # IR
     def dep(ir) -> Iterator[str]: # figures out the dependency graph, returns elements to calculate position of # IR
         d = defaultdict(lambda: []); a = ir["def"].values() | cli.cut(0, 1) | cli.lookup(entitiesD, 1) | ~cli.apply(lambda name,cls: [name,cls.dependsOn(ir,name)]) | ~cli.apply(lambda x,y:[x,y,len(y)]) | cli.deref() # IR
@@ -395,8 +420,76 @@ class IR:                                                                       
         """Calculates the length of a specific line"""                           # IR
         x1,y1,x2,y2 = ir["def"][line][4]; return vlen(x2-x1, y2-y1)              # IR
     @staticmethod                                                                # IR
-    def angle_2L(ir, l1:str, l2:str) -> "radians":                               # IR
+    def angle_2L(ir, l1:str, l2:str) -> "``radians``":                           # IR
         """Calculates the angle between 2 lines"""                               # IR
         x1,y1,x2,y2 = ir["def"][l1][4]; x3,y3,x4,y4 = ir["def"][l2][4]           # IR
         dx1 = x2-x1; dx2 = x4-x3; dy1 = y2-y1; dy2 = y4-y3                       # IR
         return math.acos((dx1*dx2+dy1*dy2)/vlen(dx1,dy1)/vlen(dx2,dy2))          # IR
+k1lib.settings.add("p5", k1lib.Settings()                                        # IR
+    .add("funcs", ["arc", "ellipse", "circle", "line", "point", "quad", "rect", "square", "triangle", "text", # IR
+                   "color", "fill", "noFill", "stroke", "noStroke", "background"], "p5 functions to syntactically replace in instance mode") # IR
+    .add("symbols", ["mouseX", "mouseY"], "symbols to syntactically replace in instance mode"), # IR
+"p5 module settings");                                                           # IR
+class Sketch(cli.BaseCli):                                                       # Sketch
+    def __init__(self, f:str, width=500, height=500):                            # Sketch
+        """Creates a real p5js sketch, but make it convenient.
+Example::
+
+    "some data" | p5.Sketch('''
+        function setup() {
+            background(200);
+        }
+        function draw() {
+            background(200);
+            text(data, 20, 20);
+            ellipse(mouseX, mouseY, 20, 20);
+        }
+    ''')
+
+:param f: the js string to inject into the sketch
+:param width: width of the sketch
+:param height: height of the sketch"""                                           # Sketch
+        self.width = width; self.height = height                                 # Sketch
+        if "function setup() {" not in f: raise Exception("Function setup() not found, please start the function with `function setup() {`") # Sketch
+        if "function draw() {" not in f:  raise Exception("Function draw() not found, please start the function with `function draw() {`") # Sketch
+        self.f = f.replace("function setup() {", f"function setup() {{ p.createCanvas({width}, {height}); ") # Sketch
+    def __ror__(self, it):                                                       # Sketch
+        pre = cli.init._jsDAuto(); f = self.f                                    # Sketch
+        for sym in k1lib.settings.p5.funcs:   f = f.replace(f"{sym}(", f"p.{sym}(") # Sketch
+        for sym in k1lib.settings.p5.symbols: f = f.replace(f"{sym}", f"p.{sym}") # Sketch
+        f = f.replace(".p.", ".")                                                # Sketch
+        return k1lib.viz.Html(f"""
+<div id="{pre}_sketch" style="width: {self.width}px; height: {self.height}px"></div>
+<div id="{pre}_errors">&nbsp;</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.3/p5.min.js" integrity="sha512-0zGLOFv/+OQ6YfVCSGDQWhrDRx0ONmBqWvs3gI4olm8i6xtKoG1FhEnB4eTaWCVnojyfUDgE8Izeln+mAJAkFA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script>
+    new p5(p => {{
+        const data = {json.dumps(it)};{f}
+        p.setup = setup;
+        p.draw = draw;
+    }}, document.querySelector("#{pre}_sketch"));
+</script>
+""")                                                                             # Sketch
+class Anim(cli.BaseCli):                                                         # Anim
+    def __init__(self, width=500, height=500):                                   # Anim
+        """Creates a quick animation that internally runs on p5js.
+Why not just use matplotlib or smth? Their performance is quite
+terrible, and sometimes I just want a simple way to display
+animations. Example::
+
+    [[0,    "ellipse(200,300,20,20);text('abc',20,20);"],
+     [0.03, "ellipse(204,299,19,19);text('abc',22,23);"]] | p5.Anim()
+
+The left column is the time in seconds to draw the frame, and the right column is the
+code to execute on that frame. Pretty simple really."""                          # Anim
+        self.width = width;                                                      # Anim
+        self.height = height                                                     # Anim
+    def __ror__(self, it):                                                       # Anim
+        pre = cli.init._jsDAuto(); it = it | cli.sort() | cli.deref(); maxT = it[-1][0] # Anim
+        timeouts = it | ~cli.apply(lambda x,y: f"setTimeout(() => {{ background(200);text('Time: {x}s, {round(x/maxT*100,2)}%',20,{self.height-20});{y} }}, {x*1000});") | cli.join("\n") # Anim
+        return None | Sketch(f"""
+{pre}_refresh = () => {{ {timeouts}; }}; {pre}_refresh();
+setInterval({pre}_refresh, {(maxT+1)*1000});
+function setup() {{ background(200); }}
+function draw() {{ }}
+""", self.width, self.height)                                                    # Anim

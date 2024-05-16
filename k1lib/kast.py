@@ -85,7 +85,7 @@ class walk(cli.BaseCli):                                                        
         """Walks the AST tree, returning (elem, parent, parent accessor, depth) tuple.
 Example::
 
-    "abc.py" | cat() | join("\n") | kast.walk() # returns generator of tuples
+    "abc.py" | cat() | join("\\n") | kast.walk() # returns generator of tuples
 """                                                                              # walk
         pass                                                                     # walk
     def __ror__(self, m:str):                                                    # walk
@@ -109,6 +109,7 @@ for asthetic, not for parsing by other tools downstream. Example::
             elif isinstance(m, ast.Import): res[-1] += f" .names[{len(m.names)}].name={', '.join([e.name for e in m.names])}" # pretty
             elif isinstance(m, ast.ImportFrom): res[-1] += f" .module={repr(m.module)} .names[{len(m.names)}].name={', '.join([e.name for e in m.names])}" # pretty
             elif isinstance(m, ast.BinOp): res[-1] += f" .op={m.op}"             # pretty
+            elif isinstance(m, ast.Lambda): res[-1] += f" .args={[a.arg for a in m.args.args]}" # pretty
             elif isinstance(m, (ast.ClassDef, ast.FunctionDef)): res[-1] += f" .name={repr(m.name)}" # pretty
             elif isinstance(m, ast.Name): res[-1] += f" .id={repr(m.id)}"        # pretty
             elif isinstance(m, ast.Constant): res[-1] += f" .value={repr(m.value)}" # pretty
@@ -185,8 +186,8 @@ _jstGuardNArgs("zip", [], lambda m, lcs: f"[{', '.join([_py2js(e, lcs) for e in 
 def flattenAttribute(x) -> str:                                                  # flattenAttribute
     if isinstance(x, ast.Name): return x.id                                      # flattenAttribute
     elif isinstance(x, ast.Attribute): return f"{flattenAttribute(x.value)}.{x.attr}" # flattenAttribute
-    else: raise JSTranspileError("kast.flattenAttribute() only supports attributes that only contains ast.Attribute and ast.Name") # flattenAttribute
-def pyLambParse(s:str) -> str: # parses code, get rid of "lambda: " in front if exists # pyLambParse
+    else: raise JSTranspileError(f"kast.flattenAttribute() only supports attributes that only contains ast.Attribute and ast.Name. Instead input is of type {type(x)}") # flattenAttribute
+def pyLambParse(s:str) -> "ast.AST": # parses code, get rid of "lambda: " in front if exists # pyLambParse
     # s might contain stringified                                                # pyLambParse
     m = ast.parse(s)                                                             # pyLambParse
     if len(m.body) == 0: raise JSTranspileError(f"No expression inside passed in code `{s}`") # pyLambParse
@@ -244,7 +245,7 @@ def _listCompTarget(m, lcs): # extracts target of list comprehensions, like [...
     if isinstance(m, ast.Name): return _py2js(m, lcs)                            # _listCompTarget
     if isinstance(m, (ast.Tuple, ast.List)): s = ", ".join([_listCompTarget(e, lcs) for e in m.elts]); return f"[{s}]" # _listCompTarget
     raise JSTranspileError(f"While trying to expand target assignment in list/set/dict comprehensions, encountered unknown type: {type(m)}") # _listCompTarget
-def _py2js(m, lcs:"list[str]"): # lcs for list of variable names, only used in ast.Name # _py2js
+def _py2js(m:"ast.AST|str", lcs:"list[str]") -> str: # lcs for list of variable names, only used in ast.Name # _py2js
     if isinstance(m, str): m = pyLambParse(m)                                    # _py2js
     if isinstance(m, ast.BinOp):                                                 # _py2js
         left = _py2js(m.left, lcs); right = _py2js(m.right, lcs)                 # _py2js
@@ -291,7 +292,7 @@ def _py2js(m, lcs:"list[str]"): # lcs for list of variable names, only used in a
     if isinstance(m, ast.Or): return "||"                                        # _py2js
     if isinstance(m, ast.Attribute): return f"{_py2js(m.value, lcs)}.{m.attr}"   # _py2js
     if isinstance(m, ast.Call):                                                  # _py2js
-        if len(m.keywords) > 0: raise JSTranspileError(f"keyword arguments don't exist in JS, please use normal arguments in your function calls only, at `{m}`") # _py2js
+        if len(m.keywords) > 0: raise JSTranspileError(f"keyword arguments don't exist in JS, please use normal arguments in your function calls only, at `{m}`. Keywords: {[k.arg for k in m.keywords]}") # _py2js
         funcName = flattenAttribute(m.func)                                      # _py2js
         if funcName in jstCallDict: return jstCallDict[funcName](m, lcs)         # _py2js
         return f"{funcName}({', '.join([_py2js(a, lcs) for a in m.args])})"      # _py2js
@@ -300,9 +301,7 @@ def _py2js(m, lcs:"list[str]"): # lcs for list of variable names, only used in a
     if isinstance(m, ast.Dict):                                                  # _py2js
         keys = [f"{_py2js(k, lcs)}" if isinstance(k, ast.Constant) else (f"[{_py2js(k, lcs)}]" if k is not None else None) for k in m.keys] # _py2js
         values = [f"{_py2js(v, lcs)}" for v in m.values]                         # _py2js
-        a = [f"{k}: {v}" for k, v in zip(keys, values) if k is not None]         # _py2js
-        b = [f"...{v}" for k, v in zip(keys, values) if k is None]               # _py2js
-        return "{" + ", ".join([*a, *b]) + "}"                                   # _py2js
+        a = [(f"...{v}" if k is None else f"{k}: {v}") for k, v in zip(keys, values)]; return "{" + ", ".join(a) + "}" # _py2js
     if isinstance(m, ast.Starred): return f"...{_py2js(m.value, lcs)}"           # _py2js
     if isinstance(m, ast.IfExp): return f"(({_py2js(m.test, lcs)}) ? ({_py2js(m.body, lcs)}) : ({_py2js(m.orelse, lcs)}))" # _py2js
     if isinstance(m, ast.Subscript):                                             # _py2js
@@ -371,7 +370,7 @@ If can't understand the object passed in, return None
             if v not in extraVars:                                               # prepareFunc
                 raise Exception(f"Expression depends on the variables {v}, but they couldn't be resolved") # prepareFunc
     # forming declaration statements                                             # prepareFunc
-    return fn, "\n".join([f"const {k} = {json.dumps(v)};" for k, v in avaiVals.items()]), argVars # prepareFunc
+    return fn, "\n".join([f"{k} = {json.dumps(v)};" for k, v in avaiVals.items()]), argVars # prepareFunc
 def kast_lambda(fn:"str|cli.op") -> "list[str]":                                 # kast_lambda
     """Grab args of the input lambda func. If it's just a simple
 expression then return ['x']"""                                                  # kast_lambda
@@ -385,7 +384,7 @@ def prepareFunc2(fn, checks=True) -> "(header, fIdx) | None":                   
     fIdx = k1lib.cli.init._jsFAuto()                                             # prepareFunc2
     dataIdx = k1lib.cli.init._jsDAuto()                                          # prepareFunc2
     return f"""{avaiVars}
-const {fIdx} = ({', '.join(args)}) => {{
+{fIdx} = ({', '.join(args)}) => {{
     return {expr};
 }}""", fIdx                                                                      # prepareFunc2
 def prepareFunc3(fn, meta, kwargs=None, args=None) -> "(header, fIdx)":          # prepareFunc3
@@ -402,11 +401,11 @@ Throws error if can't transpile the function
 """                                                                              # prepareFunc3
     res = prepareFunc2(fn, False) # tries to compile str/cli.op                  # prepareFunc3
     if res:                                                                      # prepareFunc3
-        if not(kwargs is None or len(kwargs) == 0): raise Exception(f"Keyword arguments doesn't exist in JS! Please convert the function `{fn}` into positional arguments") # prepareFunc3
+        if not(kwargs is None or len(kwargs) == 0): raise Exception(f"Keyword arguments doesn't exist in JS! Please convert the function `{fn}` into positional arguments. Here're the kwargs detected: {kwargs}") # prepareFunc3
         if args is None or len(args) == 0: return res                            # prepareFunc3
         # prepare extra code here if extra args are available                    # prepareFunc3
         fIdx = cli.init._jsFAuto(); dataIdx = cli.init._jsDAuto(); argIdx = cli.init._jsDAuto() # prepareFunc3
-        _header, _fIdx = res; return f"""{_header}\nconst {argIdx} = {json.dumps(args)};\nconst {fIdx} = ({dataIdx}) => {_fIdx}({dataIdx}, ...{argIdx})""", fIdx # prepareFunc3
+        _header, _fIdx = res; return f"""{_header}\n{argIdx} = {json.dumps(args)};\n{fIdx} = ({dataIdx}) => {_fIdx}({dataIdx}, ...{argIdx})""", fIdx # prepareFunc3
     elif hasattr(fn, "_jsF"): return fn._jsF(meta, *(args or ()), **(kwargs or {})) # if not str/cli.op, then lookup the funcs, then pass through the kwargs and whatnot # prepareFunc3
     elif fn in k1lib.settings.cli.kjs.jsF:                                       # prepareFunc3
         try: return k1lib.settings.cli.kjs.jsF[fn](meta, *(args or ()), **(kwargs or {})) # prepareFunc3
@@ -421,6 +420,6 @@ Example::
 """                                                                              # asyncGuard
     if data is NotImplemented: return NotImplemented                             # asyncGuard
     header, fIdx = data                                                          # asyncGuard
-    g1 = cli.grep(f"(?P<a>(const)|(let)) {fIdx}[ ]*=[ ]*(?P<g>(async)|((?!\(*)))[ ]*\(", extract="g") # asyncGuard
+    g1 = cli.grep(f"{fIdx}[ ]*=[ ]*(?P<g>(async)|((?!\(*)))[ ]*\(", extract="g") # asyncGuard
     g2 = cli.grep(f"(?P<g>async)[ ]*function[ ]*{fIdx}\(", extract="g")          # asyncGuard
     x = header.split("\n"); return [header, fIdx, len(list(g1(x))) + len(list(g2(x))) > 0] # asyncGuard

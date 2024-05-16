@@ -7,9 +7,11 @@ from typing import List, Union, Iterator, Callable, Any, Tuple, Dict
 from collections import defaultdict, Counter, deque
 from k1lib.cli.init import patchDefaultDelim, BaseCli, oneToMany, fastF, yieldT
 import k1lib.cli as cli; import k1lib.cli.init as init; from k1lib.cli.typehint import *
-import itertools, numpy as np, k1lib, math, json; plt = k1lib.dep("matplotlib.pyplot")
+import itertools, numpy as np, k1lib, math, json; plt = k1lib.dep.plt
 try: import torch; hasTorch = True
 except: torch = k1lib.Object().withAutoDeclare(lambda: type("RandomClass", (object, ), {})); hasTorch = True
+try: import pandas as pd; pd.core; hasPandas = True
+except: hasPandas = False
 __all__ = ["transpose", "T", "reshape", "insert", "splitW", "splitC",
            "joinStreams", "joinSt", "joinStreamsRandom", "activeSamples",
            "table", "batched", "batchedTrigger", "window", "groupBy", "ungroup",
@@ -79,7 +81,22 @@ This also has an alias of ``T()``, so you can make it shorter, like ``np.random.
             dims = list(range(len(it.shape)))                                    # transpose
             temp = dims[d1]; dims[d1] = dims[d2]; dims[d2] = temp                # transpose
             return it.transpose(dims)                                            # transpose
+        if hasPandas and isinstance(it, pd.core.frame.DataFrame):                # transpose
+            if d1 != 0 or d2 != 1: raise Exception("Can't do multidimensonal transpose on a data frame, as that makes no sense") # transpose
+            return [it[k] for k in it]                                           # transpose
         if d1 != 0 or d2 != 1: return it | cli.serial(*([transpose(fill=fill).all(i) for i in range(d1, d2)] + [transpose(fill=fill).all(i-1) for i in range(d2-1, d1, -1)])) # transpose
+        if hasPandas:                                                            # transpose
+            try:                                                                 # transpose
+                it[:]; len(it)                                                   # transpose
+                if sum(isinstance(x, pd.core.frame.Series) for x in it[:5]) >= 2: # list of series, so can turn it into a dataframe! # transpose
+                    s = set([x for x in [getattr(x, "name", None) for x in it] if x]) # transpose
+                    def gen():                                                   # transpose
+                        autoInc = k1lib.AutoIncrement(prefix="col_")             # transpose
+                        while True:                                              # transpose
+                            e = autoInc()                                        # transpose
+                            if e not in s: yield e                               # transpose
+                    nameGen = gen(); return pd.DataFrame({getattr(e, "name", next(nameGen)):e for e in it}) # transpose
+            except: pass                                                         # transpose
         if self.fill is None: return zip(*it)                                    # transpose
         else: return itertools.zip_longest(*it, fillvalue=fill)                  # transpose
     @staticmethod                                                                # transpose
@@ -110,7 +127,7 @@ access to a column, so this is how you can do it."""                            
     def _jsF(self, meta):                                                        # transpose
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # transpose
         if self.d1 != 0 or self.d2 != 1: raise Exception(f"transpose._jsF() doesn't allow complex transpose across many dimensions yet") # transpose
-        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.transpose({cli.kjs.v(self.fill)})", fIdx # transpose
+        return f"{fIdx} = ({dataIdx}) => {dataIdx}.transpose({cli.kjs.v(self.fill)})", fIdx # transpose
 #tOpt.clearPasses()                                                              # transpose
 def oTranspose1(cs, ts, metadata): # `transpose() | transpose().all()` to `transpose() | apply(aS(torch.stack) | transpose())` # oTranspose1
     tr, ap = cs; t = ts[0]                                                       # oTranspose1
@@ -149,7 +166,7 @@ iterator with :class:`joinStreams` first, like this::
     [[[0], [1]], [[2], [3]], [[4], [5]]] | joinStreams(2) | reshape(2, 1, 3) | deref()""" # reshape
         self.dims = dims                                                         # reshape
     def __ror__(self, it):                                                       # reshape
-        it = iter(it)                                                            # reshape
+        it = iter(init.dfGuard(it))                                              # reshape
         if self.dims[0] == -1:                                                   # reshape
             try:                                                                 # reshape
                 while True: yield _formStructure(it, self.dims, 1)               # reshape
@@ -171,13 +188,40 @@ Example::
 
 :param element: the element to insert"""                                         # insert
         super().__init__(); self.element = element; self.begin = begin; self.expand = False # insert
+    def _all_array_opt(self, it, level):                                         # insert
+        element = self.element                                                   # insert
+        if (it | cli.shape())[level+1:] != (element | cli.shape()): return NotImplemented # insert
+        e = (element | (cli.toNdArray(it.dtype) if isinstance(it, np.ndarray) else cli.toTensor(it.dtype)))[(*[None]*(level+1),)] # insert
+        for i in range(level): e = e | cli.repeatFrom(it.shape[i]).all(i)        # insert
+        return (np if isinstance(it, np.ndarray) else torch).concatenate([e, it] if self.begin else [it, e], level) # insert
     def __ror__(self, it):                                                       # insert
-        element = self.element; it = iter(it)                                    # insert
-        if self.begin: yield element; yield from it                              # insert
-        else: yield from it; yield element                                       # insert
+        element = self.element; begin = self.begin                               # insert
+        if isinstance(it, settings.arrayTypes):                                  # insert
+            if (it | cli.shape())[1:] == (element | cli.shape()):                # insert
+                if isinstance(it, np.ndarray):                                   # insert
+                    b = (element | cli.toNdArray())[None]                        # insert
+                    return np.concatenate([b, it] if begin else [it, b], axis=0) # insert
+                else:                                                            # insert
+                    b = (element | cli.toTensor())[None]                         # insert
+                    return torch.concatenate([b, it] if begin else [it, b], axis=0) # insert
+        if hasPandas and isinstance(it, pd.core.frame.DataFrame):                # insert
+            try:                                                                 # insert
+                newE = pd.DataFrame({c:[e] for c,e in zip(list(it), self.element)}) # insert
+                return pd.concat([newE, it] if self.begin else [it, newE], ignore_index=True) # insert
+            except: it = init.dfGuard(it)                                        # insert
+        if hasPandas and isinstance(it, pd.core.frame.Series):                   # insert
+            try: return pd.concat([pd.Series([self.element]), it], ignore_index=True) # insert
+            except: pass                                                         # insert
+        try: it[:]; len(it); return [self.element, *it] if begin else [*it, self.element] # if input is sliceable, then it must mean it's the output of some process that's not very heavy, so let's return a list, instead of going through an interator # insert
+        except: pass                                                             # insert
+        def gen():                                                               # insert
+            _it = iter(it)                                                       # insert
+            if begin: yield element; yield from _it                              # insert
+            else: yield from _it; yield element                                  # insert
+        return gen()                                                             # insert
     def _jsF(self, meta):                                                        # insert
         fIdx = init._jsFAuto(); elemIdx = init._jsDAuto(); dataIdx = init._jsDAuto() # insert
-        return f"const {elemIdx} = {json.dumps(self.element)}; const {fIdx} = ({dataIdx}) => {dataIdx}.insert({elemIdx}, {cli.kjs.v(self.begin)})", fIdx # insert
+        return f"{elemIdx} = {json.dumps(self.element)}; {fIdx} = ({dataIdx}) => {dataIdx}.insert({elemIdx}, {cli.kjs.v(self.begin)})", fIdx # insert
 class splitW(BaseCli):                                                           # splitW
     def __init__(self, *weights:List[float]):                                    # splitW
         """Splits elements into multiple weighted lists. If no weights are provided,
@@ -197,14 +241,21 @@ See also: :class:`splitC`"""                                                    
         if len(weights) == 0: weights = [0.8, 0.2]                               # splitW
         self.weights = np.array(weights)                                         # splitW
     def __ror__(self, it):                                                       # splitW
-        try: it[0]; len(it)                                                      # splitW
+        try: it[:]; len(it)                                                      # splitW
         except: it = list(it)                                                    # splitW
         ws = self.weights; c = 0; ws = (ws * len(it) / ws.sum()).astype(int)     # splitW
-        for w in ws[:-1]: yield it[c:c+w]; c += w                                # splitW
-        yield it[c:]                                                             # splitW
+        if isinstance(it, settings.arrayTypes) or (hasPandas and isinstance(it, pd.core.arraylike.OpsMixin)): # splitW
+            ans = []                                                             # splitW
+            for w in ws[:-1]: ans.append(it[c:c+w]); c += w                      # splitW
+            ans.append(it[c:]); return ans                                       # splitW
+        def gen():                                                               # splitW
+            c = 0                                                                # splitW
+            for w in ws[:-1]: yield it[c:c+w]; c += w                            # splitW
+            yield it[c:]                                                         # splitW
+        return gen()                                                             # splitW
     def _jsF(self, meta):                                                        # splitW
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # splitW
-        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.splitW({cli.kjs.vs(self.weights) | cli.join(', ')})", fIdx # splitW
+        return f"{fIdx} = ({dataIdx}) => {dataIdx}.splitW({cli.kjs.vs(self.weights) | cli.join(', ')})", fIdx # splitW
 class splitC(BaseCli):                                                           # splitC
     def __init__(self, *checkpoints:List[float]):                                # splitC
         """Splits elements into multiple checkpoint-delimited lists.
@@ -231,16 +282,23 @@ out :class:`splitW`"""                                                          
         self.checkpoints = checkpoints | cli.aS(np.array)                        # splitC
         self.intMode = checkpoints | cli.apply(lambda x: int(x) == x) | cli.aS(all) # splitC
     def __ror__(self, it):                                                       # splitC
-        try: it[0]; len(it)                                                      # splitC
+        try: it[:]; len(it)                                                      # splitC
         except: it = list(it)                                                    # splitC
         cs = self.checkpoints                                                    # splitC
         if not self.intMode: cs = (cs * len(it)).astype(int)                     # splitC
-        cs = sorted(cs); yield it[:cs[0]]                                        # splitC
-        for i in range(len(cs)-1): yield it[cs[i]:cs[i+1]]                       # splitC
-        yield it[cs[-1]:]                                                        # splitC
+        cs = sorted(cs)                                                          # splitC
+        if isinstance(it, settings.arrayTypes) or (hasPandas and isinstance(it, pd.core.arraylike.OpsMixin)): # splitC
+            ans = [it[:cs[0]]]                                                   # splitC
+            for i in range(len(cs)-1): ans.append(it[cs[i]:cs[i+1]])             # splitC
+            ans.append(it[cs[-1]:]); return ans                                  # splitC
+        def gen():                                                               # splitC
+            yield it[:cs[0]]                                                     # splitC
+            for i in range(len(cs)-1): yield it[cs[i]:cs[i+1]]                   # splitC
+            yield it[cs[-1]:]                                                    # splitC
+        return gen()                                                             # splitC
     def _jsF(self, meta):                                                        # splitC
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # splitC
-        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.splitC({cli.kjs.vs(self.checkpoints) | cli.join(', ')})", fIdx # splitC
+        return f"{fIdx} = ({dataIdx}) => {dataIdx}.splitC({cli.kjs.vs(self.checkpoints) | cli.join(', ')})", fIdx # splitC
 class joinStreams(BaseCli):                                                      # joinStreams
     def __init__(self, dims=1):                                                  # joinStreams
         """Joins multiple streams.
@@ -270,21 +328,22 @@ If "joinStreams" is too unintuitive to remember, there's also an alias called
 :param dims: how many ``joinStreams()`` do you want to do consecutively?"""      # joinStreams
         if dims < 0: raise AttributeError(f"`dims` ({dims}) can't be less than 0, as it doesn't make any sense!") # joinStreams
         self.dims = dims; self.multi = cli.serial(*(joinStreams() for d in range(dims))) if dims > 1 else None # joinStreams
-    def _all_array_opt(self, it, level:int): sh = it | cli.shape(); return it.reshape([*sh[:level], sh[level:level+self.dims+1] | cli.toProd(), *sh[level+self.dims+1:]]) # joinStreams
+    def _all_array_opt(self, it, level:int):                                     # joinStreams
+        if self.dims == 0: return it                                             # joinStreams
+        sh = tuple(it.shape)                                                     # joinStreams
+        if len(sh) < level+self.dims+1: raise init.ArrayOptException(f"joinSt({self.dims}).all({level}) can't be applied to an array of shape {sh}") # joinStreams
+        return it.reshape([*sh[:level], sh[level:level+self.dims+1] | cli.toProd(), *sh[level+self.dims+1:]]) # joinStreams
     def __ror__(self, streams:Iterator[Iterator[Any]]) -> Iterator[Any]:         # joinStreams
         if isinstance(streams, settings.arrayTypes): return self._all_array_opt(streams, 0) # joinStreams
-        if self.multi != None:                                                   # joinStreams
-            return streams | self.multi                                          # joinStreams
-            def gen(): yield from streams | self.multi                           # joinStreams
-            return gen()                                                         # joinStreams
+        if self.multi != None: return streams | self.multi                       # joinStreams
         elif self.dims == 1:                                                     # joinStreams
             def gen():                                                           # joinStreams
-                for stream in streams: yield from stream                         # joinStreams
+                for stream in init.dfGuard(streams): yield from stream           # joinStreams
             return gen()                                                         # joinStreams
         else: return streams                                                     # joinStreams
     def _jsF(self, meta):                                                        # joinStreams
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # joinStreams
-        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.joinSt({cli.kjs.v(self.dims)})", fIdx # joinStreams
+        return f"{fIdx} = ({dataIdx}) => {dataIdx}.joinSt({cli.kjs.v(self.dims)})", fIdx # joinStreams
 joinSt = joinStreams                                                             # joinStreams
 def probScale(ps, t): # t from 0 -> 1, for typical usage                         # probScale
     l = np.log(ps); avg = l.mean()                                               # probScale
@@ -329,7 +388,7 @@ be of any number::
 :param ps: if specified, use these probabilities, else try to determine from the lengths of the input streams""" # joinStreamsRandom
         super().__init__(); self.alpha = alpha; self.ps = ps                     # joinStreamsRandom
     def __ror__(self, streams:Iterator[Iterator[Any]]) -> Iterator[Any]:         # joinStreamsRandom
-        alpha = self.alpha; ps = self.ps; streams = list(streams); nStreams = len(streams) # joinStreamsRandom
+        alpha = self.alpha; ps = self.ps; streams = list(init.dfGuard(streams)); nStreams = len(streams) # joinStreamsRandom
         if alpha != 0:                                                           # joinStreamsRandom
             if ps is None:                                                       # joinStreamsRandom
                 try: ps = np.array([len(st) for st in streams])                  # joinStreamsRandom
@@ -348,7 +407,7 @@ be of any number::
     def _jsF(self, meta):                                                        # joinStreamsRandom
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # joinStreamsRandom
         if self.alpha != 0 and not self.ps is None: raise Exception("joinStreamsRandom._jsF() doesn't allow custom alpha and ps yet") # joinStreamsRandom
-        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.joinStreamsRandom()", fIdx # joinStreamsRandom
+        return f"{fIdx} = ({dataIdx}) => {dataIdx}.joinStreamsRandom()", fIdx    # joinStreamsRandom
 class activeSamples(BaseCli):                                                    # activeSamples
     def __init__(self, limit:int=100, p:float=0.95):                             # activeSamples
         """Yields active learning samples.
@@ -486,13 +545,13 @@ See also: :class:`window`, :class:`batchedTrigger`
         if not incl and isinstance(it, k1lib.settings.cli.arrayTypes):           # batched
             if (not includeLast) or (it.shape[0]%bs == 0): n = it.shape[0] // bs; it = it[:n*bs]; return it.reshape(n, bs, *it.shape[1:]) # batched
         if not incl and isinstance(it, range): return _batchRange(it, bs, includeLast, incl) # batched
-        try: it[0]; len(it); return _batchSliceable(it, bs, includeLast, incl)   # batched
+        try: it[:]; len(it); return _batchSliceable(it, bs, includeLast, incl)   # batched
         except: return _batch(it, bs, includeLast, incl)                         # batched
     def _jsF(self, meta):                                                        # batched
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # batched
-        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.batched({cli.kjs.v(self.bs)}, {cli.kjs.v(self.includeLast)})", fIdx # batched
+        return f"{fIdx} = ({dataIdx}) => {dataIdx}.batched({cli.kjs.v(self.bs)}, {cli.kjs.v(self.includeLast)})", fIdx # batched
 class batchedTrigger(BaseCli): # batched the data using a trigger column         # batchedTrigger
-    def __init__(self, col:int=None, value:"any"=None, delta:float=None, adj:bool=True): # value is to only yield segments that have the specified value # batchedTrigger
+    def __init__(self, col:int=None, value:Any=None, delta:float=None, adj:bool=True): # value is to only yield segments that have the specified value # batchedTrigger
         """Like :class:`batched`, will batch rows/elements up but based on
 a trigger value instead. See :class:`~k1lib.cli.filt.trigger` for more
 discussion. Normal mode::
@@ -547,7 +606,7 @@ See also: :class:`~k1lib.cli.filt.trigger`
         res = batchedTrigger(self.col, self.value); res.inverted = not self.inverted; return res # batchedTrigger
     def __ror__(self, it):                                                       # batchedTrigger
         col = self.col; value = self.value; delta = self.delta; adj = self.adj; inv = self.inverted # batchedTrigger
-        arr = []; lastE = object() # sentinel                                    # batchedTrigger
+        it = init.dfGuard(it); arr = []; lastE = object() # sentinel             # batchedTrigger
         # also, the reason for so many if statements because I don't want to have the ifs inside the for loops, cause that's gonna be slow # batchedTrigger
         if value is None and delta is None: # normal mode                        # batchedTrigger
             if col is None:                                                      # batchedTrigger
@@ -669,17 +728,24 @@ See also: :class:`~batched`
     has the same number of elements as the input stream or not"""                # window
         self.n = n; self.listF = (lambda x: list(x)) if newList else (lambda x: iter(x)) # window
         self.pad = pad; self.padBool = pad is not nothing # why do this? Cause in applyMp, "nothing" takes on multiple identities # window
+    def _all_array_opt(self, it, level):                                         # window
+        n = it.shape[level]; w = self.n; h = n - w + 1                           # window
+        i = np.arange(h)[:,None] + np.arange(w)[None]                            # window
+        return it[(*[slice(None, None, None)]*level,i)]                          # window
     def __ror__(self, it):                                                       # window
-        n = self.n; pad = self.pad; q = deque([], n); listF = self.listF         # window
-        for e in it:                                                             # window
-            q.append(e)                                                          # window
-            if len(q) == n: yield listF(q); q.popleft()                          # window
-        if self.padBool:                                                         # window
-            for i in range(n-1): q.append(pad); yield listF(q); q.popleft()      # window
+        if not self.padBool and isinstance(it, settings.arrayTypes): return self._all_array_opt(it, 0) # window
+        def gen():                                                               # window
+            n = self.n; pad = self.pad; q = deque([], n); listF = self.listF     # window
+            for e in init.dfGuard(it):                                           # window
+                q.append(e)                                                      # window
+                if len(q) == n: yield listF(q); q.popleft()                      # window
+            if self.padBool:                                                     # window
+                for i in range(n-1): q.append(pad); yield listF(q); q.popleft()  # window
+        return gen()                                                             # window
     def _jsF(self, meta):                                                        # window
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # window
         if self.padBool: raise Exception("window._jsF() doesn't support custom pad value yet") # window
-        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.window({cli.kjs.v(self.n)})", fIdx # window
+        return f"{fIdx} = ({dataIdx}) => {dataIdx}.window({cli.kjs.v(self.n)})", fIdx # window
 class groupBy(BaseCli):                                                          # groupBy
     def __init__(self, column:int, separate:bool=False, removeCol:bool=None):    # groupBy
         """Groups table by some column.
@@ -741,7 +807,8 @@ with ``sep=True`` might be better for you.
         if removeCol is None: removeCol = separate # if separate, then remove cols, else don't do it # groupBy
         self.removeCol = removeCol                                               # groupBy
     def __ror__(self, it):                                                       # groupBy
-        it = [list(e) for e in it]; c = self.column; separate = self.separate; removeCol = self.removeCol # groupBy
+        it = init.dfGuard(it); c = self.column; separate = self.separate; removeCol = self.removeCol # groupBy
+        if not isinstance(it, settings.arrayTypes): it = [list(e) for e in init.dfGuard(it)] # groupBy
         it = it | cli.sort(c, False); sentinel = object(); it = iter(it); a = [next(it, sentinel)] # groupBy
         if a[0] is sentinel: return                                              # groupBy
         v = a[0][c]                                                              # groupBy
@@ -758,7 +825,7 @@ with ``sep=True`` might be better for you.
                 yield [v, a] if separate else a                                  # groupBy
     def _jsF(self, meta):                                                        # groupBy
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # groupBy
-        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.groupBy({cli.kjs.v(self.column)}, {cli.kjs.v(self.separate)}, {cli.kjs.v(self.removeCol)})", fIdx # groupBy
+        return f"{fIdx} = ({dataIdx}) => {dataIdx}.groupBy({cli.kjs.v(self.column)}, {cli.kjs.v(self.separate)}, {cli.kjs.v(self.removeCol)})", fIdx # groupBy
 class ungroup(BaseCli):                                                          # ungroup
     def __init__(self, single=True, begin=True, insertCol:bool=True):            # ungroup
         """Ungroups things that were grouped using a specific mode of
@@ -778,12 +845,12 @@ structure into a flat dataframe so that you can plug into pandas. Example::
 :param insertCol: whether to insert the column into the table or not"""          # ungroup
         self.single = single; self.begin = begin; self.insertCol = insertCol     # ungroup
     def __ror__(self, it):                                                       # ungroup
-        preprocess = cli.apply(cli.wrapList().all(), 1) if self.single else cli.iden(); begin = self.begin # ungroup
+        preprocess = cli.apply(cli.wrapList().all(), 1) if self.single else cli.iden(); begin = self.begin; it = init.dfGuard(it) # ungroup
         if self.insertCol: return it | preprocess | ~cli.apply(lambda x, arr: arr | cli.insert(x, begin).all()) | cli.joinStreams() # ungroup
         else: return it | preprocess | cli.cut(1) | cli.joinStreams()            # ungroup
     def _jsF(self, meta):                                                        # ungroup
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # ungroup
-        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.ungroup({cli.kjs.v(self.single)}, {cli.kjs.v(self.begin)}, {cli.kjs.v(self.insertCol)})", fIdx # ungroup
+        return f"{fIdx} = ({dataIdx}) => {dataIdx}.ungroup({cli.kjs.v(self.single)}, {cli.kjs.v(self.begin)}, {cli.kjs.v(self.insertCol)})", fIdx # ungroup
 class insertColumn(BaseCli):                                                     # insertColumn
     def __init__(self, column:List[Any], begin=True, fill=""):                   # insertColumn
         """Inserts a column at beginning or end.
@@ -795,7 +862,7 @@ Example::
     [[1, 2], [3, 4]] | insertColumn(["a", "b"], begin=False) | deref()"""        # insertColumn
         self.column = column; self.begin = begin; self.fill = fill               # insertColumn
         self._f = transpose.wrap(insert(column, begin=begin), fill=fill)         # insertColumn
-    def __ror__(self, it): return it | self._f                                   # insertColumn
+    def __ror__(self, it): return it | self._f # conveniently, because transpose() and insert() has _all_array_opt(), this automatically has that property as well! Super nice! # insertColumn
     def _jsF(self, meta): return self._f._jsF(meta)                              # insertColumn
 class insertIdColumn(BaseCli):                                                   # insertIdColumn
     def __init__(self, table=False, begin=True):                                 # insertIdColumn
@@ -812,16 +879,43 @@ This has a shorter alias called :class:`insId`
 :param table: if False, then insert column to an Iterator[str], else treat
     input as a full fledged table"""                                             # insertIdColumn
         self.table = table; self.begin = begin                                   # insertIdColumn
-    def __ror__(self, it):                                                       # insertIdColumn
+    def _all_array_opt(self, it, level):                                         # insertIdColumn
         if self.table:                                                           # insertIdColumn
+            if level != len(it.shape)-2: return NotImplemented                   # insertIdColumn
+            else:                                                                # insertIdColumn
+                b = (np.arange(it.shape[level]) | cli.repeat(np.prod(it.shape[:level]))).reshape((*it.shape[:level+1], 1)) # insertIdColumn
+                return (np if isinstance(it, np.ndarray) else torch).concatenate([b, it] if self.begin else [it, b], -1) # insertIdColumn
+        else:                                                                    # insertIdColumn
+            if level != len(it.shape)-1: return NotImplemented                   # insertIdColumn
+            else: return it[(*[slice(None,None,None)]*len(it.shape),None)] | insId(True, self.begin).all(level) # insertIdColumn
+    def __ror__(self, it):                                                       # insertIdColumn
+        # if isinstance(it, settings.arrayTypes): return self._all_array_opt(it, 0) # insertIdColumn
+        if isinstance(it, settings.arrayTypes):                                  # insertIdColumn
+            bm = np if isinstance(it, np.ndarray) else torch                     # insertIdColumn
+            if self.table:                                                       # insertIdColumn
+                if len(it.shape) == 2:                                           # insertIdColumn
+                    b = bm.arange(it.shape[0])[:,None]                           # insertIdColumn
+                    return bm.concatenate([b, it] if self.begin else [it, b], 1) # insertIdColumn
+            else:                                                                # insertIdColumn
+                if len(it.shape) == 1:                                           # insertIdColumn
+                    a = it[:,None]; b = bm.arange(len(it))[:,None]               # insertIdColumn
+                    return bm.concatenate([b, a] if self.begin else [a, b], 1)   # insertIdColumn
+        if self.table:                                                           # insertIdColumn
+            if hasPandas and isinstance(it, pd.DataFrame):                       # insertIdColumn
+                try: return it | T() | insert(range(len(it)), self.begin) | T()  # insertIdColumn
+                except: it = init.dfGuard(it)                                    # insertIdColumn
             if self.begin: return ([i, *e] for i, e in enumerate(it))            # insertIdColumn
             else: return ([*e, i] for i, e in enumerate(it))                     # insertIdColumn
         else:                                                                    # insertIdColumn
-            if self.begin: return ([i, e] for i, e in enumerate(it))             # insertIdColumn
-            else: return ([e, i] for i, e in enumerate(it))                      # insertIdColumn
+            if hasPandas and isinstance(it, pd.Series):                          # insertIdColumn
+                if not it.name: it.name = "A"                                    # insertIdColumn
+                try: return pd.DataFrame({"_auto_idx": range(len(it)), it.name: it} if self.begin else {it.name: it, "_auto_idx": range(len(it))}) # insertIdColumn
+                except: pass                                                     # insertIdColumn
+            if self.begin: return ([i, e] for i, e in enumerate(init.dfGuard(it))) # insertIdColumn
+            else: return ([e, i] for i, e in enumerate(init.dfGuard(it)))        # insertIdColumn
     def _jsF(self, meta):                                                        # insertIdColumn
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # insertIdColumn
-        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.insertIdColumn({cli.kjs.v(self.table)}, {cli.kjs.v(self.begin)})", fIdx # insertIdColumn
+        return f"{fIdx} = ({dataIdx}) => {dataIdx}.insertIdColumn({cli.kjs.v(self.table)}, {cli.kjs.v(self.begin)})", fIdx # insertIdColumn
 insId = insertIdColumn                                                           # insertIdColumn
 def unsqueeze(dim:int=0):                                                        # unsqueeze
     """Unsqueeze input iterator.
@@ -872,7 +966,7 @@ columns. Example::
         if isinstance(inp, tListIterSet): i = inp.child                          # count
         return tIter(tCollection(int, i, str))                                   # count
     def __ror__(self, it:Iterator[str]):                                         # count
-        it = it | cli.apply(lambda row: (tuple(row) if isinstance(row, list) else row)) # count
+        it = cli.apply(lambda row: (tuple(row) if isinstance(row, list) else row))(init.dfGuard(it)) # count
         c = Counter(it); s = max(c.values()) if self._max else sum(c.values())   # count
         return [[v, k, f"{round(100*v/s)}%"] for k, v in c.items()] # has to scan through the entire thing anyway, which is long enough already, so just turn it into a list # count
     @staticmethod                                                                # count
@@ -895,7 +989,7 @@ This is useful when you want to get the count of a really long list/iterator usi
         return cli.applyS(inner)                                                 # count
     def _jsF(self, meta):                                                        # count
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # count
-        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.count()", fIdx          # count
+        return f"{fIdx} = ({dataIdx}) => {dataIdx}.count()", fIdx                # count
 class hist(BaseCli):                                                             # hist
     def __init__(self, bins:int=30, dropZero:bool=False):                        # hist
         """Bins a long 1d array. Effectively creating a historgram, without
@@ -937,7 +1031,8 @@ array of 3M length. See over :meth:`hist.join` for param details
 :param dropZero: if True, will eliminate buckets that has no element in them"""  # hist
         self.bins = bins; self.dropZero = dropZero                               # hist
     def __ror__(self, it):                                                       # hist
-        if not isinstance(it, settings.arrayTypes): it = list(it)                # hist
+        if hasPandas and isinstance(it, pd.DataFrame): it = init.dfGuard(it)     # hist
+        if not (isinstance(it, settings.arrayTypes) or (hasPandas and isinstance(it, pd.core.arraylike.OpsMixin))): it = list(it) # hist
         y, x = np.histogram(it, bins=self.bins)                                  # hist
         delta = x[1] - x[0]; x = (x[1:] + x[:-1])/2                              # hist
         if self.dropZero: idx = y > 0; return x[idx], y[idx], delta              # hist
@@ -1030,7 +1125,7 @@ Example::
         for row in it: yield _permuteGen(row, p)                                 # permute
     def _jsF(self, meta):                                                        # permute
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # permute
-        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.permute({cli.kjs.vs(self.permutations) | cli.join(', ')})", fIdx # permute
+        return f"{fIdx} = ({dataIdx}) => {dataIdx}.permute({cli.kjs.vs(self.permutations) | cli.join(', ')})", fIdx # permute
 class AA_(BaseCli):                                                              # AA_
     def __init__(self, *idxs:List[int], wraps=False):                            # AA_
         """Returns 2 streams, one that has the selected element, and the other
@@ -1059,7 +1154,7 @@ say you have a set "A", then "not A" is commonly written as A with an overline
     instead, so that A has the same signature as Ā"""                            # AA_
         super().__init__(); self.idxs = idxs; self.wraps = wraps                 # AA_
     def __ror__(self, it:List[Any]) -> List[List[List[Any]]]:                    # AA_
-        super().__ror__(it); idxs = self.idxs; it = list(it)                     # AA_
+        super().__ror__(it); idxs = self.idxs; it = list(init.dfGuard(it))       # AA_
         if len(idxs) == 0: idxs = range(len(it))                                 # AA_
         def gen(idx):                                                            # AA_
             return [it[idx], [v for i, v in enumerate(it) if i != idx]]          # AA_
@@ -1088,6 +1183,16 @@ The example happens because you have already consumed all elements of the first
 row, and thus there aren't any left when you try to call ``next(it)``."""        # peek
         super().__init__()                                                       # peek
     def __ror__(self, it:Iterator[Any]) -> Tuple[Any, Iterator[Any]]:            # peek
+        if isinstance(it, settings.arrayTypes):                                  # peek
+            try: return it[0], it                                                # peek
+            except: return None, []                                              # peek
+        if hasPandas:                                                            # peek
+            if isinstance(it, pd.DataFrame):                                     # peek
+                try: return it[:1].to_numpy()[0], it                             # peek
+                except: return None, []                                          # peek
+            if isinstance(it, pd.core.arraylike.OpsMixin):                       # peek
+                try: return it[0], it                                            # peek
+                except: return None, []                                          # peek
         it = iter(it); sentinel = object(); row = next(it, sentinel)             # peek
         if row is sentinel: return None, []                                      # peek
         def gen(): yield row; yield from it                                      # peek
@@ -1104,10 +1209,21 @@ return the input Iterator, which is not tampered. Example::
     it() | peekF(headOut()) | deref()"""                                         # peekF
         super().__init__(fs=[f]); self.f = f                                     # peekF
     def __ror__(self, it:Iterator[Any]) -> Iterator[Any]:                        # peekF
+        f = self.f                                                               # peekF
+        if isinstance(it, settings.arrayTypes):                                  # peekF
+            try: it[0]; f(it[0]); return it                                      # peekF
+            except: return []                                                    # peekF
+        if hasPandas:                                                            # peekF
+            if isinstance(it, pd.DataFrame):                                     # peekF
+                try: a = it[:1].to_numpy()[0]; f(a); return it                   # peekF
+                except: return []                                                # peekF
+            if isinstance(it, pd.core.arraylike.OpsMixin):                       # peekF
+                try: it[0]; f(it[0]); return it                                  # peekF
+                except: return None, []                                          # peekF
         it = iter(it); sentinel = object(); row = next(it, sentinel)             # peekF
         if row is sentinel: return []                                            # peekF
         def gen(): yield row; yield from it                                      # peekF
-        self.f(row); return gen()                                                # peekF
+        f(row); return gen()                                                     # peekF
 settings.add("repeat", k1lib.Settings().add("infBs", 100, "if dealing with infinite lists, how many elements at a time should be processed?"), "settings related to repeat() and repeatFrom()") # peekF
 class repeat(BaseCli):                                                           # repeat
     def __init__(self, limit:int=None):                                          # repeat
@@ -1155,7 +1271,7 @@ See also: :meth:`repeatF`
     def _jsF(self, meta):                                                        # repeat
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # repeat
         if self.limit is None: raise Exception("repeat._jsF() can't repeat the input array infinitely many times, as there's no iterator concept in JS") # repeat
-        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.repeat({cli.kjs.v(self.limit)})", fIdx # repeat
+        return f"{fIdx} = ({dataIdx}) => {dataIdx}.repeat({cli.kjs.v(self.limit)})", fIdx # repeat
 class _repeatF(BaseCli):                                                         # _repeatF
     def __init__(self, limit, kwargs): super().__init__(capture=True); self.limit = limit; self.kwargs = kwargs # _repeatF
     def __ror__(self, f):                                                        # _repeatF
@@ -1268,12 +1384,17 @@ See :class:`repeat` for a discussion on how to deal with infinite iterators
             for i in itertools.count():                                          # repeatFrom
                 if i >= limit: break                                             # repeatFrom
                 yield from it                                                    # repeatFrom
-        if limit < float("inf"): return self._all_array_opt(it, 0) if isinstance(it, settings.arrayTypes) else (gen(it) | ser) # repeatFrom
-        return (gen(it) | ser) if len(self.capturedClis) == 0 else gen(it) | cli.batched(settings.repeat.infBs) | cli.apply(ser) | cli.joinStreams() # repeatFrom
+        if limit < float("inf"):                                                 # repeatFrom
+            if isinstance(it, settings.arrayTypes): return self._all_array_opt(it, 0) # repeatFrom
+            if hasPandas:                                                        # repeatFrom
+                if isinstance(it, pd.DataFrame): return pd.DataFrame({s.name:pd.concat([s]*limit, ignore_index=True) for s in it | T()}) | ser # repeatFrom
+                if isinstance(it, pd.Series): return pd.concat([it]*limit, ignore_index=True) # repeatFrom
+            return gen(it) | ser                                                 # repeatFrom
+        it = init.dfGuard(it); return (gen(it) | ser) if len(self.capturedClis) == 0 else gen(it) | cli.batched(settings.repeat.infBs) | cli.apply(ser) | cli.joinStreams() # repeatFrom
     def _jsF(self, meta):                                                        # repeatFrom
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # repeatFrom
         if self.limit is None: raise Exception(f"repeatFrom._jsF() can't repeat the input array infinitely many times, as there's no iterator concept in JS") # repeatFrom
-        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.repeatFrom({cli.kjs.v(self.limit)})", fIdx # repeatFrom
+        return f"{fIdx} = ({dataIdx}) => {dataIdx}.repeatFrom({cli.kjs.v(self.limit)})", fIdx # repeatFrom
 def oneHotRow(i, n): ans = [0]*n; ans[i] = 1; return ans                         # oneHotRow
 class oneHot(BaseCli):                                                           # oneHot
     _groups = {}                                                                 # oneHot
@@ -1347,7 +1468,7 @@ right?
             pass                                                                 # oneHot
         return tIter(tAny())                                                     # oneHot
     def __ror__(self, it):                                                       # oneHot
-        c = self.col; d = self.d; n = self.n; sep = self.sep                     # oneHot
+        c = self.col; d = self.d; n = self.n; sep = self.sep; it = init.dfGuard(it) # oneHot
         if n == 0:                                                               # oneHot
             it = it | cli.deref(2); n = it | cli.cut(c) | cli.aS(set) | cli.shape(0) # oneHot
         for row in it:                                                           # oneHot
@@ -1417,7 +1538,7 @@ See also: :class:`~k1lib.cli.utils.syncStepper`
     def __ror__(self, it):                                                       # latch
         timeline = [[[-float("inf"), self.startTok]], self.timeline, [[float("inf"), self.endTok]]] | cli.joinSt() # latch
         before = self.before; lastT, lastT_desc = next(timeline); t, t_desc = next(timeline) # latch
-        for row in it:                                                           # latch
+        for row in init.dfGuard(it):                                             # latch
             while row[0] > t:                                                    # latch
                 lastT = t; lastT_desc = t_desc                                   # latch
                 t, t_desc = next(timeline)                                       # latch

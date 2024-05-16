@@ -3,23 +3,25 @@
 This is for quick modifiers, think of them as changing formats, or modifying an
 array in place
 """
-__all__ = ["applyS", "aS", "apply", "map_", "applyMp", "parallel", "applyCl",
+__all__ = ["applyS", "aS", "iterDelay", "apply", "applyMp", "parallel", "applyCl",
            "applyTh", "applySerial",
            "sort", "sortF", "consume", "randomize", "stagger", "op",
            "integrate", "roll", "clamp"]
 from typing import Callable, Iterator, Any, Union, List, Tuple
 from k1lib.cli.init import patchDefaultDelim, BaseCli, fastF; import k1lib.cli.init as init
-import k1lib.cli as cli, numpy as np, threading, gc; import k1lib
-from collections import deque, defaultdict
-from functools import partial, update_wrapper, lru_cache
-from k1lib.cli.typehint import *
+import k1lib.cli as cli, numpy as np, threading, gc, random, k1lib
+from collections import deque, defaultdict; from functools import partial, update_wrapper, lru_cache
+from k1lib.cli.typehint import *; requests = k1lib.dep.requests
 import dill, pickle, json, k1lib, warnings, atexit, signal, time, os, random, sys
 try: import torch; import torch.multiprocessing as mp; hasTorch = True
 except: import multiprocessing as mp; hasTorch = False
 try: import ray; hasRay = True
 except: hasRay = False
+try: import pandas as pd; pd.core; hasPandas = True
+except: hasPandas = False
 settings = k1lib.settings.cli
 class applyS(BaseCli):                                                           # applyS
+    blurb="Applies a function to the input in pipe style"                        # applyS
     def __init__(self, f:Callable[[Any], Any], *args, **kwargs):                 # applyS
         """Like :class:`apply`, but much simpler, just operating on the entire input
 object, essentially. The "S" stands for "single". There's
@@ -56,10 +58,10 @@ and whatnot.
     In fact, you can pass in ``op()`` or just a string to any cli that accepts any kind
     of function, like :class:`~k1lib.cli.filt.filt` or :class:`apply`::
 
-        range(4) | apply("x-2") | deref()
+        range(4) | apply("x-2")  | deref()
         range(4) | apply(op()-2) | deref()
-        range(4) | filt("x%2") | deref()
-        range(4) | filt(op()%2) | deref()
+        range(4) | filt("x%2")   | deref()
+        range(4) | filt(op()%2)  | deref()
 
 :param f: the function to be executed
 :param kwargs: other keyword arguments to pass to the function, together with ``args``""" # applyS
@@ -70,8 +72,18 @@ and whatnot.
         if self.hasHint: return self._hint                                       # applyS
         try: return self.f._typehint(inp)                                        # applyS
         except: return tAny()                                                    # applyS
-    def __ror__(self, it:Any) -> Any:                                            # applyS
-        return self._fC(it, *self.args, **self.kwargs)                           # applyS
+    def __ror__(self, it:Any) -> Any: return self._fC(it, *self.args, **self.kwargs) # applyS
+    def _all_array_opt(self, it, level):                                         # applyS
+        res = None; ogShape = tuple(it.shape[:level])                            # applyS
+        if isinstance(it, np.ndarray):                                           # applyS
+            n = len(it.shape); out = self._fC(np.transpose(it, (*range(level, n), *range(level))), *self.args, **self.kwargs); outN = len(out.shape) # applyS
+            res = np.transpose(out, (*range(outN - level, outN), *range(outN - level))) # applyS
+        if hasTorch and isinstance(it, torch.Tensor):                            # applyS
+            n = len(it.shape); out = self._fC(torch.transpose_axes(it, (*range(level, n), *range(level))), *self.args, **self.kwargs); outN = len(out.shape) # applyS
+            res = torch.transpose_axes(out, (*range(outN - level, outN), *range(outN - level))) # applyS
+        if res is None: return NotImplemented                                    # applyS
+        elif ogShape != tuple(res.shape[:level]): return NotImplemented          # applyS
+        else: return res                                                         # applyS
     def __invert__(self):                                                        # applyS
         """Configures it so that it expand the arguments out.
 Example::
@@ -86,7 +98,7 @@ Example::
     # returns 11
     [2, 3] | ~aS(f, a=5)"""                                                      # applyS
         if self.inverted: raise Exception("Doesn't support __invert__()ing multiple times") # applyS
-        f = self.f; a = self.args; kw = self.kwargs; res = applyS(lambda x: f(*x, *a, **kw)); # applyS
+        f = self._fC; a = self.args; kw = self.kwargs; res = aS(lambda x: f(*init.dfGuard(x), *a, **kw)); # applyS
         res.inverted = True; res.preInvAS = self; return res                     # applyS
     def _jsF(self, meta):                                                        # applyS
         # if len(self.kwargs) > 0: raise Exception("JS does not have the concept of keyword arguments") # applyS
@@ -96,25 +108,65 @@ Example::
         # lookup for custom _jsF() functions                                     # applyS
         header, _fIdx, _async = k1lib.kast.asyncGuard(k1lib.kast.prepareFunc3(self.f, ("aS", meta), self.kwargs, self.args)) # applyS
         # TODO: might want to inject args right here, on the JS side, instead of on the Python side # applyS
-        if inverted: return f"{header}\nconst {fIdx} = {'async ' if _async else ''}({dataIdx}) => {{ return {'await ' if _async else ''}{dataIdx}.aSInv{'_async' if _async else ''}({_fIdx}); }}", fIdx # applyS
+        if inverted: return f"{header}\n{fIdx} = {'async ' if _async else ''}({dataIdx}) => {{ return {'await ' if _async else ''}{dataIdx}.aSInv{'_async' if _async else ''}({_fIdx}); }}", fIdx # applyS
         else: return header, _fIdx                                               # applyS
         # for x,y in self.pattern | grep("\ue157", sep=True).till("\ue239") | cli.apply(cli.join("")) | cli.filt("x") | cli.apply(lambda x: [x, x.replace("\ue157", "${").replace("\ue239", "}")]): p = p.replace(x, y) # applyS
         # return f"const {fIdx} = ({dataIdx}) => {dataIdx}.grep(`{p}`)", fIdx    # applyS
 aS = applyS                                                                      # applyS
-def _allOpt_gen(a, ir:List[int], n:int): # a is a complex, deref-ed structure    # _allOpt_gen
-    if n == 0: return                                                            # _allOpt_gen
-    ir.append(len(a))                                                            # _allOpt_gen
-    for e in a: _allOpt_gen(e, ir, n-1)                                          # _allOpt_gen
-def _allOpt_genIr(a, n=None) -> "(derefed structure, flattened structure, ir, depth)": # a is a complex, not yet deref-ed structure # _allOpt_genIr
-    a = (a | cli.deref()) if n is None else (a | cli.deref(n)); ir = []; n = n or (a | cli.shape() | cli.shape(0)) # _allOpt_genIr
-    _allOpt_gen(a, ir, n); return a, list(a | cli.joinStreams(n-1)), ir, n       # _allOpt_genIr
-def _allOpt_recover(b:Iterator["data_structure"], ir:Iterator[int], n): # assumes b and ir are iterators # _allOpt_recover
-    ans = []; l = next(ir)                                                       # _allOpt_recover
-    for i in range(l):                                                           # _allOpt_recover
-        if n-1 > 0: ans.append(_allOpt_recover(b, ir, n-1))                      # _allOpt_recover
-        else: ans.append(next(b)); #print("  "*(4-n) + f"appended: {ans}");      # _allOpt_recover
-    return ans                                                                   # _allOpt_recover
+class iterDelay(BaseCli):                                                        # iterDelay
+    def __init__(self, n=5):                                                     # iterDelay
+        """Iterates through the array, but make sure that there's a bit of a delay.
+Example::
+
+    # returns [0, 1, 2, 3, 4, 5, 6, 7, 8. 9]
+    range(10) | iterDelay(5) | deref()
+
+At first glance, it's not obvious what's going on. Internally, :class:`iterDelay`
+will fetch 5 items from the input iterator right away and stores them in an
+internal deque (double-ended queue). Then on the 6th fetch, it will start yielding
+elements from the deque, hence introducing a delay while iterating through the input.
+
+I'd admit that this is pretty niche. I normally would not need such a cli when doing
+normal analysis, but some clis internally need this, like :class:`apply` when it detects
+that there's an _all_opt() optimization. Another use case is that prefetch feature
+of :class:`applyTh`, :class:`applyMp`, :class:`applyCl`"""                       # iterDelay
+        self.n = n                                                               # iterDelay
+    def __ror__(self, it):                                                       # iterDelay
+        if self.n <= 0: return it                                                # iterDelay
+        sentinel = object(); q = deque(); it = iter(init.dfGuard(it))            # iterDelay
+        for i in range(self.n):                                                  # iterDelay
+            e = next(it, sentinel)                                               # iterDelay
+            if e is sentinel: break                                              # iterDelay
+            q.append(e)                                                          # iterDelay
+        def g():                                                                 # iterDelay
+            while True:                                                          # iterDelay
+                e = next(it, sentinel)                                           # iterDelay
+                if e is sentinel: break                                          # iterDelay
+                q.append(e); yield q.popleft()                                   # iterDelay
+            while len(q) > 0: yield q.popleft()                                  # iterDelay
+        return g()                                                               # iterDelay
+# this section of code is a bit magical. The internal dynamics are so damn chaotic, but somehow, they all # iterDelay
+# work together beautifully                                                      # iterDelay
+def _allOpt_gen(a, q, n:int): # a is a complex, not deref-ed structure. Returns flattened a # _allOpt_gen
+    if n == 0: yield a; return                                                   # _allOpt_gen
+    c = 0; idx = len(q); q.append(None)                                          # _allOpt_gen
+    for e in a: c += 1; yield from _allOpt_gen(e, q, n-1)                        # _allOpt_gen
+    q[idx] = c                                                                   # _allOpt_gen
+def _allOpt_genIr(a, n) -> "(flattened structure, ir, depth)": # a is a complex, not deref-ed structure # _allOpt_genIr
+    q = deque(); return _allOpt_gen(a, q, n), q, n                               # _allOpt_genIr
+def _allOpt_recover(b:Iterator["data_structure"], ir:"Deque[int]", irIdx:Iterator[int], n): # assumes b and ir are iterators # _allOpt_recover
+    l = next(irIdx)                                                              # _allOpt_recover
+    for i in range(ir[l]): yield list(_allOpt_recover(b, ir, irIdx, n-1)) if n-1 > 0 else next(b) # _allOpt_recover
+def _allOpt_recover(b:Iterator["data_structure"], ir:"Deque[int]", irIdx:Iterator[int], n): # assumes b and ir are iterators # _allOpt_recover
+    l = next(irIdx); c = 0                                                       # _allOpt_recover
+    while True:                                                                  # _allOpt_recover
+        if ir[l] != None and ir[l] <= c: break                                   # _allOpt_recover
+        c += 1; yield list(_allOpt_recover(b, ir, irIdx, n-1)) if n-1 > 0 else next(b) # that list() right there is quite crucial! # _allOpt_recover
+def infIter():                                                                   # infIter
+    i = 0;                                                                       # infIter
+    while True: yield i; i += 1                                                  # infIter
 class apply(BaseCli):                                                            # apply
+    blurb="Applies a function to all input elements"                             # apply
     def __init__(self, f:Callable[[Any], Any], column:Union[int, List[int]]=None, cache:int=0, **kwargs): # apply
         """Applies a function f to every element in the incoming list/iterator.
 Example::
@@ -149,9 +201,7 @@ You can add custom keyword arguments into the function::
     # returns [15, 17, 19, 21, 23]
     [range(5), range(10, 15)] | transpose() | ~apply(f, z=5) | deref()
 
-If "apply" is too hard to remember, this cli also has an alias :class:`map_`
-that kinda mimics Python's ``map()``. Also slight reminder that you can't pass
-in extra positional args like in :class:`aS`, just extra keyword arguments.
+Slight reminder that you can't pass in extra positional args like in :class:`aS`, just extra keyword arguments.
 
 See also: :class:`aS`, :class:`~k1lib.cli.filt.filt`
 
@@ -194,7 +244,8 @@ See also: :class:`aS`, :class:`~k1lib.cli.filt.filt`
             if isinstance(last, cli.serial): # breaks up the serial: (A | B.all(2)).all(3) -> A.all(3) | B.all(5) # apply
                 self.__arrayTypeF = cli.serial(*[(e if isinstance(e, BaseCli) else aS(e)).all(depth) for e in last.clis]); return self.__arrayTypeF # apply
             else: # it | A.all(3) -> A._all_array_opt(it, 3). This function might return NotImplemented, which means it can't figure out how to utilize the speed up # apply
-                self.__arrayTypeF = aS(lambda it: last._all_array_opt(it, depth)); return self.__arrayTypeF # apply
+                if not hasattr(last, "_all_array_opt"): last = aS(last)          # apply
+                self.__arrayTypeF = lambda it: last._all_array_opt(it, depth); return self.__arrayTypeF # apply
         return self.__arrayTypeF                                                 # apply
     @property                                                                    # apply
     def _allOptF(self): # optimization 2: returns None or the function (that has to work all the time!) # apply
@@ -202,8 +253,9 @@ See also: :class:`aS`, :class:`~k1lib.cli.filt.filt`
         if self._propagatedF is None or not hasattr(self._propagatedF, "_all_opt"): self.__allOptF = 0; return None # apply
         f = self._propagatedF._all_opt                                           # apply
         def inner(it): # has to regenerate the IR on each pass through. Slow (O(30*n) or so), but the function this is supposed to run (LLMs), are even slower, so this is fine for now # apply
-            a, af, ir, n = _allOpt_genIr(it, self._applyDepth) # af = a flat     # apply
-            return _allOpt_recover(iter(f(af)), iter(ir), n)                     # apply
+            af, ir, n = _allOpt_genIr(it, self._applyDepth) # af = a flat        # apply
+            af = af | iterDelay()                                                # apply
+            return _allOpt_recover(iter(f(af)), ir, infIter(), n)                # apply
         return inner                                                             # apply
     def _typehint(self, inp):                                                    # apply
         if self.column is None:                                                  # apply
@@ -213,7 +265,7 @@ See also: :class:`aS`, :class:`~k1lib.cli.filt.filt`
         return super()._typehint(inp)                                            # apply
     def _copy(self): return apply(self.f, self.column, self.cache, **self.kwargs) # ~apply() case handled automatically # apply
     def __ror__(self, it:Iterator[str]):                                         # apply
-        c = self.column; f = self._fC; kwargs = self.kwargs                      # apply
+        c = self.column; f = self._fC; ogF = self.f; farr = (getattr(ogF, "_all_opt2", None) or f); kwargs = self.kwargs # apply
         if c is None:                                                            # apply
             if self.normal:                                                      # apply
                 if isinstance(it, settings.arrayTypes): # optimization 1         # apply
@@ -222,15 +274,34 @@ See also: :class:`aS`, :class:`~k1lib.cli.filt.filt`
                         try:                                                     # apply
                             ans = af(it)                                         # apply
                             if ans is not NotImplemented: return ans             # apply
-                        except Exception as e: pass                              # apply
+                        except init.ArrayOptException as e: raise e # this is a special exception. If the function throws this then the error relates to incorrect constraints, and not accidental, so shouldn't be ignored # apply
+                        except: pass                                             # apply
                         self.__arrayTypeF = 0 # tried to use the accelerated version, but failed, so won't ever try the accelerated version again # apply
                 elif self._allOptF is not None: return self._allOptF(it) # optimization 2, for LLMs # apply
-            return (f(line, **kwargs) for line in it)                            # apply
+                elif hasPandas and isinstance(it, pd.core.arraylike.OpsMixin):   # apply
+                    it = init.dfGuard(it)                                        # apply
+                    try:                                                         # apply
+                        res = farr(it)                                           # apply
+                        if res is not NotImplemented: return res                 # apply
+                    except: return np.array([f(x) for x in it])                  # apply
+            return (f(line, **kwargs) for line in init.dfGuard(it))              # apply
         elif isinstance(c, int):                                                 # apply
+            if hasPandas and isinstance(it, pd.DataFrame):                       # apply
+                it = it.copy(); colN = list(it)[c]                               # apply
+                try: it[colN] = f(it[colN])                                      # apply
+                except: it[colN] = [f(x) for x in it[colN]]                      # apply
+                return it                                                        # apply
             def gen(it):                                                         # apply
                 for row in it: row = list(row); row[c] = f(row[c], **kwargs); yield row # apply
             return gen(it) # return ([(e if i != c else f(e, **kwargs)) for i, e in enumerate(row)] for row in it) # old version # apply
         else: # List[int]                                                        # apply
+            if hasPandas and isinstance(it, pd.DataFrame):                       # apply
+                it = it.copy()                                                   # apply
+                for c_ in c:                                                     # apply
+                    colN = list(it)[c_]                                          # apply
+                    try: it[colN] = f(it[colN])                                  # apply
+                    except: it[colN] = [f(x) for x in it[colN]]                  # apply
+                return it                                                        # apply
             def gen(it):                                                         # apply
                 for row in it:                                                   # apply
                     row = list(row)                                              # apply
@@ -251,7 +322,7 @@ arguments out. Just for convenience really. Example::
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto(); kwIdx = init._jsDAuto(); argIdx = init._jsDAuto(); inverted = False # apply
         if self.inverted: self = self.preInvApply; inverted = True               # apply
         header, _fIdx, _async = k1lib.kast.asyncGuard(k1lib.kast.prepareFunc3(self.f, ("apply", meta), self.kwargs)) # apply
-        return f"{header}\nconst {kwIdx} = {json.dumps(self.kwargs)};\nconst {fIdx} = {'async ' if _async else ''}({dataIdx}) => {dataIdx}.apply{'_async' if _async else ''}({'async ' if _async else ''}({argIdx}) => {'await ' if _async else ''}{_fIdx}({'...' if inverted else ''}{argIdx}), {cli.kjs.v(self.column)}, {kwIdx}, false)", fIdx # apply
+        return f"{header}\n{kwIdx} = {json.dumps(self.kwargs)};\n{fIdx} = {'async ' if _async else ''}({dataIdx}) => {dataIdx}.apply{'_async' if _async else ''}({'async ' if _async else ''}({argIdx}) => {'await ' if _async else ''}{_fIdx}({'...' if inverted else ''}{argIdx}), {cli.kjs.v(self.column)}, {kwIdx}, false)", fIdx # apply
                                                                                  # apply
         # old code below, with args (self, kast, jsFnVars:"list[str]", **kwargs) # apply
         argVars = kast.kast_lambda(self.f); var = ",".join(argVars)              # apply
@@ -261,8 +332,7 @@ arguments out. Just for convenience really. Example::
         else:                                                                    # apply
             cols = [col] if isinstance(col, int) else col                        # apply
             return "".join([f".apply(({var}) => {fn}, {c})" for c in cols]), header # apply
-map_ = apply                                                                     # apply
-cloudpickle = k1lib.dep("cloudpickle")                                           # apply
+cloudpickle = k1lib.dep("cloudpickle", url="https://github.com/cloudpipe/cloudpickle") # apply
 def executeFunc(common, line, usingDill):                                        # executeFunc
     import time                                                                  # executeFunc
     if usingDill:                                                                # executeFunc
@@ -275,6 +345,7 @@ def executeFunc(common, line, usingDill):                                       
 def terminateGraceful(): signal.signal(signal.SIGINT, signal.SIG_IGN)            # terminateGraceful
 _k1_applyMp_global_ctx = {}; _k1_applyMp_global_ctx_autoInc = k1lib.AutoIncrement(prefix="_k1_applyMp") # terminateGraceful
 class applyMp(BaseCli):                                                          # applyMp
+    blurb="Applies a function to all input elements across multiple processes"   # applyMp
     _pools = set()                                                               # applyMp
     _torchNumThreads = None                                                      # applyMp
     def __init__(self, f:Callable[[Any], Any], prefetch:int=None, timeout:float=8, utilization:float=0.8, bs:int=1, newPoolEvery:int=0, **kwargs): # applyMp
@@ -372,7 +443,7 @@ so check it out.
         self.bs = bs; self.kwargs = kwargs; self.p = None                        # applyMp
         self.newPoolEvery = newPoolEvery; self.ps = []; self._serializeF = True  # applyMp
     def __ror__(self, it:Iterator[Any]) -> Iterator[Any]:                        # applyMp
-        timeout = self.timeout; it = iter(it); f = self.f # really make sure it's an iterator, for prefetch # applyMp
+        timeout = self.timeout; f = self.f # really make sure it's an iterator, for prefetch # applyMp
         if self.bs > 1: return it | cli.batched(self.bs, True) | applyMp(apply(f) | cli.toList(), self.prefetch, timeout, **self.kwargs) | cli.joinStreams() # applyMp
         def newPool():                                                           # applyMp
             if hasTorch:                                                         # applyMp
@@ -394,13 +465,7 @@ so check it out.
                 try:                                                             # applyMp
                     if self.newPoolEvery > 0: it = intercept(it, self.newPoolEvery) # applyMp
                     else: newPool()                                              # applyMp
-                    fs = deque()                                                 # applyMp
-                    for i, line in zip(range(self.prefetch), it):                # applyMp
-                        fs.append(self.p.apply_async(executeFunc, [common, dill.dumps(line), usingDill])) # applyMp
-                    for line in it:                                              # applyMp
-                        yield fs.popleft().get(timeout)                          # applyMp
-                        fs.append(self.p.apply_async(executeFunc, [common, dill.dumps(line), usingDill])) # applyMp
-                    for f in fs: yield f.get(timeout)                            # applyMp
+                    yield from it | apply(lambda line: self.p.apply_async(executeFunc, [common, dill.dumps(line), usingDill])) | iterDelay(self.prefetch) | apply(lambda x: x.get(timeout)) # applyMp
                 except KeyboardInterrupt as e:                                   # applyMp
                     print("applyMp interrupted. Terminating pool now")           # applyMp
                     for p in self.ps: p.close(); p.terminate();                  # applyMp
@@ -495,15 +560,16 @@ def specificNode(f, nodeId:str, num_gpus=0): # modify a function so that it will
     else: return f.options(scheduling_strategy=ray.util.scheduling_strategies.NodeAffinitySchedulingStrategy(node_id=nodeId, soft=False)) # specificNode
 def exportSe(se):                                                                # exportSe
     if not isinstance(se, k1lib.Settings): return se                             # exportSe
-    return {k:exportSe(v) for k,v in se.__dict__.items() if not k.startswith("_")} # exportSe
+    return {k:exportSe(v) for k,v in se.__dict__.items() if not k.startswith("_") and k != "kjs"} # excluding dicts of kjs transpilers cause that causes problems for applyCl() as it's using cloudpickle # exportSe
 def movePropsSe(obj, se):                                                        # movePropsSe
     d = se.__dict__; keys = [e for e in d.keys() if not e.startswith("_")]       # movePropsSe
     for key in keys:                                                             # movePropsSe
-        if key not in obj: continue                                              # movePropsSe
+        if key not in obj or key == "kjs": continue                              # movePropsSe
         if isinstance(d[key], k1lib.Settings): movePropsSe(obj[key], d[key])     # movePropsSe
         else: d[key] = obj[key]                                                  # movePropsSe
 _applyCl_soCache = set() # dynamic library (.so) that has been installed across all nodes, so don't have to reimport # movePropsSe
 class applyCl(BaseCli):                                                          # applyCl
+    blurb="Applies a function to all input elements across a Ray cluster"        # applyCl
     def __init__(self, f, prefetch=None, timeout=60, bs=1, rss:Union[dict, str]={}, pre:bool=False, num_cpus=1, num_gpus=0, memory=None, resolve=True, **kwargs): # applyCl
         """Like :class:`apply`, but execute a function over the input iterator
 in multiple processes on multiple nodes inside of a cluster (hence "cl"). So, just a more
@@ -757,7 +823,6 @@ tool more.
             import k1lib; movePropsSe(se, k1lib.settings) # do this to sync current settings with the remote worker nodes # applyCl
             if k1lib.settings.startup.or_patch.numpy: k1lib.cli.init.patchNumpy() # applyCl
             if k1lib.settings.startup.or_patch.dict: k1lib.cli.init.patchDict()  # applyCl
-            if k1lib.settings.startup.or_patch.pandas: k1lib.cli.init.patchPandas() # applyCl
             import os; os.makedirs(cwd, exist_ok = True); os.chdir(cwd)          # applyCl
             if isinstance(e, Handle): e.setStorage(s); e = e.get()               # applyCl
             if idxCtxHandle: _fC.__globals__["ctxHandle"] = s.d[idxCtxHandle]    # applyCl
@@ -1097,7 +1162,7 @@ want to write results into different files, you can do something like this::
 .. admonition:: Simple mode
 
     There's also another mode that's activated whenever f is not specified that feels
-    more like vanilla :class:`~inp.cat`. Say you have a file on a specific node::
+    more like vanilla :class:`~k1lib.cli.inp.cat`. Say you have a file on a specific node::
 
         nodeId = "7bb387b2920694abe9f7d2a2ed939b6d31843faf91d174d0221e871d"
         fn = "~/ssd2/randomFile.txt"
@@ -1319,8 +1384,6 @@ info directly in future runs."""                                                
         from k1lib.cli._applyCl import getFilesInFolder                          # applyCl
         if folder is None: return getFilesInFolder                               # applyCl
         return folder | getFilesInFolder                                         # applyCl
-import random                                                                    # applyCl
-requests = k1lib.dep("requests")                                                 # applyCl
 if hasRay:                                                                       # applyCl
     @ray.remote(num_cpus=0)                                                      # applyCl
     class Storage: # a wrapper for specific objects, kinda like ObjectRef, but it's an ObjectRef in my control. Should not be serialized to every other place # applyCl
@@ -1429,7 +1492,8 @@ def storageWarmup(): print("Warming up distributed storage..."); None | applyCl.
 def storageSize(): return _storages.values() | cli.op()["ss"].all() | cli.joinSt() | apply(lambda s: ray.get(s.keys.remote())) | cli.joinSt() | cli.shape(0) # storageSize
 thEmptySentinel = object()                                                       # storageSize
 class applyTh(BaseCli):                                                          # applyTh
-    def __init__(self, f, prefetch:int=None, timeout:float=5, bs:int=1, **kwargs): # applyTh
+    blurb="Applies a function to all input elements across multiple threads"     # applyTh
+    def __init__(self, f, prefetch:int=None, timeout:float=5, bs:int=1, sync=True, **kwargs): # applyTh
         """Kinda like the same as :class:`applyMp`, but executes ``f`` on multiple
 threads, instead of on multiple processes. Advantages:
 
@@ -1443,13 +1507,21 @@ Disadvantages:
 - Still has thread creation overhead, so it's still recommended to specify ``bs``
 - Is slow if ``f`` has to obtain the GIL to be able to do anything
 
-All examples from :class:`applyMp` should work perfectly here."""                # applyTh
-        fs = [f]; super().__init__(fs=fs); self.f = fs[0]; self.bs = bs; self.kwargs = kwargs # applyTh
-        self.prefetch = prefetch or int(1e9); self.timeout = timeout             # applyTh
+All examples from :class:`applyMp` should work perfectly here.
+
+:param prefetch: how many results to execute ahead of time
+:param timeout: kills the thread if it takes longer than this amount
+:param bs: how much to bunch function calls together
+:param sync: if True, execute the functions, hang and wait for the result of each
+    operation, then return. Else schedules the thread but does not wait for the
+    result and yields None right away
+:param kwargs: keyword arguments to be fed to the function"""                    # applyTh
+        fs = [f]; super().__init__(fs=fs); self.f = fs[0]; self.kwargs = kwargs  # applyTh
+        self.prefetch = prefetch or int(1e9); self.timeout = timeout; self.bs = bs; self.sync = sync # applyTh
     def __ror__(self, it):                                                       # applyTh
         if self.bs > 1:                                                          # applyTh
-            yield from (it | cli.batched(self.bs, True) | applyTh(apply(self.f), self.prefetch, self.timeout) | cli.joinStreams()); return # applyTh
-        datas = deque(); it = iter(it); kwargs = self.kwargs                     # applyTh
+            yield from (it | cli.batched(self.bs, True) | applyTh(apply(self.f), self.prefetch, self.timeout, sync=self.sync) | cli.joinStreams()); return # applyTh
+        datas = deque(); it = iter(it); kwargs = self.kwargs; sync = self.sync   # applyTh
         innerF = fastF(self.f); timeout = self.timeout                           # applyTh
         def f(line, wrapper): wrapper.value = innerF(line, **kwargs)             # applyTh
         for _, line in zip(range(self.prefetch), it):                            # applyTh
@@ -1457,19 +1529,26 @@ All examples from :class:`applyMp` should work perfectly here."""               
             t = threading.Thread(target=f, args=(line,w))                        # applyTh
             t.start(); datas.append((t, w))                                      # applyTh
         for line in it:                                                          # applyTh
-            data = datas.popleft(); data[0].join(timeout)                        # applyTh
-            if data[1].value is thEmptySentinel:                                 # applyTh
-                for data in datas: data[0].join(0.01)                            # applyTh
-                raise RuntimeError("Thread timed out!")                          # applyTh
-            yield data[1].value; w = k1lib.Wrapper(thEmptySentinel)              # applyTh
+            data = datas.popleft() # pop before checking sync to clean up memory # applyTh
+            if sync:                                                             # applyTh
+                data[0].join(timeout)                                            # applyTh
+                if data[1].value is thEmptySentinel:                             # applyTh
+                    for data in datas: data[0].join(0.01)                        # applyTh
+                    raise RuntimeError("Thread timed out!")                      # applyTh
+                yield data[1].value                                              # applyTh
+            else: yield None                                                     # applyTh
+            w = k1lib.Wrapper(thEmptySentinel)                                   # applyTh
             t = threading.Thread(target=f, args=(line,w))                        # applyTh
             t.start(); datas.append((t, w))                                      # applyTh
         for i in range(len(datas)): # do it this way so that python can remove threads early, due to ref counting # applyTh
-            data = datas.popleft(); data[0].join(timeout)                        # applyTh
-            if data[1].value is thEmptySentinel:                                 # applyTh
-                for data in datas: data[0].join(0.01)                            # applyTh
-                raise RuntimeError("Thread timed out!")                          # applyTh
-            yield data[1].value                                                  # applyTh
+            data = datas.popleft()                                               # applyTh
+            if sync:                                                             # applyTh
+                data[0].join(timeout)                                            # applyTh
+                if data[1].value is thEmptySentinel:                             # applyTh
+                    for data in datas: data[0].join(0.01)                        # applyTh
+                    raise RuntimeError("Thread timed out!")                      # applyTh
+                yield data[1].value                                              # applyTh
+            else: yield None                                                     # applyTh
     def _copy(self): return applyTh(self.f, self.prefetch, self.timeout, self.bs, **self.kwargs) # applyTh
     def __invert__(self):                                                        # applyTh
         res = self._copy(); f = fastF(res.f)                                     # applyTh
@@ -1478,6 +1557,7 @@ All examples from :class:`applyMp` should work perfectly here."""               
         res.kwargs = {}                                                          # applyTh
         return res                                                               # applyTh
 class applySerial(BaseCli):                                                      # applySerial
+    blurb="Applies a function to an element repeatedly"                          # applySerial
     def __init__(self, f, *args, **kwargs):                                      # applySerial
         """Applies a function repeatedly. First yields input iterator ``x``. Then
 yields ``f(x)``, then ``f(f(x))``, then ``f(f(f(x)))`` and so on. Example::
@@ -1510,6 +1590,7 @@ If the result of your operation is an iterator, you might want to
     def __ror__(self, it):                                                       # applySerial
         f = fastF(self.f)                                                        # applySerial
         if self.unpack:                                                          # applySerial
+            it = init.dfGuard(it)                                                # applySerial
             while True: yield it; it = f(*it, *self.args, **self.kwargs)         # applySerial
         else:                                                                    # applySerial
             while True: yield it; it = f(it, *self.args, **self.kwargs)          # applySerial
@@ -1521,8 +1602,9 @@ def argsort(it, key=None, reverse=False):                                       
     if key: return sorted(range(len(it)), key=lambda i: key(it[i]), reverse=reverse) # argsort
     else: return sorted(range(len(it)), key=it.__getitem__, reverse=reverse)     # argsort
 class sort(BaseCli):                                                             # sort
+    blurb="Sorts list/table based on an optional column"                         # sort
     def __init__(self, column:int=0, numeric=True, reverse=False, unsort=False): # sort
-        """Sorts all lines based on a specific `column`.
+        """Sorts list/table based on a specific `column`.
 Example::
 
     # returns [[5, 'a'], [1, 'b']]
@@ -1568,13 +1650,27 @@ Example::
         if c is not None and len(it.shape)-level != 2: raise Exception(f"Expected sort(None) to take in 2-d array, but the array has shape {it.shape[level:]}") # sort
         bm = np if isinstance(it, np.ndarray) else (torch if (hasTorch and isinstance(it, torch.Tensor)) else None) # sort
         if bm is not None:                                                       # sort
-            try:                                                                 # sort
-                if c is None: b = bm.argsort(it);   b = bm.flip(b, (level,)) if reverse else b; return bm.gather(it, level, b) | ser.all(level) # sort
-                else: b = bm.argsort(it[(*p1, c)]); b = bm.flip(b, (level,)) if reverse else b; return bm.gather(it, level, b[(*p1, None)].expand(it.shape)) | ser.all(level) # sort
-            except Exception as e: print(e)                                      # sort
+            if c is None: b = bm.argsort(it);   b = bm.flip(b, (level,)) if reverse else b; return bm.gather(it, level, b) | ser.all(level) # sort
+            else:                                                                # sort
+                try: b = bm.argsort(it[(*p1, c)]); b = bm.flip(b, (level,)) if reverse else b; return bm.gather(it, level, b[(*p1, None)].expand(it.shape)) | ser.all(level) # sort
+                except ValueError: # this is to catch a super strange numpy bug. This bug happens when executing # sort
+                    # the above line like: sort(1)._all_array_opt((np.random.randn(183, 32, 2)), 1). This throws "ValueError: Need at least 0 and at most 32 array objects.". # sort
+                    # That error is equivalent to np.choose([0]*32, [np.arange(0,32)]*32). But if you change all 32 into 31, then everything works fine. # sort
+                    # Pytorch version of gather() doesn't have this limitation, so if this errors out, let's create a pytorch tensor, run through this optimization # sort
+                    # again, and convert back to the correct dtype np array      # sort
+                    if isinstance(it, np.ndarray) and hasTorch: return self._all_array_opt(torch.from_numpy(it), level).numpy().astype(it.dtype) # sort
+                    return NotImplemented                                        # sort
         return NotImplemented                                                    # sort
     def __ror__(self, it:Iterator[str]):                                         # sort
-        c = self.column; reverse = self.reverse; bm = None; ser = self.capturedSerial # sort
+        c = self.column; reverse = self.reverse; unsort = self.unsort; bm = None; ser = self.capturedSerial # sort
+        if hasPandas:                                                            # sort
+            if isinstance(it, pd.DataFrame):                                     # sort
+                if c is None: it = init.dfGuard(it)                              # sort
+                else:                                                            # sort
+                    s = it[list(it)[c]]; arg = s.argsort(); arg = (arg[::-1] if reverse else arg).to_numpy(); res = it.iloc[arg] | ser # sort
+                    if unsort: return res.iloc[argsort(arg)] if isinstance(res, pd.DataFrame) else res | cli.rows(*argsort(arg)) # sort
+                    else: return res                                             # sort
+            elif isinstance(it, pd.core.arraylike.OpsMixin): it = it.to_numpy()  # sort
         if isinstance(it, settings.arrayTypes):                                  # sort
             if c is None and len(it.shape) != 1: raise Exception(f"Expected sort(None) to take in a 1-d array, but the array has shape {it.shape}") # sort
             if c is not None and len(it.shape) != 2: raise Exception(f"Expected sort(col) to take in a 2-d array, but the array has shape {it.shape}") # sort
@@ -1597,10 +1693,11 @@ Example::
     def _jsF(self, meta):                                                        # sort
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto(); argIdx = init._jsDAuto() # sort
         if self.unsort: raise Exception("sort._jsF() unsort mode is unavailable, as the cli capture mechanism isn't possible in JS") # sort
-        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.ksort({cli.kjs.v(self.column)}, {cli.kjs.v(self.numeric)}, {cli.kjs.v(self.reverse)})", fIdx # sort
+        return f"{fIdx} = ({dataIdx}) => {dataIdx}.ksort({cli.kjs.v(self.column)}, {cli.kjs.v(self.numeric)}, {cli.kjs.v(self.reverse)})", fIdx # sort
 class sortF(BaseCli):                                                            # sortF
+    "Sorts list/table using a function"                                          # sortF
     def __init__(self, f:Callable[[Any], float], column:int=None, reverse=False): # sortF
-        """Sorts rows using a function.
+        """Sorts list/table using a function.
 Example::
 
     # returns ['a', 'aa', 'aaa', 'aaaa', 'aaaaa']
@@ -1611,7 +1708,15 @@ Example::
         self.column = column; self.reverse = reverse                             # sortF
     def __ror__(self, it:Iterator[Any]) -> Iterator[Any]:                        # sortF
         c = self.column; f = self._fC                                            # sortF
-        if c is None: return sorted(list(it), key=f, reverse=self.reverse)       # sortF
+        if c is None:                                                            # sortF
+            it = init.dfGuard(it)                                                # sortF
+            try: it[:]; len(it)                                                  # sortF
+            except: it = list(it)                                                # sortF
+            return sorted(it, key=f, reverse=self.reverse)                       # sortF
+        if hasPandas and isinstance(it, pd.DataFrame):                           # sortF
+            col = it[list(it)[c]]                                                # sortF
+            arg = [x[0] for x in sorted([[i, f(x)] for i,x in enumerate(col)], key=lambda x:x[1], reverse=self.reverse)] # sortF
+            return it.iloc[arg]                                                  # sortF
         def sortF(row):                                                          # sortF
             if len(row) > c: return f(row[c])                                    # sortF
             return float("inf")                                                  # sortF
@@ -1621,10 +1726,11 @@ Example::
     def _jsF(self, meta):                                                        # sortF
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto(); argIdx = init._jsDAuto() # sortF
         header, _fIdx, _async = k1lib.kast.asyncGuard(k1lib.kast.prepareFunc3(self.f, ("sortF", meta))) # sortF
-        return f"{header}\nconst {fIdx} = {'async ' if _async else ''}({dataIdx}) => {{ return {'await ' if _async else ''}{dataIdx}.sortF{'_async' if _async else ''}(({argIdx}) => {_fIdx}({argIdx}), {cli.kjs.v(self.column)}, {cli.kjs.v(self.reverse)}); }}", fIdx # sortF
+        return f"{header}\n{fIdx} = {'async ' if _async else ''}({dataIdx}) => {{ return {'await ' if _async else ''}{dataIdx}.sortF{'_async' if _async else ''}(({argIdx}) => {_fIdx}({argIdx}), {cli.kjs.v(self.column)}, {cli.kjs.v(self.reverse)}); }}", fIdx # sortF
 class consume(BaseCli):                                                          # consume
+    blurb="Consumes the iterator in a side stream and returns the iterator"      # consume
     def __init__(self, f:Union[BaseCli, Callable[[Any], None]]):                 # consume
-        r"""Consumes the iterator in a side stream. Returns the iterator.
+        r"""Consumes the iterator in a side stream and returns the iterator.
 Kinda like the bash command ``tee``. Example::
 
     # prints "0\n1\n2" and returns [0, 1, 2]
@@ -1639,8 +1745,14 @@ See also: :class:`~k1lib.cli.output.tee`"""                                     
         fs = [f]; super().__init__(fs=fs); self.f = fs[0]                        # consume
     def __ror__(self, it):                                                       # consume
         self.f(it); return it                                                    # consume
+def batched_randperm(n, l, gen=None): # courtesy of https://discuss.pytorch.org/t/batch-version-of-torch-randperm/111121/3 # batched_randperm
+    if gen is None: return np.argsort(np.random.rand(l, n))                      # batched_randperm
+    else: return torch.argsort(torch.rand(l, n, generator=gen), dim=-1)          # batched_randperm
+def randperm(n, gen=None): return batched_randperm(n, 1, gen)[0]                 # randperm
+default = 100                                                                    # randperm
 class randomize(BaseCli):                                                        # randomize
-    def __init__(self, bs=100, seed=None):                                       # randomize
+    blurb="Randomizes the input elements' order"                                 # randomize
+    def __init__(self, bs=default, seed=None):                                   # randomize
         """Randomize input stream. In order to be efficient, this does not
 convert the input iterator to a giant list and yield random values from that.
 Instead, this fetches ``bs`` items at a time, randomizes them, returns and
@@ -1669,16 +1781,26 @@ This may or may not be desireable, but I think it's desirable.
 
 :param bs: batch size
 :param seed: if specified, will always randomize the input iterator in the same way""" # randomize
-        self.bs = bs if bs != None else float("inf"); self.seed = seed           # randomize
+        self.bs = bs if bs != None else float("inf")                             # randomize
+        self.seed = seed                                                         # randomize
         if seed is not None and not hasTorch: raise Exception("Seeded randomize() depends on PyTorch. Please install it first") # randomize
+    def _newTorchGen(self): return torch.Generator().manual_seed(random.Random(self.seed).getrandbits(63)) # randomize
     def _newGenn(self):                                                          # randomize
-        if self.seed is None: return np.random.permutation                       # randomize
-        gen = torch.Generator().manual_seed(random.Random(self.seed).getrandbits(63)) # randomize
-        return lambda n: torch.randperm(n, generator=gen)                        # randomize
+        if self.seed is None: return randperm                                    # randomize
+        gen = self._newTorchGen(); return lambda n: randperm(n, gen)             # randomize
+    def _newGenn2(self):                                                         # randomize
+        if self.seed is None: return batched_randperm                            # randomize
+        gen = self._newTorchGen(); return lambda n, l: batched_randperm(n, l, gen) # randomize
+    def _all_array_opt(self, it, level):                                         # randomize
+        perms = self._newGenn2()(it.shape[level], np.prod(it.shape[:level]))     # randomize
+        b = it | cli.joinSt(level-1); return b[np.arange(len(b))[:, None], perms].reshape(it.shape) # randomize
     def __ror__(self, it:Iterator[Any]) -> Iterator[Any]:                        # randomize
         bs = self.bs                                                             # randomize
         if isinstance(it, settings.arrayTypes):                                  # randomize
-            if bs is None or len(it) <= bs: return it if len(it) == 1 else it[self._newGenn()(len(it))] # randomize
+            if bs is default or bs is None or len(it) <= bs: return it if len(it) == 1 else it[self._newGenn()(len(it))] # randomize
+        if hasPandas and isinstance(it, pd.DataFrame):                           # randomize
+            if bs is default or bs is None or len(it) <= bs: return it.iloc[self._newGenn()(len(it))] # randomize
+        if bs is default: bs = 100                                               # randomize
         def gen():                                                               # randomize
             genn = self._newGenn()                                               # randomize
             for batch in it | cli.batched(bs, True):                             # randomize
@@ -1687,7 +1809,7 @@ This may or may not be desireable, but I think it's desirable.
         return gen()                                                             # randomize
     def _jsF(self, meta):                                                        # randomize
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # randomize
-        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.randomize({cli.kjs.v(self.seed)})", fIdx # randomize
+        return f"{fIdx} = ({dataIdx}) => {dataIdx}.randomize({cli.kjs.v(self.seed)})", fIdx # randomize
 class StaggeredStream:                                                           # StaggeredStream
     def __init__(self, stream:Iterator[Any], every:int):                         # StaggeredStream
         """Not intended to be instantiated by the end user. Use :class:`stagger`
@@ -1699,6 +1821,7 @@ instead."""                                                                     
         """Length of window (length of result if you were to deref it)."""       # StaggeredStream
         return self.every                                                        # StaggeredStream
 class stagger(BaseCli):                                                          # stagger
+    blurb='Staggers input stream into multiple stream "windows" placed serially' # stagger
     def __init__(self, every:int):                                               # stagger
         """Staggers input stream into multiple stream "windows" placed serially. Best
 explained with an example::
@@ -1747,7 +1870,7 @@ This may or may not be desirable. Also this should be obvious, but I want to
 mention this in case it's not clear to you."""                                   # stagger
         self.every = int(every)                                                  # stagger
     def __ror__(self, it:Iterator[Any]) -> StaggeredStream:                      # stagger
-        return StaggeredStream(iter(it), self.every)                             # stagger
+        return StaggeredStream(iter(init.dfGuard(it)), self.every)               # stagger
     @staticmethod                                                                # stagger
     def tv(every:int, ratio:float=0.8):                                          # stagger
         """Convenience method to quickly stagger train and valid datasets.
@@ -1758,6 +1881,7 @@ Example::
         return stagger(round(every*ratio)) + stagger(round(every*(1-ratio)))     # stagger
 compareOps = {"__lt__", "__le__", "__eq__", "__ne__", "__gt__", "__ge__"}        # stagger
 class op(k1lib.Absorber, BaseCli):                                               # op
+    blurb="Shorthand for lambda functions"                                       # op
     def __init__(self):                                                          # op
         """Absorbs operations done on it and applies it on the stream. Based
 on :class:`~k1lib.Absorber`. Example::
@@ -1875,25 +1999,44 @@ If ``f`` is not an ``op``, then just return it without doing anything to it"""  
     def _jsF(self, meta): return cli.aS(self)._jsF(meta)                         # op
 cli.op = op                                                                      # op
 class integrate(BaseCli):                                                        # integrate
-    def __init__(self, dt=1):                                                    # integrate
+    blurb="Calculates the cumulative sum of the input"                           # integrate
+    def __init__(self, col=None, dt=1):                                          # integrate
         """Integrates the input.
 Example::
 
     # returns [0, 1, 3, 6, 10, 15, 21, 28, 36, 45]
     range(10) | integrate() | deref()
     # returns [0, 2, 6, 12, 20, 30, 42, 56, 72, 90]
-    range(10) | integrate(2) | deref()
+    range(10) | integrate(dt=2) | deref()
 
-:param dt: Optional small step"""                                                # integrate
-        self.dt = dt                                                             # integrate
+
+    # returns [['a', 0], ['b', 1], ['c', 4], ['d', 10]]
+    [["a", 0], ["b", 1], ["c", 3], ["d", 6]] | integrate(1) | deref()
+    # returns [['a', 0], ['b', 2], ['c', 8], ['d', 20]]
+    [["a", 0], ["b", 1], ["c", 3], ["d", 6]] | integrate(1, dt=2) | deref()
+
+:param col: column to integrate over
+:param dt: optional step size, or delta time"""                                  # integrate
+        self.col = col; self.dt = dt                                             # integrate
     def __ror__(self, it):                                                       # integrate
-        if self.dt == 1:                                                         # integrate
-            s = 0                                                                # integrate
-            for e in it: s += e; yield s                                         # integrate
+        it = init.dfGuard(it)                                                    # integrate
+        if self.col is None:                                                     # integrate
+            if self.dt == 1:                                                     # integrate
+                s = 0                                                            # integrate
+                for e in it: s += e; yield s                                     # integrate
+            else:                                                                # integrate
+                dt = self.dt; s = 0                                              # integrate
+                for e in it: s += e*dt; yield s                                  # integrate
         else:                                                                    # integrate
-            dt = self.dt; s = 0                                                  # integrate
-            for e in it: s += e*dt; yield s                                      # integrate
+            col = self.col                                                       # integrate
+            if self.dt == 1:                                                     # integrate
+                s = 0                                                            # integrate
+                for e in it: s += e[col]; e[col] = s; yield e                    # integrate
+            else:                                                                # integrate
+                dt = self.dt; s = 0                                              # integrate
+                for e in it: s += e[col]*dt; e[col] = s; yield e                 # integrate
 class roll(BaseCli):                                                             # roll
+    blurb="Rolls the input by some amount of shift"                              # roll
     def __init__(self, shift:int):                                               # roll
         """Rolls the input some amount of shift.
 Example::
@@ -1903,15 +2046,25 @@ Example::
 
 :param shift: shift amount"""                                                    # roll
         self.shift = shift                                                       # roll
+    def _all_array_opt(self, it, level):                                         # roll
+        if isinstance(it, np.ndarray): return np.roll(it, self.shift, level)     # roll
+        if hasTorch and isinstance(it, torch.Tensor): return torch.roll(it, self.shift, level) # roll
+    def _all_opt2(self): return NotImplemented # should not do this optimization, this is not dimension-agnostic! # roll
     def __ror__(self, it):                                                       # roll
         shift = self.shift                                                       # roll
-        if isinstance(it, np.ndarray): return np.roll(it, shift)                 # roll
-        if hasTorch and isinstance(it, torch.Tensor): return torch.roll(it, shift) # roll
+        if isinstance(it, np.ndarray): return np.roll(it, shift, 0)              # roll
+        if hasTorch and isinstance(it, torch.Tensor): return torch.roll(it, shift, 0) # roll
+        if hasPandas:                                                            # roll
+            arg = np.roll(np.arange(len(it)), shift, 0)                          # roll
+            if isinstance(it, pd.DataFrame): return it.iloc[arg]                 # roll
+            if isinstance(it, pd.core.arraylike.OpsMixin): return it[arg]        # roll
+        it = init.dfGuard(it)                                                    # roll
         try: it[0]; len(it)                                                      # roll
         except: it = list(it)                                                    # roll
         return [*it[-shift:], *it[:-shift]]                                      # roll
 class clamp(BaseCli):                                                            # clamp
-    def __init__(self, col=None, min=0, max=1):                                  # clamp
+    blurb="Clamps input list/array between 2 values"                             # clamp
+    def __init__(self, col=None, min=0, max=1, std=None):                        # clamp
         """Clamps input list/array between 2 values.
 Example::
 
@@ -1920,14 +2073,64 @@ Example::
     # clamps the 1st column (0-index!) between 0 and 2
     np.random.randn(10, 3) | clamp(1, 0, 2)
 
+This cli has 2 modes. Absolute mode and std mode. Absolute mode will
+clamp between .min and .max, and is activated when .std is left alone
+(aka None).
+
+Std mode is activated when you specify .std value. Then, it will calculate
+the mean and std of the incoming data and will auto calculate the min and
+max values.
+
 :param col: column to clamp"""                                                   # clamp
-        self.col = col; self.min = min; self.max = max                           # clamp
+        self.col = col; self.min = min; self.max = max; self.std = std           # clamp
+    def _all_array_opt(self, it, level): # this was pretty painful, I have to admit! # clamp
+        n = len(it.shape); col = self.col; std = self.std                        # clamp
+        if col is None:                                                          # clamp
+            if self.std is not None:                                             # clamp
+                it = np.copy(it) if isinstance(it, np.ndarray) else torch.clone(it) # clamp
+                b = it | cli.joinSt(n-level-1).all(level)                        # clamp
+                min_ = (b.mean(level) - std*b.std(level)) | cli.repeat(b.shape[-1]).all(level) # clamp
+                max_ = (b.mean(level) + std*b.std(level)) | cli.repeat(b.shape[-1]).all(level) # clamp
+                b[b < min_] = min_[b < min_]; b[b > max_] = max_[b > max_]; return b.reshape(it.shape) # clamp
+            else:                                                                # clamp
+                if isinstance(it, np.ndarray): return np.clip(it, self.min, self.max) # clamp
+                if hasTorch and isinstance(it, torch.Tensor): return torch.clamp(it, self.min, self.max) # clamp
+        else:                                                                    # clamp
+            if self.std is not None:                                             # clamp
+                it = np.copy(it) if isinstance(it, np.ndarray) else torch.clone(it) # clamp
+                b = it[(*[slice(None,None,None)]*level,col)] | cli.joinSt(n-level-2).all(level) # clamp
+                min_ = (b.mean(level) - std*b.std(level)) | cli.repeat(b.shape[-1]).all(level) # clamp
+                max_ = (b.mean(level) + std*b.std(level)) | cli.repeat(b.shape[-1]).all(level) # clamp
+                b[b < min_] = min_[b < min_]; b[b > max_] = max_[b > max_]; return it # clamp
+            else:                                                                # clamp
+                it = np.copy(it) if isinstance(it, np.ndarray) else torch.clone(it) # clamp
+                it[(*[slice(None,None,None)]*level,col)] = (np.clip if isinstance(it, np.ndarray) else torch.clamp)(it[(*[slice(None,None,None)]*level,col)], self.min, self.max); return it # clamp
+        return NotImplemented                                                    # clamp
     def __ror__(self, it):                                                       # clamp
-        col = self.col; min_ = self.min; max_ = self.max                         # clamp
+        col = self.col; min_ = self.min; max_ = self.max; std = self.std         # clamp
         if isinstance(it, np.ndarray):                                           # clamp
-            if col is None: return np.clip(it, min_, max_)                       # clamp
-            else: a = np.copy(it); a[:,col] = np.clip(a[:,col], min_, max_); return a # clamp
+            if col is None:                                                      # clamp
+                if std is None: return np.clip(it, min_, max_)                   # clamp
+                m = it.mean(); s = it.std(); return np.clip(it, m-s*std, m+s*std) # clamp
+            else:                                                                # clamp
+                a = np.copy(it); c = a[:,col]                                    # clamp
+                if std is None: a[:,col] = np.clip(c, min_, max_)                # clamp
+                else: m = c.mean(); s = c.std(); a[:,col] = np.clip(c, m-s*std, m+s*std) # clamp
+                return a                                                         # clamp
         if hasTorch and isinstance(it, torch.Tensor):                            # clamp
-            if col is None: return torch.clamp(it, min_, max_)                   # clamp
-            else: a = torch.clone(it); a[:,col] = torch.clamp(a[:,col], min_, max_); return a # clamp
-        return it | cli.apply(lambda x: max(min(x, max_), min_), self.col)       # clamp
+            if col is None:                                                      # clamp
+                if std is None: return torch.clamp(it, min_, max_)               # clamp
+                m = it.mean(); s = it.std(); return torch.clamp(it, m-s*std, m+s*std) # clamp
+            else:                                                                # clamp
+                a = torch.clone(it); c = a[:,col]                                # clamp
+                if std is None: a[:,col] = torch.clamp(c, min_, max_)            # clamp
+                else: m = c.mean(); s = c.std(); a[:,col] = torch.clamp(c, m-s*std, m+s*std) # clamp
+                return a                                                         # clamp
+        if hasPandas and isinstance(it, pd.DataFrame):                           # clamp
+            if col is None: it = init.dfGuard(it)                                # clamp
+            else:                                                                # clamp
+                c = it[list(it)[col]]                                            # clamp
+                if std is None: c = np.clip(c, min_, max_)                       # clamp
+                else: m = c.mean(); s = c.std(); c = np.clip(c, m-s*std, m+s*std) # clamp
+                return it.replaceCol(list(it)[col], c)                           # clamp
+        return it | cli.apply(lambda x: max(min(x, max_), min_), self.col) # TODO: needs fixing # clamp

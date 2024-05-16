@@ -16,7 +16,7 @@ _cuda = k1lib.Wrapper(None)
 def cuda() -> bool: # internal func to figure out whether the funcs should run on gpus or not # cuda
     if _cuda() is None: _cuda.value = torch.cuda.is_available() and torch.cuda.device_count() >= 1 # cuda
     return _cuda()                                                               # cuda
-sentence_transformers = k1lib.dep("sentence_transformers"); embed_models_cpu = dict(); embed_models_cuda = dict() # cuda
+sentence_transformers = k1lib.dep("sentence_transformers", url="https://www.sbert.net/"); embed_models_cpu = dict(); embed_models_cuda = dict() # cuda
 def embed_models(): return embed_models_cuda if cuda() else embed_models_cpu     # embed_models
 settings.add("embed", k1lib.Settings().add("model", "all-MiniLM-L6-v2", "what model to choose from `SentenceTransformer` library").add("bs", 512, "batch size to feed the model. For all-MiniLM-L6-v2, it seems to be able to deal with anything. I've tried 10k batch and it's still doing good")) # embed_models
 def embed_model(): # returns correct function capable of passing in List[str] and will spit out np.ndarray with shape (N, F) # embed_model
@@ -48,7 +48,7 @@ for document-lookup style applications.
         self.model = embed_model(); self.normF = (lambda x: (x - (x | cli.toMean())) / (x | cli.toStd())) if norm else (lambda x: x) # embed
     def __ror__(self, it): return self.normF(self.model([it])[0] if isinstance(it, str) else self.model(list(it))) # embed
     def _all_opt(self, it:List[str]): return it | cli.batched(settings.embed.bs, True) | cli.apply(self.__ror__) | cli.joinStreams() # embed
-transformers = k1lib.dep("transformers"); generic_models_cpu = dict(); generic_models_cuda = dict() # embed
+transformers = k1lib.dep("transformers", url="https://huggingface.co/docs/transformers/en/index"); generic_models_cpu = dict(); generic_models_cuda = dict() # embed
 def generic_models(): return generic_models_cuda if cuda() else generic_models_cpu # generic_models
 settings.add("generic", k1lib.Settings().add("model", "google/flan-t5-xl", "what model to choose from `transformers` library").add("bs", 16, "batch size to feed the model. For flan-t5-xl, 16 seems to be the sweet spot for 24GB VRAM (RTX 3090/4090). Decrease it if you don't have as much VRAM")) # generic_models
 def generic_model(maxTokens=100): # returns correct function capable of passing in str|List[str] and will spit out List[str] # generic_model
@@ -89,9 +89,9 @@ Can change model type by doing ``settings.cli.models.generic.model = "google/fla
         return ans if arrMode else ans | cli.item()                              # complete
     def _all_opt(self, it:List[str]):                                            # complete
         return it | cli.batched(settings.generic.bs, True) | cli.apply(self.__ror__) | cli.joinStreams() # complete
-skclus = k1lib.dep("sklearn.cluster")                                            # complete
-skpre = k1lib.dep("sklearn.preprocessing")                                       # complete
-skmet = k1lib.dep("sklearn.metrics")                                             # complete
+skclus = k1lib.dep("sklearn.cluster", url="https://scikit-learn.org/")           # complete
+skpre = k1lib.dep("sklearn.preprocessing", url="https://scikit-learn.org/")      # complete
+skmet = k1lib.dep("sklearn.metrics", url="https://scikit-learn.org/")            # complete
 def refine(fea, a, b, kwargs, timeout=1):                                        # refine
     scores = []; topScore = float("-inf")                                        # refine
     for k in torch.loglinspace(a, b, 10).numpy().astype(int) | cli.aS(np.unique): # refine
@@ -137,7 +137,7 @@ Example::
         centers = scaler.inverse_transform(centers)                              # kmeans
         if mode == 0: return [centers, labels]                                   # kmeans
         return centers if mode == 1 else labels                                  # kmeans
-skmani = k1lib.dep("sklearn.manifold")                                           # kmeans
+skmani = k1lib.dep("sklearn.manifold", url="https://scikit-learn.org/")          # kmeans
 class tsne(BaseCli):                                                             # tsne
     def __init__(self, n=2, **kwargs):                                           # tsne
         """Transforms feature vectors of shape (N, F) down to (N, 2) for easy plotting.

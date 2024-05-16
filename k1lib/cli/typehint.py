@@ -34,7 +34,7 @@ class tBase:                                                                    
         return True                                                              # tBase
     def check(self, v):                                                          # tBase
         """Checks whether a specific object adhears to this type hint or not.
-Returns :attr:`yieldT` if object does not adhere. If it does, then return the object.
+Returns :attr:`~k1lib.cli.init.yieldT` if object does not adhere. If it does, then return the object.
 
 Note that in the case that the object is actually an iterator, it will return
 a new iterator containing all elements from the old iterator."""                 # tBase
@@ -335,7 +335,7 @@ all type hint outputs of all clis are good or not. Example::
     assert range(1, 3) | tCheck() | item() | op()*2 == 2
 
 Mainly used in cli unit tests. Return type of statement will be :class:`tCheck`,
-which might be undesirable, so you can pipe it to :data:`yieldT` like this::
+which might be undesirable, so you can pipe it to :attr:`~k1lib.cli.init.yieldT` like this::
 
     # returns tCheck object
     range(1, 3) | tCheck() | item() | op()*2

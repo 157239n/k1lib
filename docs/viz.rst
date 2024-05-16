@@ -23,3 +23,12 @@ k1lib.viz module
    .. autofunction:: FAnim
 
    .. autofunction:: mask
+   
+   .. autoclass:: PDF
+      :members:
+   .. autoclass:: Html
+      :members:
+   .. autoclass:: onload
+      :members:
+   .. autoclass:: Table
+      :members:

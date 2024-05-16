@@ -635,6 +635,14 @@ kapi module
    :undoc-members:
    :show-inheritance:
 
+kcv module
+-------------------------
+
+.. automodule:: k1lib.cli.kcv
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 kgv module
 -------------------------
 

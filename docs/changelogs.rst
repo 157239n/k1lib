@@ -2,6 +2,54 @@
 Changelogs
 ==========
 
+`1.7 </1.7>`_ - Mar 8th, 2024
+-------------------------------
+
+.. currentmodule:: k1lib.cli
+
+Cli:
+
+- something
+
+Generic:
+
+- Added :meth:`~k1lib.aes_encrypt` and :meth:`~k1lib.aes_decrypt`
+- Added :meth:`k1lib.viz.Clipboard`, :meth:`k1lib.viz.Download`
+
+`1.6 </1.6>`_ - Mar 8th, 2024
+-------------------------------
+
+.. currentmodule:: k1lib.cli
+
+Cli:
+
+- Added :class:`~utils.toPdf`, :class:`~utils.lookupRange`, :class:`~utils.branch`
+- Added optional delay to :class:`~output.intercept`
+- Added :class:`~modifier.iterDelay`
+- Added :class:`~conv.toDist`, :class:`~conv.toAngle`, :class:`~conv.idxsToNdArray`, :class:`~conv.toYaml`, :class:`~conv.toMedian`
+- Added daemon mode to :class:`~inp.cmd`
+- Added module :mod:`~k1lib.cli.kcv`, focusing on opencv aruco markers detection
+- Added proper pandas support to most cli
+- Added support for raw row ingestion to :class:`~conv.toCsv`
+- Added powerful ``nparray | (~aS(lambda x,y: x+y)).all(3)`` array optimization strategy
+- Added :meth:`lsext.sql.queryMany` and :meth:`lsext.sqltable.insertBulk`
+- Added convenience methods to :class:`~lsext.s3` and friends. Also added :class:`lsext.Redis`
+- Added JS transpiler functions to matplotlib colormaps
+
+Generic:
+
+- Added monkey patched methods :meth:`os.netstat` and :meth:`os.killPort`
+- Added :meth:`~k1lib.fmt.dollar`
+- Added several language formatters like :class:`~k1lib.fmt.js`, :class:`~k1lib.fmt.py`, :class:`~k1lib.fmt.html`, :class:`~k1lib.fmt.sql`
+- Added :mod:`~k1lib.kcom` for external hardware communications, with :class:`~k1lib.kcom.Gsm` and
+  :class:`~k1lib.kcom.Host`
+- Added monkey-patched method :meth:`torch.transpose_axes` to match numpy's signature
+- Added monkey-patched method :meth:`plt.worldmap` to quickly plot out a world map
+- Added monkey-patched method :meth:`html.b64escape` to provide a more robust html escaping where JS is available
+- Added monkey-patched method :meth:`pandas.DataFrame.newColName`
+- Added module :mod:`~k1lib.kop` for optics simulation
+- Added module :mod:`~k1lib.zircon` for browser automation
+
 `1.5 </1.5>`_ - Jan 6th, 2024
 -------------------------------
 

@@ -17,14 +17,14 @@ if settings.startup.import_optionals:
         plt.rcParams['figure.dpi'] = 100; plt.rcParams["animation.html"] = "jshtml"
     except: pass
     import dill as pickle, multiprocessing as mp, concurrent.futures as futures, threading
-    import math, os, time, sys, random, logging, traceback, re, typing, glob, warnings, asyncio, ast
+    import math, os, time, sys, random, logging, traceback, re, typing, glob, warnings, asyncio, ast, itertools, pprint, copy, urllib
     import dill, json, inspect, xml, base64, io, html
     import functools; from functools import partial, lru_cache
     import contextlib; from contextlib import contextmanager
     from collections import deque, defaultdict
     from typing import List, Tuple, Callable, Union, Iterator, Set, Dict, Any
-    from k1lib import schedule, graphEqn, mo, knn, fmt, selector, viz, Cbs, _k1a, serve, p5, k1ui, selen, kws, kast, zircon, serpent
-    k1a = _k1a
+    from k1lib import schedule, graphEqn, mo, knn, fmt, selector, viz, Cbs, _k1a, serve, p5, k1ui, selen, kws, kast, zircon, serpent, trans, kcom, kop, kph, kstr
+    k1a = _k1a; met = kph.met
     for e in cli._scatteredClis: globals()[e.__name__] = e
     if "py_k1lib_in_applyMp" not in os.environ: k1lib.dontWrap()
 from k1lib.cli import *; k1 = k1lib
@@ -32,14 +32,10 @@ from math import e, pi; inf = float("inf"); nan = float("nan"); # this section i
 h = 6.62607015e-34; hbar = h/(2*pi); Na = 6.0221408e23; kb = 1.380649e-23
 c = 299_792_458; qe = 1.60217663e-19; me = 9.1093837e-31; mn = 1.67262192e-27
 e0 = 8.85418782e-12; Dal = u = 1.6605390666e-27; R = 8.3145; sb = 5.670374e-8
-secondsInYear = 31_556_926
+secondsInYear = 31_556_926; pm = "±"; g = 9.80665
 if settings.startup.or_patch.numpy: cli.init.patchNumpy()
 if settings.startup.or_patch.dict: cli.init.patchDict()
 if settings.startup.import_optionals:
-    try:
-        import pandas as pd
-        if settings.startup.or_patch.pandas: cli.init.patchPandas()
-    except ImportError as _: pass
     try:
         import ray
         if settings.startup.init_ray: ray.init()
@@ -87,4 +83,14 @@ if settings.startup.import_optionals:                                           
     try: import websockets                                                       # dummy
     except: pass                                                                 # dummy
     try: import bs4                                                              # dummy
+    except: pass                                                                 # dummy
+    try: import cv2; import cv2.aruco as aruco                                   # dummy
+    except: pass                                                                 # dummy
+    try: import cloudpickle                                                      # dummy
+    except: pass                                                                 # dummy
+    try: import rosbag, genpy                                                    # dummy
+    except: pass                                                                 # dummy
+    try: import yaml                                                             # dummy
+    except: pass                                                                 # dummy
+    try: import boto3                                                            # dummy
     except: pass                                                                 # dummy

@@ -73,3 +73,9 @@ Module :mod:`ray`
 --------------------------------------------------
 
 .. automethod:: ray.progress
+
+Module :mod:`os`
+--------------------------------------------------
+
+.. automethod:: os.netstat
+.. automethod:: os.killPort

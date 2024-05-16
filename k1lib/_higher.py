@@ -4,7 +4,7 @@ __all__ = ["Func", "polyfit", "derivative", "optimize", "inverse", "integral", "
 from typing import Callable, List
 import k1lib, numpy as np, warnings, threading, time, inspect
 from functools import partial
-plt = k1lib.dep("matplotlib.pyplot")
+plt = k1lib.dep.plt
 import k1lib.cli as cli
 Func = Callable[[float], float]
 def polyfit(x:List[float], y:List[float], deg:int=6) -> Func:                    # polyfit

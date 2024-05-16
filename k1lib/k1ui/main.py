@@ -6,15 +6,15 @@ ease its use.
 
 Not quite developed yet tho, because I'm lazy."""
 import k1lib, numpy as np, asyncio, time, inspect, json, threading, dill, math, base64, os, random, warnings
-k1 = k1lib; cli = k1.cli; from k1lib.cli import *; knn = k1.knn; Cbs = k1.Cbs; viz = k1.viz; websockets = k1.dep("websockets")
-nn = k1.dep("torch.nn"); optim = k1.dep("torch.optim")
-PIL = k1.dep("PIL"); k1.dep("graphviz"); requests = k1.dep("requests"); tf = k1.dep("torchvision.transforms")
+k1 = k1lib; cli = k1.cli; from k1lib.cli import *; knn = k1.knn; Cbs = k1.Cbs; viz = k1.viz; websockets = k1.dep.websockets
+nn = k1.dep("torch.nn", url="https://pytorch.org/"); optim = k1.dep("torch.optim", url="https://pytorch.org/")
+PIL = k1.dep.PIL; k1.dep.graphviz; requests = k1.dep.requests; tf = k1.dep("torchvision.transforms", url="https://pytorch.org/")
 try: import torch; hasTorch = True
-except: torch = k1.dep("torch"); hasTorch = False
+except: torch = k1.dep.torch; hasTorch = False
 try: import torchvision; hasTv = True
 except: hasTv = False
 from typing import Callable, List, Iterator, Tuple, Union, Dict; from collections import defaultdict, deque; from functools import lru_cache
-mpl = k1lib.dep("matplotlib"); plt = k1lib.dep("matplotlib.pyplot")
+mpl = k1lib.dep.mpl; plt = k1lib.dep.plt
 __all__ = ["get", "WsSession", "selectArea", "record", "execute", "Recording",
            "Track", "CharTrack", "WordTrack", "ContourTrack", "ClickTrack", "WheelTrack", "StreamTrack",
            "distNet", "TrainScreen"]
@@ -173,9 +173,6 @@ async def execute(events:List[dict]):                                           
     await WsSession(eventCb, mainThreadCb).run()                                 # selectArea
 uuid = k1.AutoIncrement(random.randint(0, int(1e9)), prefix="k1ui-")             # selectArea
 def escapeHtml(s): return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;") # escapeHtml
-class HtmlView:                                                                  # HtmlView
-    def __init__(self, html): self.html = html                                   # HtmlView
-    def _repr_html_(self): return self.html                                      # HtmlView
 class Recording:                                                                 # Recording
     def __init__(self, events):                                                  # Recording
         self.uuid = uuid(); self._tracks = []                                    # Recording
@@ -209,7 +206,7 @@ specified, they will default to the start and end of all events.
         _dis1 = self.dis1; t1 = _dis1 if t1 is None else t1 + self.startTime     # Recording
         _dis2 = self.dis2; t2 = _dis2 if t2 is None else t2 + self.startTime     # Recording
         delta = t2-t1; t1-=delta*0.03; t2+=delta*0.03; self.dis1 = t1; self.dis2 = t2 # Recording
-        html = self._repr_html_(); self.dis1 = _dis1; self.dis2 = _dis2; return HtmlView(html) # Recording
+        html = self._repr_html_(); self.dis1 = _dis1; self.dis2 = _dis2; return k1lib.viz.Html(html) # Recording
     def sel(self, t1=None, t2=None, klass=None) -> List["Track"]:                # Recording
         """Selects a subset of tracks using several filters.
 
@@ -908,7 +905,7 @@ stacked array for memory performance"""                                         
         return self._considering | lookup(self.frames) | insertIdColumn(begin=False) | plotImgs(5, self._aspect-0.2, im=True) # TrainScreen
     def _refreshIdx(self): self.idx2Name, self.name2Idx = self.data | cut(1) | aS(set) | insertIdColumn() | toDict() & (permute(1, 0) | toDict()) | deref() # TrainScreen
     def register(self, d):                                                       # TrainScreen
-        """Tells the object which images previously displayed by :meth:`__next__`
+        """Tells the object which images previously displayed by :meth:`TrainScreen.__next__`
 associate with what screen name. Example::
 
     next(ts) # displays the images out to a notebook cell
@@ -928,7 +925,7 @@ Example::
 
 This differs from :meth:`register` in that the frame id here is the
 absolute frame index in the recording, while in :meth:`register`,
-it's the frame displayed by :meth:`__next__`."""                                 # TrainScreen
+it's the frame displayed by :meth:`TrainScreen.__next__`."""                     # TrainScreen
         self.data = [self.data, deref()(data.items()) | apply(repeat(), 0) | transpose().all() | joinStreams() | permute(1, 0)] | joinStreams() | sort(0) | unique(0) | deref(); self._refreshIdx(); self.train() # TrainScreen
     def addRule(self, *screenNames:List[str]) -> "TrainScreen":                  # TrainScreen
         """Adds a screen transition rule. Let's say that the transition
@@ -978,10 +975,10 @@ bunch of features of shape (N, 10). Example::
     # returns list of 2 integers
     ts.predict(torch.randn(2, 3, 192, 192) | aS(k1ui.distNet()))"""              # TrainScreen
         self._coldGuard(); return feats | batched(128, True) | apply(aS(list) | aS(torch.stack) | aS(self.l.model) | op().argmax(1).numpy()) | joinStreams() # TrainScreen
-    def transitionGraph(self) -> "graphviz.dot.Digraph":                         # TrainScreen
+    def transitionGraph(self) -> "graphviz.graphs.Digraph":                      # TrainScreen
         """Gets a screen transition graph of the entire recording. See also: :meth:`graphs`""" # TrainScreen
         g = k1.digraph(); self.transitionScreens() | cut(1) | window(2) | apply(tuple) | count() | cut(0, 1) | ~apply(lambda c, xy: g(*xy, label=f" {c}")) | ignore(); return g # TrainScreen
-    def ruleGraph(self) -> "graphviz.dot.Digraph":                               # TrainScreen
+    def ruleGraph(self) -> "graphviz.graphs.Digraph":                            # TrainScreen
         """Gets a screen transition graph based on the specified rules.
 Rules are added using :meth:`addRule`. See also: :meth:`graphs`"""               # TrainScreen
         g = k1.digraph(); self._rules | ~apply(g) | ignore(); return g           # TrainScreen

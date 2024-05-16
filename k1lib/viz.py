@@ -5,9 +5,9 @@ This module is for nice visualization tools. This is exposed automatically with:
    from k1lib.imports import *
    viz.mask # exposed
 """
-import k1lib, base64, io, os, matplotlib as mpl, warnings
+import k1lib, base64, io, os, matplotlib as mpl, warnings, json, html
 import k1lib.cli as cli
-plt = k1lib.dep("matplotlib.pyplot"); import numpy as np
+plt = k1lib.dep.plt; import numpy as np
 from typing import Callable, List, Union
 from functools import partial, update_wrapper
 try: import torch; import torch.nn as nn; hasTorch = True
@@ -17,7 +17,8 @@ except:
 try: import PIL; hasPIL = True
 except: hasPIL = False
 __all__ = ["SliceablePlot", "plotSegments", "Carousel", "Toggle", "ToggleImage",
-           "Scroll", "confusionMatrix", "FAnim", "mask", "PDF"]
+           "Scroll", "confusionMatrix", "FAnim", "mask", "PDF", "Html", "onload",
+           "Clipboard", "Download", "Table"]
 class _PlotDecorator:                                                            # _PlotDecorator
     """The idea with decorators is that you can do something like this::
 
@@ -29,8 +30,7 @@ This class is not expected to be used by end users though."""                   
         """
 :param sliceablePlot: the parent plot
 :param name: the decorator's name, like "yscale" """                             # _PlotDecorator
-        self.sliceablePlot = sliceablePlot                                       # _PlotDecorator
-        self.name = name; self.args, self.kwargs = None, None                    # _PlotDecorator
+        self.sliceablePlot = sliceablePlot; self.name = name; self.args, self.kwargs = None, None # _PlotDecorator
     def __call__(self, *args, **kwargs):                                         # _PlotDecorator
         """Stores all args, then return the parent :class:`SliceablePlot`"""     # _PlotDecorator
         self.args = args; self.kwargs = kwargs; return self.sliceablePlot        # _PlotDecorator
@@ -101,16 +101,13 @@ wonderful, isn't it?"""                                                         
 
 :param plotF: function that takes in a :class:`slice` or tuple of :class:`slice`s
 :param docs: optional docs for the function that will be displayed in :meth:`__repr__`""" # SliceablePlot
-        self.plotF = plotF                                                       # SliceablePlot
-        self.slices = [slices] if isinstance(slices, slice) else slices          # SliceablePlot
+        self.plotF = plotF; self.slices = [slices] if isinstance(slices, slice) else slices # SliceablePlot
         self.docs = docs; self.plotDecorators = list(plotDecorators)             # SliceablePlot
     @staticmethod                                                                # SliceablePlot
     def decorate(f):                                                             # SliceablePlot
         """Decorates a plotting function so that it becomes a
 SliceablePlot."""                                                                # SliceablePlot
-        answer = partial(SliceablePlot, plotF=f)                                 # SliceablePlot
-        update_wrapper(answer, f)                                                # SliceablePlot
-        return answer                                                            # SliceablePlot
+        answer = partial(SliceablePlot, plotF=f); update_wrapper(answer, f); return answer # SliceablePlot
     @property                                                                    # SliceablePlot
     def squeezedSlices(self) -> Union[List[slice], slice]:                       # SliceablePlot
         """If :attr:`slices` only has 1 element, then return that
@@ -122,10 +119,8 @@ element, else return the entire list."""                                        
         dec = _PlotDecorator(self, attr)                                         # SliceablePlot
         self.plotDecorators.append(dec); return dec                              # SliceablePlot
     def __getitem__(self, idx):                                                  # SliceablePlot
-        if type(idx) == slice:                                                   # SliceablePlot
-            return SliceablePlot(self.plotF, [idx], self.plotDecorators, self.docs) # SliceablePlot
-        if type(idx) == tuple and all([isinstance(elem, slice) for elem in idx]): # SliceablePlot
-            return SliceablePlot(self.plotF, idx, self.plotDecorators, self.docs) # SliceablePlot
+        if type(idx) == slice: return SliceablePlot(self.plotF, [idx], self.plotDecorators, self.docs) # SliceablePlot
+        if type(idx) == tuple and all([isinstance(elem, slice) for elem in idx]): return SliceablePlot(self.plotF, idx, self.plotDecorators, self.docs) # SliceablePlot
         raise Exception(f"Don't understand {idx}")                               # SliceablePlot
     def __repr__(self, show=True):                                               # SliceablePlot
         self.plotF(self.squeezedSlices)                                          # SliceablePlot
@@ -174,10 +169,7 @@ the same length as your data, filled with ints, like this::
         if lx != None: _x = [lx] + _x; _y = [ly] + _y                            # plotSegments
         plt.plot(_x, _y, colors[state])                                          # plotSegments
 class _Carousel:                                                                 # _Carousel
-    def __init__(self, searchMode, imgs, titles):                                # _Carousel
-        self.searchMode = searchMode                                             # _Carousel
-        self.imgs:List[Tuple[str, str]] = imgs # Tuple[format, base64 img]       # _Carousel
-        self.titles = titles                                                     # _Carousel
+    def __init__(self, searchMode, imgs, titles): self.searchMode = searchMode; self.titles = titles; self.imgs:List[Tuple[str, str]] = imgs # Tuple[format, base64 img] # _Carousel
     def _repr_html_(self):                                                       # _Carousel
         idx = Carousel._idx(); pre = f"k1c_{idx}"; searchMode = self.searchMode  # _Carousel
         imgs = self.imgs | cli.apply(lambda x: f"`{x}`") | cli.deref(); n = len(imgs) # _Carousel
@@ -190,47 +182,28 @@ class _Carousel:                                                                
         html = f"""<!-- k1lib.Carousel start -->
 <style>
     .{pre}_btn {{
-        cursor: pointer;
-        padding: 6px 12px;
-        /*background: #9e9e9e;*/
-        background-color: #eee;
-        margin-right: 8px;
-        color: #000;
-        box-shadow: 0 3px 5px rgb(0,0,0,0.3);
-        border-radius: 18px;
-        user-select: none;
-        -webkit-user-select: none; /* Safari */
-        -ms-user-select: none; /* IE 10+ */
+        cursor: pointer; padding: 6px 12px; /*background: #9e9e9e;*/ background-color: #eee;
+        margin-right: 8px; color: #000; box-shadow: 0 3px 5px rgb(0,0,0,0.3); border-radius: 18px;
+        user-select: none; -webkit-user-select: none; /* Safari */ -ms-user-select: none; /* IE 10+ */
     }}
-    .{pre}_btn:hover {{
-        box-shadow: box-shadow: 0 3px 10px rgb(0,0,0,0.6);
-        background: #4caf50;
-        color: #fff;
-    }}
+    .{pre}_btn:hover {{ box-shadow: box-shadow: 0 3px 10px rgb(0,0,0,0.6); background: #4caf50; color: #fff; }}
 </style>
 {searchBar}
 <div>
     <div style="display: flex; flex-direction: row; padding: 8px">
+        <div id="{pre}_prevBtn_10" class="{pre}_btn">&#60;10</div>
         <div id="{pre}_prevBtn" class="{pre}_btn">Prev</div>
         <div id="{pre}_nextBtn" class="{pre}_btn">Next</div>
+        <div id="{pre}_nextBtn_10" class="{pre}_btn">10&#62;</div>
     </div>
     <div id="{pre}_status" style="padding: 10px"></div>
 </div>
-<div id="{pre}_imgContainer">
-    {contents}
-</div>
+<div id="{pre}_imgContainer">{contents}</div>
 <script>
-    const {pre}_allImgs = [{','.join(imgs)}];
-    let {pre}_imgs = [...Array({pre}_allImgs.length).keys()]; // index of all available images. If searching for something then it will be a subset of allImgs
-    const {pre}_titles = [{','.join(titles)}];
-    {pre}_imgIdx = 0; // n-th element of pre_imgs, not of pre_allImgs
-    {pre}_searchMode = {searchMode};
-    function {pre}_show(i) {{ // i here is allImgs index, not of imgs
-        document.querySelector(`#{pre}_content${{i}}`).style.display = "block";
-    }}
-    function {pre}_hide(i) {{ // i here is allImgs index, not of imgs
-        document.querySelector(`#{pre}_content${{i}}`).style.display = "none";
-    }}
+    {pre}_allImgs = [{','.join(imgs)}]; {pre}_imgs = [...Array({pre}_allImgs.length).keys()]; // index of all available images. If searching for something then it will be a subset of allImgs
+    {pre}_searchMode = {searchMode}; {pre}_titles = [{','.join(titles)}]; {pre}_imgIdx = 0; // n-th element of pre_imgs, not of pre_allImgs
+    function {pre}_show(i) {{ document.querySelector(`#{pre}_content${{i}}`).style.display = "block"; }} // i here is allImgs index, not of imgs
+    function {pre}_hide(i) {{ document.querySelector(`#{pre}_content${{i}}`).style.display = "none";  }} // i here is allImgs index, not of imgs
     function {pre}_updatePageCount() {{
         let n = {pre}_imgs.length;
         if (n > 0) document.querySelector("#{pre}_status").innerHTML = "Page: " + ({pre}_imgIdx + 1) + "/" + n;
@@ -242,16 +215,10 @@ class _Carousel:                                                                
         if (n > 0) {pre}_show({pre}_imgs[{pre}_imgIdx]);
         {pre}_updatePageCount();
     }};
-    document.querySelector("#{pre}_prevBtn").onclick = () => {{
-        {pre}_imgIdx -= 1;
-        {pre}_imgIdx = Math.max({pre}_imgIdx, 0);
-        {pre}_display();
-    }};
-    document.querySelector("#{pre}_nextBtn").onclick = () => {{
-        {pre}_imgIdx += 1;
-        {pre}_imgIdx = Math.min({pre}_imgIdx, {pre}_imgs.length - 1);
-        {pre}_display();
-    }};
+    document.querySelector("#{pre}_prevBtn")   .onclick = () => {{ {pre}_imgIdx -= 1;  {pre}_imgIdx = Math.max({pre}_imgIdx, 0); {pre}_display(); }};
+    document.querySelector("#{pre}_prevBtn_10").onclick = () => {{ {pre}_imgIdx -= 10; {pre}_imgIdx = Math.max({pre}_imgIdx, 0); {pre}_display(); }};
+    document.querySelector("#{pre}_nextBtn")   .onclick = () => {{ {pre}_imgIdx += 1;  {pre}_imgIdx = Math.min({pre}_imgIdx, {pre}_imgs.length - 1); {pre}_display(); }};
+    document.querySelector("#{pre}_nextBtn_10").onclick = () => {{ {pre}_imgIdx += 10; {pre}_imgIdx = Math.min({pre}_imgIdx, {pre}_imgs.length - 1); {pre}_display(); }};
     if ({pre}_searchMode > 0) {{
         {pre}_searchInp = document.querySelector("#{pre}_search");
         {pre}_searchInp.oninput = (value) => {{
@@ -261,8 +228,7 @@ class _Carousel:                                                                
         }}
     }}
     {pre}_display();
-</script>
-<!-- k1lib.Carousel end -->"""                                                   # _Carousel
+</script><!-- k1lib.Carousel end -->"""                                          # _Carousel
         return html                                                              # _Carousel
 class Carousel(cli.BaseCli):                                                     # Carousel
     _idx = k1lib.AutoIncrement.random()                                          # Carousel
@@ -302,39 +268,32 @@ will search inside the title only, that means it's expecting to receive Iterator
         self.searchMode = searchMode                                             # Carousel
     def _process(self, e):                                                       # Carousel
         if isinstance(e, str): return f"{e}"                                     # Carousel
-        elif hasPIL and isinstance(e, PIL.Image.Image):                          # Carousel
-            return f"<img alt='' style='max-width: 100%' src='data:image/png;base64, {base64.b64encode(e | cli.toBytes()).decode()}' />" # Carousel
+        elif hasPIL and isinstance(e, PIL.Image.Image): return f"<img alt='' style='max-width: 100%' src='data:image/png;base64, {base64.b64encode(e | cli.toBytes()).decode()}' />" # Carousel
         else: raise Exception(f"Content is not a string nor a PIL image. Can't make a Carousel out of this unknown type: {type(e)}") # Carousel
     def __ror__(self, it):                                                       # Carousel
-        imgs = []; titles = []                                                   # Carousel
-        searchMode = self.searchMode                                             # Carousel
+        imgs = []; titles = []; searchMode = self.searchMode                     # Carousel
         if searchMode == 0 or searchMode == 1:                                   # Carousel
             for e in it: imgs.append(k1lib.encode(self._process(e)))             # Carousel
         elif searchMode == 2:                                                    # Carousel
             for title, e in it:                                                  # Carousel
                 if not isinstance(title, str): raise Exception("Title is not a string. Can't perform search") # Carousel
-                imgs.append(k1lib.encode(title+self._process(e)))                # Carousel
-                titles.append(k1lib.encode(title))                               # Carousel
+                imgs.append(k1lib.encode(title+self._process(e))); titles.append(k1lib.encode(title)) # Carousel
         else: raise Exception(f"Invalid searchMode: {searchMode}")               # Carousel
         return _Carousel(searchMode, imgs, titles)                               # Carousel
     def _jsF(self, meta):                                                        # Carousel
         if self.searchMode != 0: raise Exception("viz.Carousel._jsF() does not support .searchMode!=0. You're using the JS transpiler anyway, you can trivially build your own, more complex search engine!") # Carousel
         fIdx = cli.init._jsFAuto(); dataIdx = cli.init._jsDAuto(); imgIdx = cli.init._jsDAuto(); pre = cli.init._jsDAuto() # Carousel
-        return f"""const {fIdx} = ({dataIdx}) => {{
-        return unescape(`<!-- k1lib.Carousel start -->
+        return f"""
+//k1_moveOutStart{pre}_stack = [0];//k1_moveOutEnd
+{fIdx} = ({dataIdx}) => {{
+    if (window.{pre}_counter) window.{pre}_counter++; else window.{pre}_counter = 1;
+    {pre}_stack[window.{pre}_counter] = btoa(JSON.stringify({dataIdx})); return unescape(`<!-- k1lib.Carousel start -->
 <style>
     .{pre}_btn {{
-        cursor: pointer; padding: 6px 12px; background-color: #eee;
-        margin-right: 8px; color: #000;
-        box-shadow: 0 3px 5px rgb(0,0,0,0.3);
-        border-radius: 18px; user-select: none;
-        -webkit-user-select: none; /* Safari */
-        -ms-user-select: none; /* IE 10+ */
+        cursor: pointer; padding: 6px 12px; background-color: #eee; margin-right: 8px; color: #000; box-shadow: 0 3px 5px rgb(0,0,0,0.3);
+        border-radius: 18px; user-select: none; -webkit-user-select: none; /* Safari */ -ms-user-select: none; /* IE 10+ */
     }}
-    .{pre}_btn:hover {{
-        box-shadow: box-shadow: 0 3px 10px rgb(0,0,0,0.6);
-        background: #4caf50; color: #fff;
-    }}
+    .{pre}_btn:hover {{ box-shadow: 0 3px 10px rgb(0,0,0,0.6); background: #4caf50; color: #fff; }}
 </style>
 <div>
     <div style="display: flex; flex-direction: row; padding: 8px">
@@ -343,36 +302,34 @@ will search inside the title only, that means it's expecting to receive Iterator
     </div>
     <div id="{pre}_status" style="padding: 10px"></div>
 </div>
-<div id="{pre}_imgContainer">
-    ${{{dataIdx}.map((x, i) => "<div id='{pre}_content" + i + "'>" + x + "</div>").join("")}}
-</div>
+<div id="{pre}_imgContainer"></div>
 %3Cscript%3E
     (async () => {{
-        const {pre}_n = ${{{dataIdx}.length}}; {pre}_imgIdx = 0;
+        const {pre}_imgsData = JSON.parse(atob("${{{pre}_stack[window.{pre}_counter]}}"));
+        const {pre}_n = {pre}_imgsData.length; {pre}_imgIdx = 0; // current image that's displayed
+        let {pre}_imgLoadedIdx = 0; // img ids lower than this is loaded and can be displayed right away, else it should be appended
+        {pre}_imgContainer = document.querySelector("#{pre}_imgContainer");
         function {pre}_updatePageCount() {{
             if ({pre}_n > 0) document.querySelector("#{pre}_status").innerHTML = "Page: " + ({pre}_imgIdx + 1) + "/" + {pre}_n;
             else document.querySelector("#{pre}_status").innerHTML = "Page: 0/0"
         }}
         function {pre}_display() {{
-            for (let i = 0; i < {pre}_n; i++) document.querySelector("#{pre}_content" + i).style.display = "none";
+            while ({pre}_imgIdx >= {pre}_imgLoadedIdx) {{ // some pages not loaded yet, let's load them up
+                const elem = document.createElement("div"); elem.id = "{pre}_content" + {pre}_imgLoadedIdx;
+                elem.style.display = "none"; elem.innerHTML = {pre}_imgsData[{pre}_imgLoadedIdx];
+                {pre}_imgContainer.appendChild(elem); {pre}_imgLoadedIdx++;
+                setTimeout(() => {{ for (const script of elem.getElementsByTagName("script")) eval(script.innerHTML); }}, 100);
+            }}
+            for (let i = 0; i < {pre}_imgLoadedIdx; i++) document.querySelector("#{pre}_content" + i).style.display = "none";
             if ({pre}_n > 0) document.querySelector("#{pre}_content" + {pre}_imgIdx).style.display = "block";
             {pre}_updatePageCount();
         }};
-        document.querySelector("#{pre}_prevBtn").onclick = () => {{
-            {pre}_imgIdx -= 1;
-            {pre}_imgIdx = Math.max({pre}_imgIdx, 0);
-            {pre}_display();
-        }};
-        document.querySelector("#{pre}_nextBtn").onclick = () => {{
-            {pre}_imgIdx += 1;
-            {pre}_imgIdx = Math.min({pre}_imgIdx, {pre}_n - 1);
-            {pre}_display();
-        }};
+        document.querySelector("#{pre}_prevBtn").onclick = () => {{ {pre}_imgIdx -= 1; {pre}_imgIdx = Math.max({pre}_imgIdx, 0);           {pre}_display(); }};
+        document.querySelector("#{pre}_nextBtn").onclick = () => {{ {pre}_imgIdx += 1; {pre}_imgIdx = Math.min({pre}_imgIdx, {pre}_n - 1); {pre}_display(); }};
         {pre}_display();
     }})();
-%3C/script%3E`) }}
-<!-- k1lib.Carousel end -->""", fIdx                                             # Carousel
-k1lib.settings.cli.atomic.deref = (*k1lib.settings.cli.atomic.deref, Carousel)   # Carousel
+%3C/script%3E`); }}""", fIdx                                                     # Carousel
+k1lib.cli.init.addAtomic(Carousel)                                               # Carousel
 class Toggle(cli.BaseCli):                                                       # Toggle
     _idx = k1lib.AutoIncrement.random()                                          # Toggle
     def __init__(self):                                                          # Toggle
@@ -383,33 +340,21 @@ not. Useful if the html content is very big in size. Example::
     plt.gcf() | toImg() | toHtml() | viz.Toggle()
 
 This will plot a graph, then create a button where you can toggle the image's visibility""" # Toggle
-        self.content:str = "" # html string                                      # Toggle
-        self._enteredRor = False                                                 # Toggle
+        self._enteredRor = False; self.content:str = "" # html string            # Toggle
     def __ror__(self, it): self._enteredRor = True; self.content = it if isinstance(it, str) else it | cli.toHtml(); return self # Toggle
-    def __or__(self, it): # see discussion on Carousel()                         # Toggle
-        if self._enteredRor: return it.__ror__(self)                             # Toggle
-        else: return super().__or__(it)                                          # Toggle
+    def __or__(self, it): return it.__ror__(self) if self._enteredRor else super().__or__(it) # see discussion on Carousel() class # Toggle
     def _repr_html_(self):                                                       # Toggle
-        pre = f"k1t_{Toggle._idx()}"                                             # Toggle
-        html = f"""<!-- k1lib.Toggle start -->
+        pre = f"k1t_{Toggle._idx()}"; html = f"""<!-- k1lib.Toggle start -->
 <style>
     #{pre}_btn {{
-        cursor: pointer;
-        padding: 6px 12px;
-        background: #eee;
-        margin-right: 5px;
-        color: #000;
-        user-select: none;
+        cursor: pointer; padding: 6px 12px;
+        background: #eee; margin-right: 5px;
+        color: #000; user-select: none; border-radius: 18px;
         -webkit-user-select: none; /* Safari */
         -ms-user-select: none; /* IE 10+ */
         box-shadow: 0 3px 5px rgb(0,0,0,0.3);
-        border-radius: 18px;
     }}
-    #{pre}_btn:hover {{
-        box-shadow: 0 3px 5px rgb(0,0,0,0.6);
-        background: #4caf50;
-        color: #fff;
-    }}
+    #{pre}_btn:hover {{ box-shadow: 0 3px 5px rgb(0,0,0,0.6); background: #4caf50; color: #fff; }}
 </style>
 <div>
     <div style="display: flex; flex-direction: row; padding: 4px">
@@ -419,11 +364,8 @@ This will plot a graph, then create a button where you can toggle the image's vi
     <div id="{pre}_content" style="display: none; margin-top: 12px">{self.content}</div>
 </div>
 <script>
-    console.log("setup script ran for {pre}");
-    {pre}_btn = document.querySelector("#{pre}_btn");
+    {pre}_btn = document.querySelector("#{pre}_btn"); {pre}_displayed = false;
     {pre}_content = document.querySelector("#{pre}_content");
-
-    {pre}_displayed = false;
     {pre}_btn.onclick = () => {{
         {pre}_displayed = !{pre}_displayed;
         {pre}_btn.innerHTML = {pre}_displayed ? "Hide content" : "Show content";
@@ -434,26 +376,21 @@ This will plot a graph, then create a button where you can toggle the image's vi
         return html                                                              # Toggle
     def _jsF(self, meta):                                                        # Toggle
         fIdx = cli.init._jsFAuto(); dataIdx = cli.init._jsDAuto(); pre = cli.init._jsDAuto() # Toggle
-        return f"""const {fIdx} = ({dataIdx}) => {{
+        return f"""{fIdx} = ({dataIdx}) => {{
         return unescape(`
 <!-- k1lib.Toggle start -->
 <style>
     #{pre}_btn {{
-        cursor: pointer;
-        padding: 6px 12px;
-        background: #eee;
-        margin-right: 5px;
-        color: #000;
-        user-select: none;
+        cursor: pointer; padding: 6px 12px;
+        background: #eee; margin-right: 5px;
+        color: #000; user-select: none; border-radius: 18px;
         -webkit-user-select: none; /* Safari */
         -ms-user-select: none; /* IE 10+ */
         box-shadow: 0 3px 5px rgb(0,0,0,0.3);
-        border-radius: 18px;
     }}
     #{pre}_btn:hover {{
         box-shadow: 0 3px 5px rgb(0,0,0,0.6);
-        background: #4caf50;
-        color: #fff;
+        background: #4caf50; color: #fff;
     }}
 </style>
 <div>
@@ -465,7 +402,6 @@ This will plot a graph, then create a button where you can toggle the image's vi
 </div>
 %3Cscript%3E
     (async () => {{
-        console.log("setup script ran for {pre}");
         {pre}_btn = document.querySelector("#{pre}_btn");
         {pre}_content = document.querySelector("#{pre}_content");
 
@@ -478,12 +414,11 @@ This will plot a graph, then create a button where you can toggle the image's vi
     }})();
 %3C/script%3E`) }}
 <!-- k1lib.Toggle end -->""", fIdx                                               # Toggle
-k1lib.settings.cli.atomic.deref = (*k1lib.settings.cli.atomic.deref, Toggle)     # Toggle
+k1lib.cli.init.addAtomic(Toggle)                                                 # Toggle
 def ToggleImage():                                                               # ToggleImage
     """This function is sort of legacy. It's just ``img | toHtml() | viz.Toggle()`` really""" # ToggleImage
     return cli.toHtml() | Toggle()                                               # ToggleImage
 class Scroll(cli.BaseCli):                                                       # Scroll
-    _idx = k1lib.AutoIncrement.random()                                          # Scroll
     def __init__(self, height=300):                                              # Scroll
         """Creates a new preview html component. If content
 is too long, then it will only show the first 500px, then
@@ -494,25 +429,12 @@ have a button to expand and view the rest. Example::
 
 This will plot a preview of a graph
 :param height: height of the parent container"""                                 # Scroll
-        self.content:str = "" # html string                                      # Scroll
-        self.height = height; self._enteredRor = False                           # Scroll
-    def __ror__(self, it): self._enteredRor = True; self.content = it; return self # Scroll
-    def __or__(self, it): # see discussion on Carousel()                         # Scroll
-        if self._enteredRor: return it.__ror__(self)                             # Scroll
-        else: return super().__or__(it)                                          # Scroll
-    def _repr_html_(self):                                                       # Scroll
-        pre = f"k1scr_{Scroll._idx()}"                                           # Scroll
-        html = f"""<!-- k1lib.Scroll start -->
-<div style="max-height: {self.height}px; overflow-y: auto">{self.content}</div>
-<!-- k1lib.Scroll end -->"""                                                     # Scroll
-        return html                                                              # Scroll
+        self.height = height                                                     # Scroll
+    def __ror__(self, it): return Html(f"""<div style="max-height: {self.height}px; overflow-y: auto">{it}</div>""") # Scroll
     def _jsF(self, meta):                                                        # Scroll
         fIdx = cli.init._jsFAuto(); dataIdx = cli.init._jsDAuto(); pre = cli.init._jsDAuto() # Scroll
-        return f"""const {fIdx} = ({dataIdx}) => {{
-        return unescape(`<!-- k1lib.Scroll start -->
-<div style="max-height: {self.height}px; overflow-y: auto">${{{dataIdx}}}</div>
-<!-- k1lib.Scroll end -->`) }}""", fIdx                                          # Scroll
-k1lib.settings.cli.atomic.deref = (*k1lib.settings.cli.atomic.deref, Scroll)     # Scroll
+        return f"""{fIdx} = ({dataIdx}) => {{ return unescape(`<div style="max-height: {self.height}px; overflow-y: auto">${{{dataIdx}}}</div>`); }}""", fIdx # Scroll
+k1lib.cli.init.addAtomic(Scroll)                                                 # Scroll
 def confusionMatrix(matrix:torch.Tensor, categories:List[str]=None, **kwargs):   # confusionMatrix
     """Plots a confusion matrix. Example::
 
@@ -527,11 +449,9 @@ def confusionMatrix(matrix:torch.Tensor, categories:List[str]=None, **kwargs):  
     if categories is None: categories = [f"{e}" for e in range(len(matrix))]     # confusionMatrix
     fig = plt.figure(**{"dpi":100, **kwargs}); ax = fig.add_subplot(111)         # confusionMatrix
     cax = ax.matshow(matrix); fig.colorbar(cax)                                  # confusionMatrix
-                                                                                 # confusionMatrix
     with k1lib.ignoreWarnings():                                                 # confusionMatrix
         ax.set_xticklabels([''] + categories, rotation=90)                       # confusionMatrix
         ax.set_yticklabels([''] + categories)                                    # confusionMatrix
-                                                                                 # confusionMatrix
     # Force label at every tick                                                  # confusionMatrix
     ax.xaxis.set_major_locator(mpl.ticker.MultipleLocator(1))                    # confusionMatrix
     ax.yaxis.set_major_locator(mpl.ticker.MultipleLocator(1))                    # confusionMatrix
@@ -585,3 +505,336 @@ can reference those pdf files.
     def __ror__(self, pdf): self.pdf = pdf; return self                          # PDF
     def _repr_html_(self): return '<iframe src={0} width={1[0]} height={1[1]}></iframe>'.format(self.pdf, self.size) # PDF
     def _repr_latex_(self): return r'\includegraphics[width=1.0\textwidth]{{{0}}}'.format(self.pdf) # PDF
+class Html(str):                                                                 # Html
+    """A string that will display rich html to a notebook.
+Example::
+
+    s = "Just a <b>regular</b> string"
+    h = viz.Html(s) # this is an instance of viz.Html, but it's also still a string, as viz.Html subclasses str!
+    h               # running this in a notebook cell will display out the html
+"""                                                                              # Html
+    def _repr_html_(self): return self                                           # Html
+class onload(cli.BaseCli):                                                       # onload
+    def __init__(self):                                                          # onload
+        """Returns html code that will run the captured clis when that html is loaded.
+Example::
+
+    3 | (toJsFunc() | (viz.onload() | aS("x+3"))) | op().interface()
+
+This displays html that will execute "x+3", then inject it into the main body.
+At first glance, this seems useless. A much simpler solution exists::
+
+    3 | (toJsFunc() | aS("x+3")) | op().interface()
+
+This would pretty much do the exact same thing. But there's a subtle difference.
+The jsFunc output of the first line (the one with onload()) is some complex html,
+and of the second line (without onload()) is just a single number. This is useful
+in cases where you don't want to render something right away (as that can take
+time/space), but want to defer rendering till later. This is roughly what the first
+line generates this html:
+
+.. code-block:: html
+
+    <div id="content">(Loading...)</div>
+    <script>
+        const data = 3;
+        const customFunction = (x) => x+3;
+        function onload() { document.querySelector("#content").innerHTML = customFunction(data); }
+        onload();
+    </script>
+
+While the second line generates this html:
+
+.. code-block:: html
+
+    6
+
+These html is returned by the blocks ``(viz.onload() | aS("x+3"))`` and ``aS("x+3")``
+in JS, respectively.
+
+The value of this is that your custom function might do something that generates a
+whole bunch of html (like fetching an image somewhere, then return the base64-encoded
+image tag). If you were to do it the normal way, then you would execute your function,
+return the giant html to display. Meanwhile, if you use this cli, then when you're
+moving html around, it's relatively lightweight, and only when that html is embedded
+into a page will your custom function captured by :class:`onload` execute, and display
+outwards.
+
+Honestly this feels like another implementation of :class:`~k1lib.cli.kjs.toJsFunc`
+"""                                                                              # onload
+        super().__init__(capture=True)                                           # onload
+    def __ror__(self, it:str):                                                   # onload
+        jsF = it | (cli.toJsFunc() | self.capturedSerial); pre = cli.init._jsDAuto() # this impl below doesn't quite do what this cli claims to do, so throws error for now # onload
+        return Html(f"""<div id='{pre}_div'>(Loading...)</div><script>{jsF.fn}; setTimeout(async () => {{ document.querySelector('#{pre}_div').innerHTML = await {jsF.fIdx}(); }}, 10);</script>""") # onload
+    def _jsF(self, meta):                                                        # onload
+        fIdx = cli.init._jsFAuto(); dataIdx = cli.init._jsDAuto(); pre = cli.init._jsDAuto(); # onload
+        header, fn, _async = k1lib.kast.asyncGuard(self.capturedSerial._jsF(meta)) # onload
+        return f"""//k1_moveOutStart{dataIdx} = [-1];//k1_moveOutEnd
+{fIdx} = (x) => {{ // returns html string that will run the function on load
+    if (window.{fIdx}_counter) window.{fIdx}_counter++; else window.{fIdx}_counter = 1; {dataIdx}[window.{fIdx}_counter] = x;
+    {header}; window.{fn} = {fn};
+    return unescape(`<div id='{pre}_${{window.{fIdx}_counter}}_div'>(Loading...)</div>
+        %3Cscript%3EsetTimeout({'async ' if _async else ''}() => {{
+            console.log("viz.onload() executed"); document.querySelector('#{pre}_${{window.{fIdx}_counter}}_div').innerHTML = {'await ' if _async else ''}{fn}({dataIdx}[${{window.{fIdx}_counter}}])
+        }}, 100);%3C/script%3E`);
+}};""", fIdx                                                                     # onload
+icons = {"copy": '<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M360-240q-33 0-56.5-23.5T280-320v-480q0-33 23.5-56.5T360-880h360q33 0 56.5 23.5T800-800v480q0 33-23.5 56.5T720-240H360Zm0-80h360v-480H360v480ZM200-80q-33 0-56.5-23.5T120-160v-560h80v560h440v80H200Zm160-240v-480 480Z"/></svg>', # onload
+         "check": '<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M382-240 154-468l57-57 171 171 367-367 57 57-424 424Z"/></svg>', # onload
+         "delete": '<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M280-120q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520ZM360-280h80v-360h-80v360Zm160 0h80v-360h-80v360ZM280-720v520-520Z"/></svg>', # onload
+         "edit": '<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M200-200h57l391-391-57-57-391 391v57Zm-80 80v-170l528-527q12-11 26.5-17t30.5-6q16 0 31 6t26 18l55 56q12 11 17.5 26t5.5 30q0 16-5.5 30.5T817-647L290-120H120Zm640-584-56-56 56 56Zm-141 85-28-29 57 57-29-28Z"/></svg>', # onload
+         "download": '<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M480-320 280-520l56-58 104 104v-326h80v326l104-104 56 58-200 200ZM240-160q-33 0-56.5-23.5T160-240v-120h80v120h480v-120h80v120q0 33-23.5 56.5T720-160H240Z"/></svg>'} # onload
+class Clipboard(cli.BaseCli):                                                    # Clipboard
+    def __init__(self, msg="Copy to clipboard"):                                 # Clipboard
+        """Returns some nice Html of a button that will copy to the
+clipboard when the user clicks on it. Example::
+
+    "some data" | viz.Clipboard() # returns html string
+
+:param msg: message on the button"""                                             # Clipboard
+        self.msg = msg                                                           # Clipboard
+    def _scripts(self):                                                          # Clipboard
+        pre = cli.init._jsDAuto(); return pre, f"""
+<div style="display: flex; flex-direction: row; align-items: center; cursor: pointer" onclick='{pre}_clip(event)'>
+    <div>{self.msg}</div><span id='{pre}_copy_icon' style='margin-left: 8px; width: 24px; height: 24px'>{icons['copy']}</span>
+</div>""", f"""
+    {pre}_copyToClipboard = (text) => {{
+        let textArea, elem;
+        try {{ navigator.clipboard.writeText(text); }} catch (e) {{ // clipboard api only available via https, so fallback to traditional method if https is not available
+            textArea = document.createElement("textarea"); textArea.value = text; elem = document.body
+            elem.appendChild(textArea); textArea.focus(); textArea.select(); document.execCommand('copy');
+        }} finally {{ if (textArea) elem.removeChild(textArea); }} }}
+    window.b64toBlob = (b64Data, contentType='', sliceSize=512) => {{
+        const byteCharacters = atob(b64Data); const byteArrays = [];
+        for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {{
+            const slice = byteCharacters.slice(offset, offset + sliceSize); const byteNumbers = new Array(slice.length);
+            for (let i = 0; i < slice.length; i++) byteNumbers[i] = slice.charCodeAt(i);
+            const byteArray = new Uint8Array(byteNumbers); byteArrays.push(byteArray);
+        }}; return new Blob(byteArrays, {{type: contentType}}); }}
+    {pre}_clip = async (e) => {{
+        {pre}_copyToClipboard(window.{pre}_it);
+        const icon = document.querySelector("#{pre}_copy_icon"); icon.innerHTML = atob('{base64.b64encode(icons['check'].encode()).decode()}');
+        setTimeout(() => {{ icon.innerHTML = atob('{base64.b64encode(icons['copy'].encode()).decode()}'); }}, 1000);
+    }}"""                                                                        # Clipboard
+    def __ror__(self, it): pre, body, scripts = self._scripts(); return Html(f"""{body}\n<script>{scripts}\n(async () => {{window.{pre}_it = await b64toBlob('{base64.b64encode(it | cli.toBytes()).decode()}').text();}})();\n</script>""") # Clipboard
+    def _jsF(self, meta): fIdx = cli.init._jsFAuto(); pre, body, scripts = self._scripts(); return f"""{scripts}\n{fIdx} = (it) => {{ window.{pre}_it = it; return `{body}`; }}""", fIdx # Clipboard
+class Download(cli.BaseCli):                                                     # Download
+    def __init__(self, fn:str="untitled", msg:str="Download file"):              # Download
+        """Returns some nice Html of a button that will download
+whatever's piped into this into a file. Example::
+
+    "some data" | viz.Download("some_text_file.txt") # returns html string that downloads the file
+
+:param fn: desired file name
+:param msg: message on the button"""                                             # Download
+        self.fn = fn; self.msg = msg                                             # Download
+    def __ror__(self, it):                                                       # Download
+        pre = cli.init._jsDAuto();                                               # Download
+        if isinstance(it, str): it = it.encode()                                 # Download
+        if not isinstance(it, bytes): raise Exception("Input has to be string or bytes") # Download
+        return Html(f"""
+<div style="display: flex; flex-direction: row; align-items: center; cursor: pointer" onclick='{pre}_down(event)'>
+    <div>{self.msg}</div><span id='{pre}_down_icon' style='margin-left: 8px; width: 24px; height: 24px'>{icons['download']}</span>
+</div>
+<script>
+    {pre}_down = async (e) => {{
+        const url = window.URL.createObjectURL(new Blob([atob("{base64.b64encode(it).decode()}")]));
+        const a = document.createElement('a'); a.style.display = 'none'; a.href = url; a.download = {json.dumps(self.fn)};
+        document.body.appendChild(a); a.click(); window.URL.revokeObjectURL(url); a.remove();
+        const icon = document.querySelector("#{pre}_down_icon"); icon.innerHTML = atob('{base64.b64encode(icons['check'].encode()).decode()}');
+        setTimeout(() => {{ icon.innerHTML = atob('{base64.b64encode(icons['download'].encode()).decode()}'); }}, 1000);
+    }}
+</script>""")                                                                    # Download
+class Table(cli.BaseCli):                                                        # Table
+    def __init__(self, headers:"list[str]"=None,                                 # Table
+                 onclickFName:str=None, ondeleteFName:str=None, oneditFName:str=None, # Table
+                 colOpts:"list[list[str]]"=None,                                 # Table
+                 selectable=False, selectCallback:str=None, height=None):        # Table
+        """Returns some nice Html displaying a table.
+Example::
+
+    res = enumerate("abcdef") | viz.Table(onclickFName="onclickF", ondeleteFName="deleteF")
+    viz.Html(f\"\"\"<script>
+        function onclickF(row, i, e) {{ console.log("onclickF: ", row, i, e); }}
+        function deleteF(row, i, e) {{ console.log("deleteF: ", row, i, e); }}
+    </script>
+    {res}\"\"\") # creates html string and displays it in the notebook cell
+
+Normally, if you want to display a plain old table, you can do ``sometable | display()``,
+which is the same as ``sometable | head() | pretty() | stdout()``, but that only gives you
+a static table. This class will still show the table, but you can specify an "onclickFName"
+which the system will call whenever the user clicks on a particular row. If "ondeleteFName"
+is specified, then a column full of delete buttons will be injected as the first column,
+and if the user clicks on it will execute the function you specified. The example above
+should be intuitive enough.
+
+If oneditFName is specified, then it allows editing a row at a time. After the user has
+typed in everything, that function will be called, and if successful, will update the
+table right away.
+
+There're these available options for each column ("colOpts"):
+- ["pad", 10]: padding on all 4 sides, defaulted to 10 if not specified
+- "json": if specified, will assume the row element to be a json and make it look nice
+- ["jsonWidth", 400]: max width of json fields
+- ["jsonHeight", 300]: max height of json fields
+- "clipboard": if specified, will copy the contents of the cell to clipboard when user clicks on it
+
+Say you have 3 columns, and you want:
+- Column 1: json with max width of 500px, copies its contents to clipboard onclick
+- Column 2: nothing special
+- Column 3: copies its contents to clipboard onclick
+
+Then "colOpts" should be [["json", ["jsonWidth", 500], "clipboard"], [], ["clipboard"]]
+
+:param headers: a list of column names
+:param onclickFName:  global function that will be called whenever the user clicks on a specific item
+:param ondeleteFName: global function that will be called whenever the user wants to delete a specific row
+:param oneditFName:   global function that will be called whenever the user finishes editing a specific row
+:param colOpts: column options
+:param selectable: if True, make the row bold when user clicks on it, else don't do that
+:param selectCallback: function name to inject into global namespace so as to trigger
+    internal selection. Does not cascade to onclickFName"""                      # Table
+        self.headers = headers; self.onclickFName = onclickFName; self.ondeleteFName = ondeleteFName # Table
+        self.oneditFName = oneditFName; self.colOpts = colOpts; self.selectable = selectable; self.selectCallback = selectCallback # Table
+        self.height = height                                                     # Table
+    def _scripts(self, pre): # common scripts section between __ror__() and _jsF() # Table
+        onclickFName = self.onclickFName; ondeleteFName = self.ondeleteFName; oneditFName = self.oneditFName; selectCallback = self.selectCallback; # Table
+        height = f"""document.querySelector("#{pre}_tableWrap").scrollTop = e.getBoundingClientRect().top - document.querySelector("#{pre}_table").getBoundingClientRect().top - 80;""" if self.height else ""; return f"""
+    if (!window.alertCallback) window.alertCallback = alert;
+    window.{selectCallback} = (predicate) => {{ // scans entire existing table for rows that satify the predicate function
+        data = {pre}_data;
+        for (let i = 0; i < data.length; i++) document.querySelector("#{pre}_row_" + i).style.backgroundColor = "";
+        for (let i = 0; i < data.length; i++) if (predicate(data[i])) {{
+            e = document.querySelector("#{pre}_table").querySelector("#{pre}_row_" + i);
+            {height}
+            e.style.backgroundColor = "#dddddd"; {pre}_selectedRow = i; break
+        }}
+    }}
+    {pre}_delete = async (row, i, e) => {{
+        e.stopPropagation();
+        try {{ // if the function don't raise any error, then actually delete the element, else just alert the user that the operation failed
+            if ({ondeleteFName}.constructor.name === "AsyncFunction") res = await {ondeleteFName}(row, i, e);
+            else res = {ondeleteFName}(row, i, e);
+            if (res === "dont_delete") return;
+            document.querySelector("#{pre}_row_" + i).remove();
+        }} catch (e) {{ if (e.message !== "\ue000nopropagate") window.alertCallback(e); }}
+    }}
+    {pre}_selectedRow = -1;
+    {pre}_select = async (row, i, e) => {{
+        if (i < 0) return;
+        e.stopPropagation();
+        if ({json.dumps(self.selectable)}) {{
+            if ({pre}_selectedRow >= 0) document.querySelector("#{pre}_row_" + {pre}_selectedRow).style.backgroundColor = "";
+            if (i >= 0) {{
+                s = document.querySelector("#{pre}_row_" + i).style;
+                if ({pre}_selectedRow === i) {{ s.backgroundColor = ""; {pre}_selectedRow = -1; }} else {{ s.backgroundColor = "#dddddd"; {pre}_selectedRow = i; }}
+            }}
+        }}
+        if ({json.dumps(onclickFName)}) {{ // if the function don't raise any error, then actually delete the element's ui, else just alert the user that the operation failed
+            try {{ if ({onclickFName}.constructor.name === "AsyncFunction") await {onclickFName}(row, i, e); else {onclickFName}(row, i, e);
+            }} catch (e) {{ if (e.message !== "\ue000nopropagate") window.alertCallback(e); }}
+        }}
+    }}
+    {pre}_copyToClipboard = (text, rowi, elemi) => {{
+        let textArea, elem;
+        try {{ navigator.clipboard.writeText(text); }} catch (e) {{ // clipboard api only available via https, so fallback to traditional method if https is not available
+            textArea = document.createElement("textarea"); textArea.value = text
+            elem = document.querySelector("#{pre}_elem_" + rowi + "_" + elemi); elem.appendChild(textArea);
+            textArea.focus(); textArea.select(); document.execCommand('copy');
+        }} finally {{ if (textArea) elem.removeChild(textArea); }}
+    }}
+    {pre}_edit = async (row, rowi, e) => {{
+        e.stopPropagation(); nodes = Array.from(document.querySelectorAll("#{pre}_row_" + rowi + " > .k1TableElement"));
+        for (let i = 0; i < nodes.length; i++) {{
+            nodes[i].innerHTML = "<input type='text' class='input input-bordered' />";
+            nodes[i].querySelector("input").value = {pre}_data[rowi][i];
+            nodes[i].onclick = (e) => {{ e.stopPropagation(); }}
+        }}
+        document.querySelector("#{pre}_row_" + rowi + ">.editIcon").innerHTML = "<span style='cursor: pointer' onclick='{pre}_finishedEdit({pre}_data[" + rowi + "], " + rowi + ", event)'></span>"
+        document.querySelector("#{pre}_row_" + rowi + ">.editIcon>span").innerHTML = atob('{base64.b64encode(icons['check'].encode()).decode()}')
+    }}
+    {pre}_finishedEdit = async (row, rowi, e) => {{
+        e.stopPropagation(); console.log("finishedEdit:", row, rowi, e);
+        nodes  = Array.from(document.querySelectorAll("#{pre}_row_" + rowi + ">.k1TableElement"))
+        inputs = Array.from(document.querySelectorAll("#{pre}_row_" + rowi + ">.k1TableElement>input"));
+        values = inputs.map((inp) => inp.value);
+        try {{ // if the function don't raise any error, then actually registers the element, else just alert the user that the operation failed
+            if ({oneditFName}.constructor.name === "AsyncFunction") res = await {oneditFName}(row, values, rowi, e);
+            else res = {oneditFName}(row, values, rowi, e);
+            for (let i = 0; i < nodes.length; i++) {{ nodes[i].innerHTML = values[i]; }}
+            {pre}_data[rowi] = values;
+            document.querySelector("#{pre}_row_" + rowi + ">.editIcon").innerHTML = "<span style='cursor: pointer' onclick='{pre}_edit({pre}_data[" + rowi + "], " + rowi + ", event)'></span>";
+            document.querySelector("#{pre}_row_" + rowi + ">.editIcon>span").innerHTML = atob('{base64.b64encode(icons['edit'].encode()).decode()}');
+        }} catch (e) {{ if (e.message !== "\ue000nopropagate") window.alertCallback(e); }}
+    }}
+    {pre}_clip = async (e, rowi, elemi) => {{
+        const value = {pre}_data[rowi][elemi]; {pre}_copyToClipboard((typeof(value) === "string") ? value : JSON.stringify(value), rowi, elemi);
+        const icon = document.querySelector("#{pre}_copy_icon_" + rowi + "_" + elemi); icon.innerHTML = atob('{base64.b64encode(icons['check'].encode()).decode()}');
+        setTimeout(() => {{ icon.innerHTML = atob('{base64.b64encode(icons['copy'].encode()).decode()}'); }}, 1000);
+    }}"""                                                                        # Table
+    def __ror__(self, it) -> Html:                                               # Table
+        headers = self.headers; onclickFName = self.onclickFName; ondeleteFName = self.ondeleteFName; oneditFName = self.oneditFName; colOpts = self.colOpts # Table
+        it = it | cli.deref(2); pre = cli.init._jsDAuto(); N = len(it);          # Table
+        try: F = max([len(x) for x in it])                                       # Table
+        except: F = len(self.headers) if self.headers else 1000                  # Table
+        colOpts = [] if colOpts is None else list(colOpts)                       # Table
+        for i in range(F-len(colOpts)): colOpts.append([])                       # Table
+        def felem(i, e, rowi):                                                   # Table
+            idx = f"id='{pre}_elem_{rowi}_{i}' class='k1TableElement'"           # Table
+            res = [opt[1] for opt in colOpts[i] if not isinstance(opt, str) and opt[0] == "pad"]; pad = res[0] if len(res) > 0 else 10; style = f"position: relative; padding: {pad}px" # Table
+            copy = f"<div style='position: absolute; top: 0px; right: 0px'><span id='{pre}_copy_icon_{rowi}_{i}' style='cursor: pointer' onclick='{pre}_clip(event, {rowi}, {i})'>{icons['copy']}</span></div>" if "clipboard" in colOpts[i] and rowi >= 0 else "" # Table
+            if "json" in colOpts[i] and rowi >= 0:                               # Table
+                res = [opt[1] for opt in colOpts[i] if not isinstance(opt, str) and opt[0] == "jsonWidth"];  maxWidth  = res[0] if len(res) > 0 else 400 # Table
+                res = [opt[1] for opt in colOpts[i] if not isinstance(opt, str) and opt[0] == "jsonHeight"]; maxHeight = res[0] if len(res) > 0 else 300 # Table
+                return f"<td {idx} style='text-align: left; {style}'>{copy}<pre style='max-width: {maxWidth}px; max-height: {maxHeight}px; overflow-x: auto; overflow-y: auto; background-color: transparent'>{html.escape(json.dumps(e, indent=2))}</pre></td>" # Table
+            return f"<td {idx} style='{style}'>{copy}{e}</td>"                   # Table
+        def frow(i, row):                                                        # Table
+            row = [felem(_i, e, i) for _i,e in enumerate(row)]                   # Table
+            if oneditFName: row = ["<td></td>", *row] if i < 0 else [f"<td class='editIcon'><span style='cursor: pointer' onclick='{pre}_edit({pre}_data[{i}], {i}, event)'>{icons['edit']}</span></td>", *row] # Table
+            if ondeleteFName: row = ["<td></td>", *row] if i < 0 else [f"<td class='deleteIcon'><span style='cursor: pointer' onclick='{pre}_delete({pre}_data[{i}], {i}, event)'>{icons['delete']}</span></td>", *row] # Table
+            sticky = "style='position: sticky; top: 0px; background: white; z-index: 100'" if i < 0 else ""; sig = f"id='{pre}_row_{i}' {sticky}" # Table
+            sig = f"<tr {sig} onclick='{pre}_select({pre}_data[{i}], {i}, event)'>" if onclickFName else f"<tr {sig} >"; return sig + "".join(row) + "</tr>" # Table
+        contents = "".join([frow(i, row) for i,row in ([(-1, headers), *enumerate(it)] if headers else enumerate(it))]); # Table
+        height = [f"<div id='{pre}_tableWrap' style='height:{self.height}px;overflow-y:auto'>", "</div>"] if self.height else ["", ""]; return Html(f"""
+{height[0]}<table id='{pre}_table'>{contents}</table>{height[1]}
+<script>
+    {pre}_data = {json.dumps(it)};
+    {self._scripts(pre)}
+</script>""")                                                                    # Table
+    def _jsF(self, meta):                                                        # Table
+        fIdx = cli.init._jsFAuto(); dataIdx = cli.init._jsDAuto(); pre = cli.init._jsDAuto(); # Table
+        frow = cli.init._jsFAuto(); felem = cli.init._jsFAuto(); height = f"height: {self.height}px;" if self.height else "" # Table
+        # header, fn, _async = k1lib.kast.asyncGuard(self.capturedSerial._jsF(meta)) # Table
+        headers = self.headers; onclickFName = self.onclickFName; ondeleteFName = self.ondeleteFName; oneditFName = self.oneditFName; colOpts = self.colOpts # Table
+        height = [f"<div id='{pre}_tableWrap' style='height:{self.height}px;overflow-y:auto'>", "</div>"] if self.height else ["", ""]; # Table
+        colOpts = [] if colOpts is None else list(colOpts); return f"""
+{fIdx}_colOpts = {json.dumps(colOpts)};
+{felem} = (i, e, rowi) => {{
+    idx = `id='{pre}_elem_${{rowi}}_${{i}}' class='k1TableElement'`
+    res = {fIdx}_colOpts[i].filter((x) => typeof(x) !== "string").filter((x) => x[0] == "pad").map((x) => x[1]); pad = res.length > 0 ? res[0] : 10; style = `position: relative; padding: ${{pad}}px`
+    copy = ({fIdx}_colOpts[i].includes("clipboard") && rowi >= 0) ? `<div style='position: absolute; top: 0px; right: 0px'><span id='{pre}_copy_icon_${{rowi}}_${{i}}' style='cursor: pointer' onclick='{pre}_clip(event, ${{rowi}}, ${{i}})'>{icons['copy']}</span></div>` : ""
+    if ({fIdx}_colOpts[i].includes("json") && rowi >= 0) {{
+        res = {fIdx}_colOpts[i].filter((x) => typeof(x) !== "string").filter((x) => x[0] == "jsonWidth"). map((x) => x[1]); maxWidth  = (res.length > 0) ? res[0] : 400;
+        res = {fIdx}_colOpts[i].filter((x) => typeof(x) !== "string").filter((x) => x[0] == "jsonHeight").map((x) => x[1]); maxHeight = (res.length > 0) ? res[0] : 300;
+        escapeHtml = (x) => x.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        return `<td ${{idx}} style='text-align: left; ${{style}}'>${{copy}}<pre style='max-width: ${{maxWidth}}px; max-height: ${{maxHeight}}px; overflow-x: auto; overflow-y: auto; background-color: transparent'>${{escapeHtml(JSON.stringify(e, null, 2))}}</pre></td>`
+    }}
+    return `<td ${{idx}} style='${{style}}'>${{copy}}${{e}}</td>`
+}};
+{frow} = (i, row) => {{
+    row = row.map((e,_i) => {felem}(_i, e, i));
+    if ({json.dumps(oneditFName)}) row = i < 0 ? ["<td></td>", ...row] : [`<td class='editIcon'><span style='cursor: pointer' onclick='{pre}_edit({pre}_data[${{i}}], ${{i}}, event)'>{icons['edit']}</span></td>`, ...row];
+    if ({json.dumps(ondeleteFName)}) row = i < 0 ? ["<td></td>", ...row] : [`<td class='deleteIcon'><span style='cursor: pointer' onclick='{pre}_delete({pre}_data[${{i}}], ${{i}}, event)'>{icons['delete']}</span></td>`, ...row];
+    sticky = i < 0 ? "style='position: sticky; top: 0px; background: white; z-index: 100'" : "";
+    return `<tr id='{pre}_row_${{i}}' ${{sticky}} onclick='{pre}_select({pre}_data[${{i}}], ${{i}}, event)'>` + row.join("") + "</tr>";
+}};
+{fIdx} = (it) => {{
+    const N = it.length; const F = (N > 0) ? (it.map(x => x.length).toMax()) : ({json.dumps(headers)} ? {json.dumps(headers)}.length : 1000);
+    for (const i of [...Array(F-{fIdx}_colOpts.length).keys()]) {fIdx}_colOpts.push([]);
+    contents = ({json.dumps(headers)} ? [[-1, {json.dumps(headers)}], ...it.map((x,i) => [i,x])] : it.map((x,i) => [i,x])).map(([i, row]) => {frow}(i, row)).join("");
+    return unescape(`
+{height[0]}<table id="{pre}_table">${{contents}}</table>{height[1]}
+%3Cscript%3E
+    {pre}_data = JSON.parse(atob('${{btoa(JSON.stringify(it))}}'));
+    {self._scripts(pre)}
+%3C/script%3E`)
+}}""", fIdx                                                                      # Table

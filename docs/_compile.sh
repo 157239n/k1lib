@@ -14,6 +14,7 @@ export SPHINX=1
 # building stuff
 echo Building main docs --------------------
 rm -r _build
+#SPHINXOPTS="-n" make html
 make html
 
 rm -r _build/html/_static/fonts

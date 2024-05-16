@@ -9,6 +9,8 @@ from k1lib.cli.typehint import *
 import numpy as np; from collections import deque
 try: import torch; hasTorch = True
 except: hasTorch = False
+try: import pandas as pd; pd.core; hasPandas = True
+except: hasPandas = False
 __all__ = ["filt", "filter_", "inSet", "contains", "empty",
            "isNumeric", "instanceOf",
            "head", "tail", "cut", "rows",
@@ -70,32 +72,40 @@ that kinda mimics Python's ``filter()``.
             else:                                                                # filt
                 column = list(column)                                            # filt
                 if len([c for c in column if c < 0]): raise ex                   # filt
-        self.f = f = fs[0]; _fP = fastF(f); self.column = column                 # filt
+        self.f = f = fs[0]; _fP = fastF(f); self.column = column; self._fPArr = None; self.pArr = None # filt
         if catchErrors:                                                          # filt
             def g(x):                                                            # filt
                 try: return _fP(x)                                               # filt
                 except: return False                                             # filt
             self.predicate = g                                                   # filt
         else: self.predicate = _fP                                               # filt
+    def _injectPArr(self, pArr):                                                 # filt
+        if pArr is not None: self.pArr = pArr; self._fPArr = fastF(pArr)         # filt
+        return self # explicit vectorized predicate, can be injected by downstream clis # filt
     def __ror__(self, it:Iterator[Any]) -> Iterator[Any]:                        # filt
-        p = self.predicate; c = self.column                                      # filt
+        p = self.predicate; c = self.column; fusedPArr = self._fPArr or p        # filt
+        isPd = hasPandas and isinstance(it, pd.core.arraylike.OpsMixin)          # filt
         if c is None:                                                            # filt
-            if isinstance(it, settings.arrayTypes):                              # filt
-                try: return it[p(it)]                                            # filt
-                except Exception as e: print(e)                                  # filt
+            if isinstance(it, settings.arrayTypes) or isPd:                      # filt
+                a = (it | cli.apply(p)) if self._fPArr is None else self._fPArr(it) # filt
+                try: return it[a]                                                # filt
+                except: pass                                                     # filt
             return (l for l in it if p(l))                                       # filt
         elif isinstance(c, int):                                                 # filt
             if isinstance(it, settings.arrayTypes):                              # filt
-                try: return it[p(it[:,c])]                                       # filt
+                try: return it[fusedPArr(it[:,c])]                               # filt
+                except: pass                                                     # filt
+            if isPd:                                                             # filt
+                try: return it[fusedPArr(it[list(it)[c]])]                       # filt
                 except: pass                                                     # filt
             def gen():                                                           # filt
-                for es in it:                                                    # filt
+                for es in init.dfGuard(it):                                      # filt
                     es = list(es)                                                # filt
                     if c < len(es) and p(es[c]): yield es                        # filt
             return gen()                                                         # filt
         else: # list of ints                                                     # filt
             ops = []                                                             # filt
-            for c_ in c: ops.append(filt(self.predicate, c_, False))             # filt
+            for c_ in c: ops.append(filt(self.predicate, c_, False)._injectPArr(self.pArr)) # filt
             return it | cli.serial(*ops)                                         # filt
     def __invert__(self):                                                        # filt
         """Negate the condition"""                                               # filt
@@ -122,7 +132,7 @@ Example::
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto(); argIdx = init._jsDAuto(); inverted = False # filt
         if self.inverted: self = self.preInvFilt; inverted = True                # filt
         header, _fIdx, _async = k1lib.kast.asyncGuard(k1lib.kast.prepareFunc3(self.f, ("filt", meta))) # filt
-        return f"{header}\nconst {fIdx} = {'async ' if _async else ''}({dataIdx}) => {'await ' if _async else ''}{dataIdx}.filt{'_async' if _async else ''}({'async ' if _async else ''}({argIdx}) => {'!' if inverted else ''}({'await ' if _async else ''}{_fIdx}({argIdx})), {cli.kjs.v(self.column)})", fIdx # filt
+        return f"{header}\n{fIdx} = {'async ' if _async else ''}({dataIdx}) => {'await ' if _async else ''}{dataIdx}.filt{'_async' if _async else ''}({'async ' if _async else ''}({argIdx}) => {'!' if inverted else ''}({'await ' if _async else ''}{_fIdx}({argIdx})), {cli.kjs.v(self.column)})", fIdx # filt
 filter_ = filt                                                                   # filt
 class inSet(filt):                                                               # inSet
     def __init__(self, values:Set[Any], column:int=None, inverse=False):         # inSet
@@ -139,7 +149,7 @@ Example::
     def __invert__(self): return inSet(self.values, self.column, not self.inverse) # inSet
     def _jsF(self, meta):                                                        # inSet
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto(); setIdx = init._jsDAuto() # inSet
-        return f"const {setIdx} = {json.dumps(list(self.values))};\nconst {fIdx} = ({dataIdx}) => {dataIdx}.inSet({setIdx}, {cli.kjs.v(self.column)}, {cli.kjs.v(self.inverse)})", fIdx # inSet
+        return f"{setIdx} = {json.dumps(list(self.values))};\n{fIdx} = ({dataIdx}) => {dataIdx}.inSet({setIdx}, {cli.kjs.v(self.column)}, {cli.kjs.v(self.inverse)})", fIdx # inSet
 class contains(filt):                                                            # contains
     def __init__(self, s:str, column:int=None, inverse=False):                   # contains
         """Filters out lines that don't contain the specified substring. Sort of similar
@@ -153,7 +163,7 @@ Example::
     def __invert__(self): return contains(self.s, self.column, not self.inverse) # contains
     def _jsF(self, meta):                                                        # contains
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto(); sIdx = init._jsDAuto() # contains
-        return f"const {sIdx} = {json.dumps(self.s)};\nconst {fIdx} = ({dataIdx}) => {dataIdx}.contains({sIdx}, {cli.kjs.v(self.column)}, {cli.kjs.v(self.inverse)})", fIdx # contains
+        return f"{sIdx} = {json.dumps(self.s)};\n{fIdx} = ({dataIdx}) => {dataIdx}.contains({sIdx}, {cli.kjs.v(self.column)}, {cli.kjs.v(self.inverse)})", fIdx # contains
 class empty(BaseCli):                                                            # empty
     def __init__(self, reverse=False):                                           # empty
         """Filters out streams that is not empty. Almost always used inverted,
@@ -276,7 +286,7 @@ into many more parts with specified checkpoints, check out
         return headSplit(self.n, self.inverted)                                  # head
     def _jsF(self, meta):                                                        # head
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto(); argIdx = init._jsDAuto() # head
-        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.head({self.n}, {cli.kjs.v(self.inverted)})", fIdx # head
+        return f"{fIdx} = ({dataIdx}) => {dataIdx}.head({self.n}, {cli.kjs.v(self.inverted)})", fIdx # head
 class headSplit(BaseCli):                                                        # headSplit
     def __init__(self, n, inverted):                                             # headSplit
         self.n = n; self.inverted = inverted                                     # headSplit
@@ -286,9 +296,9 @@ class headSplit(BaseCli):                                                       
         n = self.n; inverted = self.inverted                                     # headSplit
         if n is not None and round(n) != n: n = int(it.shape[level]*n) # fractional head # headSplit
         sl = tuple([slice(None)]*level); b = it[(*sl, slice(n, None))]; a = it[(*sl, slice(None, n))] # headSplit
-        return [b, a] if inverted else [a, b]                                    # headSplit
+        return (b, a) if inverted else (a, b)                                    # headSplit
     def __ror__(self, it):                                                       # headSplit
-        sliceable_ = self.sliceable; n = self.n                                  # headSplit
+        sliceable_ = self.sliceable; n = self.n; inverted = self.inverted        # headSplit
         if sliceable_ is None: self.sliceable = sliceable_ = sliceable(it)       # headSplit
         it = it if sliceable_ else list(it)                                      # headSplit
         if self.fixup: # needs to fix n to a more definite value. Just to make it faster # headSplit
@@ -296,7 +306,7 @@ class headSplit(BaseCli):                                                       
             if n is None: return it, []                                          # headSplit
             if isinstance(n, float): n = int(l*n) # fractional head              # headSplit
             n = (n+l)%l                                                          # headSplit
-        return it[:n], it[n:]                                                    # headSplit
+        return (it[n:], it[:n]) if inverted else (it[:n], it[n:])                # headSplit
 class tail(BaseCli):                                                             # tail
     def __init__(self, n:int=10):                                                # tail
         """Basically an inverted :class:`head`.
@@ -307,7 +317,7 @@ Examples::
     def __ror__(self, it): return it | ~head(-self.n)                            # tail
     def _jsF(self, meta):                                                        # tail
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto(); argIdx = init._jsDAuto() # tail
-        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.head(-({self.n}), true)", fIdx # tail
+        return f"{fIdx} = ({dataIdx}) => {dataIdx}.head(-({self.n}), true)", fIdx # tail
 class lazyList:                                                                  # lazyList
     def __init__(self, it):                                                      # lazyList
         self.it = iter(it); self.elems = []                                      # lazyList
@@ -345,8 +355,7 @@ this::
     iter(range(10)) | rItem(3) # returns 3
 
 :param rows: ints for the row indices"""                                         # rows
-        if len(rows) == 1 and isinstance(rows[0], slice):                        # rows
-            self.slice = rows[0]; self.rows = None; self.idxMode = False         # rows
+        if len(rows) == 1 and isinstance(rows[0], slice): self.slice = rows[0]; self.rows = None; self.idxMode = False # rows
         else: self.slice = None; self.rows = rows; self.sortedRows = sorted(rows); self.idxMode = True # rows
         self.inverted = False                                                    # rows
     def __getitem__(self, _slice):                                               # rows
@@ -364,6 +373,9 @@ this::
     def __invert__(self): self.inverted = not self.inverted; return self         # rows
     def __ror__(self, it:Iterator[str]):                                         # rows
         idxMode = self.idxMode; inverted = self.inverted; sl = self.slice; rw = self.rows # rows
+        if hasPandas and isinstance(it, pd.core.frame.DataFrame):                # rows
+            if sl is not None: return it.iloc[sl] if not inverted else it.iloc[np.array(list(set(range(len(it))) - set(range(len(it))[sl])))] # rows
+            else: return it.iloc[list(rw)] if not inverted else it.iloc[np.array(list(set(range(len(it))) - set(rw)))] # rows
         def gen(it):                                                             # rows
             if not inverted:                                                     # rows
                 if idxMode:                                                      # rows
@@ -383,7 +395,7 @@ this::
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # rows
         if not self.slice is None: raise Exception("rows._jsF() doesn't support slice-based indexing yet") # rows
         if self.inverted: raise Exception("rows._jsF() doesn't support inversion yet") # rows
-        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.rows({cli.kjs.vs(self.rows) | cli.join(', ')})", fIdx # rows
+        return f"{fIdx} = ({dataIdx}) => {dataIdx}.rows({cli.kjs.vs(self.rows) | cli.join(', ')})", fIdx # rows
 class cut(BaseCli):                                                              # cut
     def __init__(self, *columns:List[int]):                                      # cut
         """Cuts out specific columns, sliceable. Examples::
@@ -456,6 +468,14 @@ automatically use the C-accelerated versions, like this::
         it = it | r.all(level+1); return (it | cli.item().all(level+1)) if not isinstance(c, slice) and len(c) == 1 else it # cut
     def __ror__(self, it):                                                       # cut
         columns = self.columns; inverted = self.inverted                         # cut
+        if hasPandas and isinstance(it, pd.core.frame.DataFrame):                # cut
+            itt = (it | cli.T()); n = len(itt); colNames = list(it)              # cut
+            if isinstance(columns, slice):                                       # cut
+                columns = list(sorted(set(range(n)) - set(range(n)[self.columns]))) if self.inverted else range(len(colNames))[columns] # cut
+                return it[[colNames[x] for x in columns]]                        # cut
+            else:                                                                # cut
+                columns = list(sorted(set(range(n)) - set(self.columns))) if self.inverted else self.columns # cut
+                return it[colNames[columns[0]]] if len(columns) == 1 and not inverted else it[[colNames[x] for x in columns]] # cut
         isArray = isinstance(it, settings.arrayTypes)#; isArray = False          # cut
         if isArray: nCols = len(it[0]); prs = rs = range(nCols) # range(nColumns). "prs" for padded rs # cut
         else: # carefully peaking first row and get the number of columns        # cut
@@ -475,7 +495,7 @@ automatically use the C-accelerated versions, like this::
     def _jsF(self, meta):                                                        # cut
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # cut
         if isinstance(self.columns, slice): raise Exception("cut._jsF() doesn't support slice-based indexing yet") # cut
-        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.{'cutInv' if self.inverted else 'cut'}({cli.kjs.vs(self.columns) | cli.join(', ')})", fIdx # cut
+        return f"{fIdx} = ({dataIdx}) => {dataIdx}.{'cutInv' if self.inverted else 'cut'}({cli.kjs.vs(self.columns) | cli.join(', ')})", fIdx # cut
 class intersection(BaseCli):                                                     # intersection
     def __init__(self, column=None, full=False):                                 # intersection
         """Returns the intersection of multiple streams.
@@ -538,7 +558,7 @@ as what's left of each stream, you can do something like this::
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # intersection
         if not self.column is None: raise Exception("intersection._jsF() doesn't support targeting specific .column yet") # intersection
         if not self.full: raise Exception("intersection._jsF() doesn't support .full yet") # intersection
-        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.intersection()", fIdx   # intersection
+        return f"{fIdx} = ({dataIdx}) => {dataIdx}.intersection()", fIdx         # intersection
 class union(BaseCli):                                                            # union
     def __init__(self):                                                          # union
         """Returns the union of multiple streams.
@@ -556,7 +576,7 @@ Example::
         return answer                                                            # union
     def _jsF(self, meta):                                                        # union
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # union
-        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.union()", fIdx          # union
+        return f"{fIdx} = ({dataIdx}) => {dataIdx}.union()", fIdx                # union
 class unique(BaseCli):                                                           # unique
     def __init__(self, column:int=None):                                         # unique
         """Filters out non-unique row elements.
@@ -593,7 +613,7 @@ In the first example, because the 3rd element's first column is
         return gen()                                                             # unique
     def _jsF(self, meta):                                                        # unique
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # unique
-        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.unique({cli.kjs.v(self.column)})", fIdx # unique
+        return f"{fIdx} = ({dataIdx}) => {dataIdx}.unique({cli.kjs.v(self.column)})", fIdx # unique
 class breakIf(BaseCli):                                                          # breakIf
     def __init__(self, f, col:int=None):                                         # breakIf
         """Breaks the input iterator if a condition is met.
@@ -611,18 +631,24 @@ Example::
         return tIter(tAny())                                                     # breakIf
     def __ror__(self, it:Iterator[Any]) -> Iterator[Any]:                        # breakIf
         f = self._fC; col = self.col                                             # breakIf
-        if col is None:                                                          # breakIf
-            for line in it:                                                      # breakIf
-                if f(line): break                                                # breakIf
-                yield line                                                       # breakIf
-        else:                                                                    # breakIf
-            for row in it:                                                       # breakIf
-                if f(row[col]): break                                            # breakIf
-                yield row                                                        # breakIf
+        if hasPandas and isinstance(it, pd.core.arraylike.OpsMixin):             # breakIf
+            ndim = len(it | cli.shape())                                         # breakIf
+            a = init.preprocessPd(it, col, lambda x: bool(f(x)), lambda x: f(x).astype(bool)) # breakIf
+            return it[:a.argmax()] if a[a.argmax()] else it                      # breakIf
+        def gen():                                                               # breakIf
+            if col is None:                                                      # breakIf
+                for line in it:                                                  # breakIf
+                    if f(line): break                                            # breakIf
+                    yield line                                                   # breakIf
+            else:                                                                # breakIf
+                for row in it:                                                   # breakIf
+                    if f(row[col]): break                                        # breakIf
+                    yield row                                                    # breakIf
+        return gen()                                                             # breakIf
     def _jsF(self, meta):                                                        # breakIf
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto(); argIdx = init._jsDAuto() # breakIf
         header, _fIdx = k1lib.kast.prepareFunc3(self.f, ("breakIf", meta))       # breakIf
-        return f"{header}\nconst {fIdx} = ({dataIdx}) => {dataIdx}.breakIf(({argIdx}) => {_fIdx}({argIdx}))", fIdx # breakIf
+        return f"{header}\n{fIdx} = ({dataIdx}) => {dataIdx}.breakIf(({argIdx}) => {_fIdx}({argIdx}))", fIdx # breakIf
 class mask(BaseCli):                                                             # mask
     def __init__(self, mask:Iterator[bool]):                                     # mask
         """Masks the input stream.
@@ -639,12 +665,14 @@ Example::
     def __ror__(self, it):                                                       # mask
         if self.inverted:                                                        # mask
             if isinstance(it, settings.arrayTypes): return it[[not e for e in self.mask]] # mask
+            if hasPandas and isinstance(it, pd.core.arraylike.OpsMixin): return it[[not e for e in self.mask]] # mask
             return (e for e, m in zip(it, self.mask) if not m)                   # mask
         else:                                                                    # mask
             if isinstance(it, settings.arrayTypes): return it[list(self.mask)]   # mask
+            if hasPandas and isinstance(it, pd.core.arraylike.OpsMixin): return it[list(self.mask)] # mask
             return (e for e, m in zip(it, self.mask) if m)                       # mask
 class tryout(BaseCli):                                                           # tryout
-    def __init__(self, result=None, retries=0):                                  # tryout
+    def __init__(self, result=None, retries=0, mode="result"):                   # tryout
         """Wraps every cli operation after this in a try-catch block, returning ``result``
 if the operation fails. Example::
 
@@ -653,11 +681,11 @@ if the operation fails. Example::
     # returns "failed", instead of raising an exception
     "3" | (tryout("failed") | op()**2)
     # special mode: returns "unsupported operand type(s) for ** or pow(): 'str' and 'int'"
-    "3" | (tryout(str) | op()**2)
+    "3" | (tryout(mode="str") | op()**2)
     # special mode: returns entire trace stack (do `import traceback` first)
-    "3" | (tryout(traceback) | op()**2)
+    "3" | (tryout(mode="traceback") | op()**2)
     # special mode: returns "3", the input of the tryout() block
-    "3" | (tryout(input) | op()**2)
+    "3" | (tryout(mode="input") | op()**2)
 
 By default, this ``tryout()`` object will gobble up all clis behind it and wrap
 them inside a try-catch block. This might be undesirable, so you can stop it early::
@@ -739,20 +767,20 @@ catch errors happening within the first ``op()**2``.
         counter = 0 # line below returns [0, 1, 4, 9, 16, 25, 36, 49, 64, 81]
         range(10) | (~tryout(retries=2) | apply(f)) | deref()
 
-:param result: result to return if there is an exception. If passed in the class
-    `str`, then will return the exception's string instead. If passed in the
-    function `input`, then will return the input instead
+:param result: result to return if there is an exception
+:param mode: if "result" (default), returns the result if there's an exception. If "str" then
+    returns the exception's string. If "input" then returns the original input. If "traceback"
+    then returns the exception's traceback
 :param retries: how many time to retry before giving up?"""                      # tryout
-        super().__init__(capture=True); self.result = result; self.inverted = False; self.retries = retries # tryout
+        super().__init__(capture=True); self.result = result; self.inverted = False; self.retries = retries; self.mode = mode # tryout
     def __ror__(self, it):                                                       # tryout
-        retries = self.retries                                                   # tryout
-        result = self.result                                                     # tryout
+        retries = self.retries; result = self.result; mode = self.mode; it = init.dfGuard(it) # tryout
         if len(self.capturedClis) == 0: raise Exception("tryout() currently does not wrap around any other cli. You may need to change `data | tryout() | cli1() | cli2()` into `data | (tryout() | cli1() | cli2())`") # tryout
         if not self.inverted: # single mode                                      # tryout
             while True:                                                          # tryout
                 try: return it | self.capturedSerial                             # tryout
                 except Exception as e:                                           # tryout
-                    if retries <= 0: return str(e) if result is str else (it if result is input else (traceback.format_exc() if result is traceback else result)) # tryout
+                    if retries <= 0: return str(e) if mode == "str" else (it if mode == "input" else (traceback.format_exc() if mode == "traceback" else result)) # tryout
                     retries -= 1                                                 # tryout
         else: # array mode                                                       # tryout
             def gen(it):                                                         # tryout
@@ -770,7 +798,7 @@ catch errors happening within the first ``op()**2``.
                         it = interceptIt([list(savedInputs()), ogIt] | cli.joinStreams()) # tryout
                         savedInputs.value = deque(); outIt = it | self.capturedSerial # tryout
                         if patience == retries:                                  # tryout
-                            yield str(e) if result is str else (ogInp if result is input else (traceback.format_exc() if result is traceback else result)) # just resetted # tryout
+                            yield str(e) if mode == "str" else (ogInp if mode == "input" else (traceback.format_exc() if mode == "traceback" else result)) # just resetted # tryout
             return gen(it)                                                       # tryout
     def __invert__(self): self.inverted = not self.inverted; return self         # tryout
 def resume(fn):                                                                  # resume
@@ -842,7 +870,7 @@ and ``aS(set)``
     changes. Defaulted to next value (False)"""                                  # trigger
         self.col = col; self.before = before                                     # trigger
     def __ror__(self, it):                                                       # trigger
-        empty = object() # random sentinel                                       # trigger
+        it = init.dfGuard(it); empty = object() # random sentinel                # trigger
         col = self.col; before = self.before; lastValue = empty; lastRow = empty # trigger
         if col is not None:                                                      # trigger
             if isinstance(col, int): # single column                             # trigger
@@ -891,7 +919,7 @@ Example::
     # column mode
     data | apply(lambda x: ["a", x]) | filtStd(1, std=2) | shape(0) # likely returns around 104
 
-    # inverse mode
+    # inverse mode. Will only take values that are outside the std range
     data | ~filtStd(std=0.1) | shape(0) # likely returns around 88
 
 :param col: column to extract the value out of
@@ -905,8 +933,9 @@ Example::
             for i in range(self.N): it = it | f                                  # filtStd
             return it                                                            # filtStd
         col = self.col; inv = self.inverted; fStd = self.std # filter std        # filtStd
+        isPd = hasPandas and isinstance(it, pd.core.arraylike.OpsMixin)          # filtStd
         if col is None:                                                          # filtStd
-            if isinstance(it, k1lib.settings.cli.arrayTypes):                    # filtStd
+            if isinstance(it, k1lib.settings.cli.arrayTypes) or isPd:            # filtStd
                 mean = it.mean(); std = it.std()                                 # filtStd
                 minV = mean - std*fStd; maxV = mean + std*fStd                   # filtStd
                 if not inv: return it[(it >= minV) * (it <= maxV)]               # filtStd
@@ -916,10 +945,11 @@ Example::
             if not inv: return [v for v in it if minV <= v <= maxV]              # filtStd
             else:       return [v for v in it if v < minV or v > maxV]           # filtStd
         else:                                                                    # filtStd
-            if isinstance(it, k1lib.settings.cli.arrayTypes):                    # filtStd
-                mean = it[:,col].mean(); std = it[:,col].std()                   # filtStd
+            if isinstance(it, k1lib.settings.cli.arrayTypes) or isPd:            # filtStd
+                c = it[list(it)[col]] if isPd else it[:,col]                     # filtStd
+                mean = c.mean(); std = c.std()                                   # filtStd
                 minV = mean - std*fStd; maxV = mean + std*fStd                   # filtStd
-                x = it[:,col] | cli.toMean().all()                               # filtStd
+                x = c if isPd else (c | cli.toMean().all())                      # filtStd
                 if not inv: return it[(minV <= x) * (x <= maxV)]                 # filtStd
                 else:       return it[(minV >  x) + (x > maxV)]                  # filtStd
             row, it = it | cli.peek()                                            # filtStd

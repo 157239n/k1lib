@@ -8,12 +8,17 @@ try: import PIL.Image, PIL; hasPIL = True
 except: PIL = k1.dep("PIL"); hasPIL = False
 __all__ = ["tag_serve",
            "FromNotebook", "FromPythonFile", "BuildPythonFile", "BuildDashFile", "StartServer", "GenerateHtml", "commonCbs", "serve",
-           "text", "slider", "html", "json", "date", "serialized", "apiKey", "analyze", "webToPy", "pyToWeb"]
+           "baseType", "text", "slider", "html", "json", "date", "serialized", "apiKey", "analyze", "webToPy", "pyToWeb"]
 basePath = os.path.dirname(inspect.getabsfile(k1lib)) + os.sep + "serve" + os.sep
 def pretty_py(code_string):                                                      # pretty_py
     s = pygments.highlight(code_string, pygments.lexers.PythonLexer(), pygments.formatters.HtmlFormatter()).replace('<pre', '<pre class="pre"') # pretty_py
     css = pygments.formatters.HtmlFormatter().get_style_defs('.highlight').replace(".highlight { background: #f8f8f8; }", "") # pretty_py
     return f'<style>{css}</style>{s}'                                            # pretty_py
+def pretty_js(code_string):                                                      # pretty_js
+    from pygments.lexers.javascript import JavascriptLexer                       # pretty_js
+    s = pygments.highlight(code_string, JavascriptLexer(), pygments.formatters.HtmlFormatter()).replace('<pre', '<pre class="pre"') # pretty_js
+    css = pygments.formatters.HtmlFormatter().get_style_defs('.highlight').replace(".highlight { background: #f8f8f8; }", "") # pretty_js
+    return f'<style>{css}</style>{s}'                                            # pretty_js
 def execPy(s:str, node:str, condaEnv:str=None, condaPath:str="~/miniconda3") -> "list[str]": # execPy
     fn = s | cli.file(); None | cli.cmd(f"scp {fn} {node}:{fn}") | cli.deref()   # execPy
     return None | cli.cmd(f"ssh {node} 'source {condaPath}/bin/activate {condaEnv} && python {fn}'") | cli.filt("x") | cli.deref() # execPy
@@ -118,6 +123,9 @@ class GenerateHtml(k1.Callback):                                                
         super().__init__(); self.serverPrefix = serverPrefix; self.htmlFile = htmlFile; self.title = title # GenerateHtml
     def generateHtml(self):                                                      # GenerateHtml
         meta = dict(self.l["meta"])                                              # GenerateHtml
+        meta["fetch"]["js"] = meta["fetch"]["js"].replace("PREFIX", self.l["prefix"] or "PREFIX_") # GenerateHtml
+        meta["fetch"]["py"] = meta["fetch"]["py"].replace("PREFIX", self.l["prefix"] or "PREFIX_") # GenerateHtml
+        meta["fetch"]["k1"] = meta["fetch"]["k1"].replace("PREFIX", self.l["prefix"] or "PREFIX_") # GenerateHtml
         replaceNewlineWithBr = op().split("<!-- k1lib.raw.start -->") | apply(op().split("<!-- k1lib.raw.end -->")) | head(1).split() | (op().replace("\n", "<br>").all(2)) + apply(op().replace("\n", "<br>"), 1) | joinSt(2) | join("") # GenerateHtml
         replaces = cli.op().replace("META_JSON", base64.b64encode(_json.dumps(meta).encode()).decode())\
             .replace("SERVER_PREFIX", self.serverPrefix or self.l["serverPrefix"] or f"http://localhost:{self.l['port']}")\
@@ -138,6 +146,86 @@ def serve(cbs):                                                                 
     cbs("beforeGenerateHtml"); cbs("generateHtml") # produces a standalone html file that provides interactive functionalities # serve
     cbs("end")                                                                   # serve
     return cbs                                                                   # serve
+def cutoffLongText(s):                                                           # cutoffLongText
+    if len(s) > 50:                                                              # cutoffLongText
+        if isinstance(s, str):   return s[:50]+ "..."+s[-10:]                    # cutoffLongText
+        if isinstance(s, bytes): return s[:50]+b"..."+s[-10:]                    # cutoffLongText
+    return s                                                                     # cutoffLongText
+def fetch_js(meta):                                                              # fetch_js
+    a = meta["annos"].items() | filt(op()!="return", 0) | ~apply(lambda x,y: [x,y,meta["defaults"][x]]) | deref() # fetch_js
+    ans = []; ret = meta["annos"]["return"]                                      # fetch_js
+    for arg, anno, default in a:                                                 # fetch_js
+        if anno in ("int", "float", "slider", "date", "text"): ans.append(f"    '{arg}': {_json.dumps(default[0])}") # fetch_js
+        elif anno in ("apiKey",):     ans.append(f"    '{arg}': '<api key here>'") # fetch_js
+        elif anno in ("checkbox",):   ans.append(f"    '{arg}': {_json.dumps(default)}") # fetch_js
+        elif anno in ("json",):       ans.append(f"    '{arg}': {_json.dumps(default[0])} /* raw json object, no need to do JSON.stringify() */") # fetch_js
+        elif anno in ("bytes",):      ans.append(f"    '{arg}': {cutoffLongText(_json.dumps(default))} /* base64-encoded bytes */") # fetch_js
+        elif anno in ("image",):      ans.append(f"    '{arg}': {cutoffLongText(_json.dumps(default))} /* base64-encoded bytes of image in popular formats like jpg, png */") # fetch_js
+        elif anno in ("serialized",): ans.append(f"    '{arg}': {cutoffLongText(_json.dumps(default))} /* base64-encoded bytes, encoded by python module `dill` */") # fetch_js
+        elif anno in ("dropdown",):   ans.append(f"    '{arg}': {_json.dumps(default[1][default[0]])}") # fetch_js
+    b = ",\n".join(ans)                                                          # fetch_js
+    s = f"""
+let result = (await (await fetch("https://local.mlexps.com/routeServer/PREFIX", {{
+  method: "POST",
+  body: JSON.stringify({{
+{b}
+  }}),
+  headers: {{
+    "Content-Type": "application/json",
+  }}
+}})).json()).data;"""                                                            # fetch_js
+    if ret in ("int", "float"): s = f"{s} // returns {ret}"                      # fetch_js
+    elif ret in ("text", "html"): s = f"{s} // returns string"                   # fetch_js
+    elif ret in ("json",): s = f"{s} // returns js object, no need to do JSON.parse()" # fetch_js
+    elif ret in ("bytes", "serialized"): s = f"{s} // returns base64-encoded bytes" # fetch_js
+    elif ret in ("image",): s = f"{s} // returns base64-encoded bytes of an image, typically in jpg" # fetch_js
+    return s                                                                     # fetch_js
+def fetch_py(meta):                                                              # fetch_py
+    a = meta["annos"].items() | filt(op()!="return", 0) | ~apply(lambda x,y: [x,y,meta["defaults"][x]]) | deref() # fetch_py
+    ans = []; ret = meta["annos"]["return"]                                      # fetch_py
+    for arg, anno, default in a:                                                 # fetch_py
+        if anno in ("int", "float", "slider", "date", "text"): ans.append(f"    '{arg}': {_json.dumps(default[0])},") # fetch_py
+        elif anno in ("apiKey",):     ans.append(f"    '{arg}': '<api key here>',") # fetch_py
+        elif anno in ("checkbox",):   ans.append(f"    '{arg}': {default},")     # fetch_py
+        elif anno in ("json",):       ans.append(f"    '{arg}': {default[0]}, # raw python object, no need to do json.dumps()") # fetch_py
+        elif anno in ("bytes",):      ans.append(f"    '{arg}': base64.b64encode({cutoffLongText(base64.b64decode(default))}).decode(), # base64-encoded bytes") # fetch_py
+        elif anno in ("image",):      ans.append(f"    '{arg}': base64.b64encode({cutoffLongText(base64.b64decode(default))}).decode(), # base64-encoded bytes of image in popular formats like jpg, png") # fetch_py
+        elif anno in ("serialized",): ans.append(f"    '{arg}': base64.b64encode(dill.dumps(<raw_python_object_here>)).decode(), # base64-encoded bytes, encoded by python module `dill`") # fetch_py
+        elif anno in ("dropdown",):   ans.append(f"    '{arg}': {_json.dumps(default[1][default[0]])},") # fetch_py
+    b = "\n".join(ans)                                                           # fetch_py
+    s = f"""
+import requests, base64, dill, json
+result = requests.post("https://local.mlexps.com/routeServer/PREFIX", json={{
+{b}
+}}).json()["data"]"""                                                            # fetch_py
+    if ret in ("int", "float"): s = f"{s} # returns {ret}"                       # fetch_py
+    elif ret in ("text", "html"): s = f"{s} # returns string"                    # fetch_py
+    elif ret in ("json",): s = f"{s} # returns js object, no need to do json.loads()" # fetch_py
+    elif ret in ("bytes",): s = f"{s} # returns base64-encoded bytes\nresult = base64.b64decode(result.encode())" # fetch_py
+    elif ret in ("serialized",): s = f"{s} # returns base64-encoded bytes\nresult = dill.loads(base64.b64decode(result.encode()))" # fetch_py
+    elif ret in ("image",): s = f"{s} # returns base64-encoded bytes of an image, typically in jpg" # fetch_py
+    return s                                                                     # fetch_py
+def fetch_k1(meta):                                                              # fetch_k1
+    a = meta["annos"].items() | filt(op()!="return", 0) | ~apply(lambda x,y: [x,y,meta["defaults"][x]]) | deref() # fetch_k1
+    ans = []; ret = meta["annos"]["return"]                                      # fetch_k1
+    for arg, anno, default in a:                                                 # fetch_k1
+        if anno in ("int", "float", "slider", "date", "text"): ans.append(f"    '{arg}': {_json.dumps(default[0])},") # fetch_k1
+        elif anno in ("apiKey",):     ans.append(f"    '{arg}': '<api key here>',") # fetch_k1
+        elif anno in ("checkbox",):   ans.append(f"    '{arg}': {default},")     # fetch_k1
+        elif anno in ("json",):       ans.append(f"    '{arg}': {default[0]},")  # fetch_k1
+        elif anno in ("bytes",):      ans.append(f"    '{arg}': {cutoffLongText(base64.b64decode(default))},") # fetch_k1
+        elif anno in ("image",):      ans.append(f"    '{arg}': 'some/image/path.jpg' | toImg(), # raw PIL image") # fetch_k1
+        elif anno in ("serialized",): ans.append(f"    '{arg}': <raw_python_object_here>,") # fetch_k1
+        elif anno in ("dropdown",):   ans.append(f"    '{arg}': {_json.dumps(default[1][default[0]])},") # fetch_k1
+    b = "\n".join(ans)                                                           # fetch_k1
+    s = f"""{{\n{b}\n}} | kapi.demo("PREFIX")"""                                 # fetch_k1
+    if ret in ("int", "float"): s = f"{s} # returns {ret}"                       # fetch_k1
+    elif ret in ("text", "html"): s = f"{s} # returns string"                    # fetch_k1
+    elif ret in ("json",): s = f"{s} # returns js object, no need to do json.loads()" # fetch_k1
+    elif ret in ("bytes",): s = f"{s} # returns raw bytes, no need to base64-decode" # fetch_k1
+    elif ret in ("serialized",): s = f"{s} # returns raw Python object, no need to base64-decode and dill-decode" # fetch_k1
+    elif ret in ("image",): s = f"{s} # returns PIL image, no need to base64-decode" # fetch_k1
+    return s                                                                     # fetch_k1
 class baseType:                                                                  # baseType
     def __init__(self):                                                          # baseType
         """Base type for all widget types"""                                     # baseType
@@ -163,7 +251,7 @@ middle point between start and stop. Example::
     def endpoint(a:serve.slider(2, 3.2)=2.3) -> str: pass
 
 For inputs only"""                                                               # slider
-        super().__init__(); self.start = start; self.stop = stop; self.intervals = intervals; self.dt = (stop-start)/intervals # slider
+        super().__init__(); self.start = start; self.stop = stop; self.intervals = intervals; self.dt = (stop-start)/intervals; self.step = self.dt # slider
     def __repr__(self): return f"<slider {self.start}---{self.intervals}-->{self.stop}>" # slider
 class html(baseType):                                                            # html
     def __init__(self):                                                          # html
@@ -190,9 +278,9 @@ class date(baseType):                                                           
         """Local date time (no timezone information).
 Example::
 
-    def endpoint(d:serve.date()="2023-12-07T00:00") -> str: pass
+    def endpoint(d:serve.date()="2023-12-07T00:00:00") -> str: pass
 
-:param min: min date, also in format '2023-12-07T00:00'"""                       # date
+:param min: min date, also in format '2023-12-07T00:00:00'"""                    # date
         super().__init__(); self.minDate = min; self.maxDate = max               # date
     def __repr__(self): return f"<date>"                                         # date
 class serialized(baseType):                                                      # serialized
@@ -233,7 +321,7 @@ def refine(param:str, anno:baseType, default): # anno is not necessarily baseTyp
     if isinstance(anno, html): return [param, "html", [default], None]           # refine
     if isinstance(anno, json): return [param, "json", [default, True], None]     # refine
     if isinstance(anno, date): return [param, "date", [default, anno.minDate, anno.maxDate], None] # refine
-    if isinstance(anno, apiKey): return [param, "apiKey", [default], anno.apiKey] # refine
+    if isinstance(anno, apiKey): return [param, "apiKey", [default, False, True], anno.apiKey] # refine
     raise Exception(f"Unknown type {anno}")                                      # refine
 def analyze(f):                                                                  # analyze
     spec = getattr(f, "fullargspec", inspect.getfullargspec(f)); args = spec.args; n = len(args) # analyze
@@ -246,34 +334,33 @@ def analyze(f):                                                                 
     a = [args, args | lookup(annos), defaults] | transpose() | ~apply(refine) | deref() # analyze
     ret = refine("return", annos["return"], None)[1]; defaults = a | cut(0, 2) | toDict() # analyze
     annos = a | cut(0, 1) | toDict(); annos["return"] = ret; privates = a | cut(0, 3) | toDict() # analyze
-    if ret == "slider": raise Exception(f"Return value is a slider, which doesn't really make sense. Return float, str or sth like that") # analyze
+    if ret == "slider": raise Exception(f"Return value is a slider, which doesn't really make sense") # analyze
+    if ret == "date": raise Exception(f"Return value is a date, which doesn't really make sense. Use `str` instead") # analyze
+    if ret == "apiKey": raise Exception(f"Return value is an api key, which doesn't really make sense") # analyze
+    if ret == "checkbox": raise Exception(f"Return value is a checkbox, which doesn't really make sense. Use `serve.json()` instead") # analyze
+    for anno in [v for k,v in annos.items() if k != "return"]:                   # analyze
+        if anno == "html": raise Exception("One of the input arguments is serve.html(), which doesn't really make sense. Use serve.text() instead") # analyze
                                                                                  # analyze
     # args:list, annos:dict, defaults:list, docs:dict                            # analyze
                                                                                  # analyze
-    return {"args": args, "annos": annos, "defaults": defaults, "privates": privates, "docs": docs, # analyze
+    meta = {"args": args, "annos": annos, "defaults": defaults, "privates": privates, "docs": docs, # analyze
      "mainDoc": mainDoc, "source": inspect.getsource(f), "pid": os.getpid()}     # analyze
-    return args, annos, defaults, docs, mainDoc, d                               # analyze
-class Html(str):                                                                 # Html
-    def _repr_html_(self): return self                                           # Html
-def webToPy(o:str, klass:baseType):                                              # webToPy
-    if klass == "json": return o                                                 # webToPy
+    f_js = pretty_js(fetch_js(meta)); f_py = pretty_py(fetch_py(meta)); f_k1 = pretty_py(fetch_k1(meta)) # analyze
+    return {**meta, "fetch": {"js": f_js, "py": f_py, "k1": f_k1}}               # analyze
+def webToPy(o, klass:baseType):                                                  # webToPy
+    if klass == "int": return int(o)                                             # webToPy
+    if klass in ("float", "text", "checkbox", "dropdown", "slider", "apiKey", "date", "json"): return o # webToPy
     o = str(o)                                                                   # webToPy
-    if klass == "int": return int(float(o))                                      # webToPy
-    if klass == "float": return float(o)                                         # webToPy
-    if klass == "slider": o = float(o); return int(o) if round(o) == o else o    # webToPy
-    if klass == "text" or klass == "dropdown" or klass == "apiKey" or klass == "date": return o # webToPy
-    if klass == "checkbox": return o.lower() == "true"                           # webToPy
     if klass == "bytes": return base64.b64decode(o)                              # webToPy
     if klass == "serialized": return dill.loads(base64.b64decode(o))             # webToPy
     if klass == "image": return o | aS(base64.b64decode) | toImg()               # webToPy
-    if klass == "html": return Html(base64.b64decode(o).decode())                # webToPy
+    if klass == "html": return k1lib.viz.Html(base64.b64decode(o).decode())      # webToPy
     return NotImplemented                                                        # webToPy
-def pyToWeb(o, klass:baseType) -> str:                                           # pyToWeb
-    if klass in ("int", "float", "text", "checkbox", "slider", "apiKey", "date"): return f"{o}" # pyToWeb
+def pyToWeb(o, klass:baseType):                                                  # pyToWeb
+    if klass in ("int", "float", "text", "checkbox", "slider", "apiKey", "date", "json"): return o # pyToWeb
     if klass == "bytes": return base64.b64encode(o).decode()                     # pyToWeb
     if klass == "serialized": return base64.b64encode(dill.dumps(o)).decode()    # pyToWeb
     if klass == "image": return base64.b64encode(o | toBytes()).decode()         # pyToWeb
     if klass == "dropdown": return o;                                            # pyToWeb
     if klass == "html": return o.encode() | aS(base64.b64encode) | op().decode() # pyToWeb
-    if klass == "json": return o # ---------------------------------------------- that one case where it returns an object instead of a string # pyToWeb
     return NotImplemented                                                        # pyToWeb

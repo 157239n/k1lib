@@ -8,7 +8,7 @@ __all__ = ["cells", "grabTags", "executeTags", "pretty", "execute"]
 from k1lib.cli import BaseCli; import k1lib.cli as cli
 import json, k1lib, os, traceback; from typing import List
 from collections import defaultdict
-plt = k1lib.dep("matplotlib.pyplot")
+plt = k1lib.dep.plt
 def _cells(fileName, outputs=False):                                             # _cells
     js = json.loads(cli.cat(fileName) | cli.join("\n"))                          # _cells
     cells = []; fields = set(["cell_type", "source"])                            # _cells

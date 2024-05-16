@@ -12,12 +12,11 @@ except: nn = k1lib.Object().withAutoDeclare(lambda: type("RandomClass", (object,
 __all__ = ["Lambda", "Identity", "LinBlock", "MultiheadAttention"]
 class Lambda(nn.Module):                                                         # Lambda
     def __init__(self, f:Callable[[Any], Any]):                                  # Lambda
-        """Creates a simple module with a specified :meth:`forward`
-function."""                                                                     # Lambda
+        """Creates a simple module with a specified forward function."""         # Lambda
         super().__init__(); self.f = f                                           # Lambda
     def forward(self, x): return self.f(x)                                       # Lambda
 class Identity(Lambda):                                                          # Identity
-    """Creates a module that returns the input in :meth:`forward`"""             # Identity
+    """Creates a module that returns the input in forward function."""           # Identity
     def __init__(self): super().__init__(lambda x: x)                            # Identity
 class LinBlock(nn.Module):                                                       # LinBlock
     def __init__(self, inC, outC):                                               # LinBlock

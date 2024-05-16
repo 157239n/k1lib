@@ -2,8 +2,7 @@
 """Reliable websocket client and server handle functions"""
 import k1lib, math, numpy as np, random, base64, json, time; import k1lib.cli as cli; from typing import List, Iterator
 from collections import defaultdict, deque
-websockets = k1lib.dep("websockets")
-asyncio = k1lib.dep("asyncio")
+websockets = k1lib.dep.websockets; asyncio = k1lib.dep("asyncio")
 __all__ = ["serverHandle", "serverSend", "serverClose", "WsClient"]
 async def serverHandle(ws: "websockets.WebSocketServerProtocol", msg:str) -> "bytes | str | None":
     """Tiny server handle addon function.

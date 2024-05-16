@@ -47,7 +47,7 @@ can tack on wildly different functions, have them play nicely with each
 other, and remove entire complex functionalities by commenting out a
 single line."""
 import k1lib, time, os, logging, numpy as np
-plt = k1lib.dep("matplotlib.pyplot"); import k1lib.cli as cli
+plt = k1lib.dep.plt; import k1lib.cli as cli
 from typing import Set, List, Union, Callable, ContextManager, Iterator
 from collections import OrderedDict
 __all__ = ["Callback", "Callbacks", "Cbs"]

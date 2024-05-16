@@ -4,7 +4,7 @@
 # to refresh all files and install everywhere: `./export.py --dist=True`
 # to refresh just 1 file without dependency on k1lib: `./export.py cli/grep --bootstrap=True`. This is useful when k1lib is kinda
 
-import json, fire, os, re, warnings, traceback
+import json, fire, os, re, warnings, traceback, sys
 os.chdir(os.path.dirname(os.path.realpath(__file__)))
 
 try: from k1lib.imports import *; hasK1 = True
@@ -23,6 +23,7 @@ of the notebook. The root directory will always be that of the k1lib library.
 :param dist: whether to distributedly install k1lib to all nodes in the cluster
 :param bootstrap: put False if you want the simple version without dependency on k1lib
 """
+    print(f"./export started up - {sys.executable}")
     if bootstrap or not hasK1: # if k1 is in working state, then just export the whole thing, it's pretty quick. If it's not, then do the vanilla Python version to fix that one particular notebook file
         print("----- bootstrapping")
         if nb:
@@ -45,7 +46,7 @@ of the notebook. The root directory will always be that of the k1lib library.
     if dist: distributedInstall()
 
 def uploadF(): # installs in the local pypi server
-    None | cmd("cd ~/repos/labs/k1lib && rm -rf ~/repos/pypi/k1lib && mkdir -p ~/repos/pypi/k1lib && rm -r dist && ./setup.py sdist && ./setup.py bdist && ./setup.py bdist_wheel && mv dist/* ~/repos/pypi/k1lib/") | ignore()
+    None | cmd("cd ~/repos/labs/k1lib && rm -rf ~/repos/pypi/k1lib && mkdir -p ~/repos/pypi/k1lib && rm -rf dist && python -m build && mv dist/* ~/repos/pypi/k1lib/") | ignore()
     ls("~/repos/pypi/k1lib") | apply(op().split("/")[-1]) | apply(lambda x: f"<a href='{x}'>{x}</a>") | join("") | aS(lambda x: f"<html>{x}</html>") | file("~/repos/pypi/k1lib/index.html")
 
 def distributedInstall():
@@ -62,9 +63,9 @@ def oldDistributedInstall(): # installs the library in all nodes, should take 8-
     print("Finished distributedInstall()")
 
 def install():
-    os.system("rm -r build dist k1lib.egg-info __pycache__")
+    os.system("rm -rf build dist k1lib.egg-info __pycache__")
     os.system("pip uninstall -y k1lib")
-    os.system(f"./setup.py install")
+    os.system(f"pip install .")
 
 arr = []
 def expandDomain(it):

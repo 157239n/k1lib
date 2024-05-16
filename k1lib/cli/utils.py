@@ -5,18 +5,21 @@ from k1lib.cli.init import patchDefaultDelim, BaseCli, yieldT
 import k1lib.cli as cli, k1lib.cli.init as init, numbers, numpy as np, dis
 from k1lib.cli.typehint import *
 from typing import overload, Iterator, Any, List, Set, Union, Callable
-import k1lib, time, math, os, json
+import k1lib, time, math, os, json, dill
 from collections import defaultdict
 try: import torch; hasTorch = True
 except: torch = k1lib.Object().withAutoDeclare(lambda: type("RandomClass", (object, ), {})); hasTorch = False
 try: import PIL; hasPIL = True
 except: hasPIL = False
-try: plt = k1lib.dep("matplotlib.pyplot")
-except: pass
+plt = k1lib.dep.plt
+try: import genpy, rosbag; hasRos1 = True
+except: hasRos1 = False
+try: import pandas as pd; pd.core; hasPandas = True
+except: hasPandas = False
 __all__ = ["size", "shape", "item", "rItem", "iden", "join", "wrapList",
            "equals", "reverse", "ignore", "rateLimit", "timeLimit", "tab", "indent",
            "clipboard", "deref", "bindec", "smooth", "disassemble",
-           "tree", "lookup", "dictFields", "backup", "sketch", "syncStepper", "zeroes", "normalize"]
+           "tree", "lookup", "lookupRange", "getitems", "backup", "sketch", "syncStepper", "zeroes", "normalize", "branch"]
 settings = k1lib.settings.cli
 def exploreSize(it):                                                             # exploreSize
     """Returns first element and length of array. Returns [first item, length]""" # exploreSize
@@ -58,26 +61,25 @@ Example::
 
 :class:`shape` is an alias of this cli. Use whichever is more intuitive for you.
 
-There's also :class:`lengths`, which is sort of a simplified/faster version of
-this, but only use it if you are sure that ``len(it)`` can be called.
-
 :param idx: if not specified, returns a tuple of ints. If specified,
     then returns the specific index of the tuple"""                              # size
         super().__init__(); self.idx = idx;                                      # size
         if idx is not None: self._f = cli.item(idx)                              # size
-    def _all_array_opt(self, it, level): return np.array(it.shape[level:])[tuple([None]*level)] + np.zeros(it.shape[:level], dtype=int)[(*[slice(None)]*level, None)] # size
+    def _all_array_opt(self, it, level):                                         # size
+        res = np.array(it.shape[level:])[tuple([None]*level)] + np.zeros(it.shape[:level], dtype=int)[(*[slice(None)]*level, None)] # size
+        return res if self.idx is None else res | cli.rItem(self.idx).all(level) # size
     def _typehint(self, inp):                                                    # size
         if self.idx is not None: return int                                      # size
         return tList(int)                                                        # size
     def __ror__(self, it:Iterator[str]):                                         # size
         idx = self.idx                                                           # size
-        if idx == 0:                                                             # size
+        if idx == 0: # super quick path for the really common case               # size
             try: return len(it)                                                  # size
             except:                                                              # size
                 try: return exploreSize(it)[1]                                   # size
                 except: pass                                                     # size
-        if hasPIL and isinstance(it, PIL.Image.Image):                           # size
-            return it.size if idx is None else it.size[idx]                      # size
+        if hasPIL and isinstance(it, PIL.Image.Image): return it.size if idx is None else it.size[idx] # size
+        if hasPandas and isinstance(it, pd.core.frame.DataFrame): s = (len(it), it.size//len(it)); return s if idx is None else s[idx] # size
         if idx is None:                                                          # size
             answer = []                                                          # size
             try:                                                                 # size
@@ -91,7 +93,7 @@ this, but only use it if you are sure that ``len(it)`` can be called.
     def _jsF(self, meta):                                                        # size
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # size
         post = "" if self.idx is None else f"[{cli.kjs.v(self.idx)}]"            # size
-        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.shape(){post}", fIdx    # size
+        return f"{fIdx} = ({dataIdx}) => {dataIdx}.shape(){post}", fIdx          # size
 shape = size                                                                     # size
 noFill = object()                                                                # size
 class item(BaseCli):                                                             # item
@@ -122,10 +124,12 @@ Example::
         return tAny()                                                            # item
     def __ror__(self, it:Iterator[str]):                                         # item
         if self.amt != 1: return it | self._f                                    # item
-        return next(iter(it), *self.fillP)                                       # item
+        if isinstance(it, settings.arrayTypes): return it[0]                     # item
+        if hasPandas and isinstance(it, pd.DataFrame): return it[:1].to_numpy()[0] # item
+        return next(iter(init.dfGuard(it)), *self.fillP)                         # item
     def _jsF(self, meta):                                                        # item
-        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # item
-        return f"const {fIdx} = ({dataIdx}) => {dataIdx}[0]", fIdx               # item
+        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto(); _slice = "".join(["[0]"]*self.amt) # item
+        return f"{fIdx} = ({dataIdx}) => {dataIdx}{_slice}", fIdx                # item
 class rItem(BaseCli):                                                            # rItem
     def __init__(self, idx:int):                                                 # rItem
         """Combines ``rows(idx) | item()``, as this is a pretty common pattern.
@@ -136,12 +140,14 @@ Example::
         self.idx = idx; self.arrayTypes = (*settings.arrayTypes, list, tuple)    # rItem
     def _all_array_opt(self, it, level:int): return it[(*[slice(None, None, None) for i in range(level)], self.idx)] # rItem
     def __ror__(self, it):                                                       # rItem
-        if isinstance(it, self.arrayTypes): return it[self.idx]                  # rItem
+        idx = self.idx                                                           # rItem
+        if isinstance(it, self.arrayTypes): return it[idx]                       # rItem
+        if hasPandas and isinstance(it, pd.DataFrame): return it[idx:idx+1].to_numpy()[0] # rItem
         for i, e in zip(range(self.idx+1), it): pass                             # rItem
         return e                                                                 # rItem
     def _jsF(self, meta):                                                        # rItem
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # rItem
-        return f"const {fIdx} = ({dataIdx}) => {dataIdx}[{cli.kjs.v(self.idx)}]", fIdx # rItem
+        return f"{fIdx} = ({dataIdx}) => {dataIdx}[{cli.kjs.v(self.idx)}]", fIdx # rItem
 class iden(BaseCli):                                                             # iden
     def __init__(self):                                                          # iden
         """Yields whatever the input is. Useful for multiple streams.
@@ -155,7 +161,7 @@ Example::
     def __ror__(self, it:Iterator[Any]): return it                               # iden
     def _jsF(self, meta):                                                        # iden
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # iden
-        return f"const {fIdx} = ({dataIdx}) => {dataIdx}", fIdx                  # iden
+        return f"{fIdx} = ({dataIdx}) => {dataIdx}", fIdx                        # iden
 class join(BaseCli):                                                             # join
     def __init__(self, delim:str=None):                                          # join
         r"""Merges all strings into 1, with `delim` in the middle. Basically
@@ -166,10 +172,10 @@ class join(BaseCli):                                                            
         super().__init__(); self.delim = patchDefaultDelim(delim)                # join
     def _typehint(self, inp): return str                                         # join
     def __ror__(self, it:Iterator[str]):                                         # join
-        return self.delim.join(it | cli.apply(str))                              # join
+        return self.delim.join(init.dfGuard(it) | cli.apply(str))                # join
     def _jsF(self, meta):                                                        # join
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # join
-        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.join({json.dumps(self.delim)})", fIdx # join
+        return f"{fIdx} = ({dataIdx}) => {dataIdx}.join({json.dumps(self.delim)})", fIdx # join
 class wrapList(BaseCli):                                                         # wrapList
     def __init__(self):                                                          # wrapList
         """Wraps inputs inside a list. There's a more advanced cli tool
@@ -185,7 +191,7 @@ built from this, which is :meth:`~k1lib.cli.structural.unsqueeze`. Example::
         return [it]                                                              # wrapList
     def _jsF(self, meta):                                                        # wrapList
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # wrapList
-        return f"const {fIdx} = ({dataIdx}) => [{dataIdx}]", fIdx                # wrapList
+        return f"{fIdx} = ({dataIdx}) => [{dataIdx}]", fIdx                      # wrapList
 class _EarlyExp(Exception): pass                                                 # _EarlyExp
 class equals:                                                                    # equals
     def __init__(self):                                                          # equals
@@ -214,10 +220,11 @@ Example::
         return tAny()                                                            # reverse
     def __ror__(self, it:Iterator[str]) -> List[str]:                            # reverse
         if isinstance(it, settings.arrayTypes): return it[::-1]                  # reverse
+        if hasPandas and isinstance(it, pd.core.arraylike.OpsMixin): return it[::-1] # reverse
         return reversed(list(it))                                                # reverse
     def _jsF(self, meta):                                                        # reverse
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # reverse
-        return f"const {fIdx} = ({dataIdx}) => [...{dataIdx}].reverse()", fIdx   # reverse
+        return f"{fIdx} = ({dataIdx}) => [...{dataIdx}].reverse()", fIdx         # reverse
 class ignore(BaseCli):                                                           # ignore
     def __init__(self):                                                          # ignore
         r"""Just loops through everything, ignoring the output.
@@ -232,10 +239,11 @@ Example::
     def _typehint(self, inp): return type(None)                                  # ignore
     def __ror__(self, it:Iterator[Any]):                                         # ignore
         if isinstance(it, settings.arrayTypes): return                           # ignore
+        if hasPandas and isinstance(it, pd.core.arraylike.OpsMixin): return      # ignore
         for _ in it: pass                                                        # ignore
     def _jsF(self, meta):                                                        # ignore
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # ignore
-        return f"const {fIdx} = ({dataIdx}) => {dataIdx}", fIdx                  # ignore
+        return f"{fIdx} = ({dataIdx}) => {dataIdx}", fIdx                        # ignore
 class rateLimit(BaseCli):                                                        # rateLimit
     def __init__(self, f, delay=0.1):                                            # rateLimit
         """Limits the execution flow rate upon a condition.
@@ -273,7 +281,7 @@ around 4 seconds to run.
         return tAny()                                                            # rateLimit
     def __ror__(self, it):                                                       # rateLimit
         f = self.f; delay = self.delay                                           # rateLimit
-        for e in it:                                                             # rateLimit
+        for e in init.dfGuard(it):                                               # rateLimit
             while not f(): time.sleep(delay)                                     # rateLimit
             yield e                                                              # rateLimit
     @staticmethod                                                                # rateLimit
@@ -304,7 +312,7 @@ passed. Example::
         return tAny()                                                            # timeLimit
     def __ror__(self, it):                                                       # timeLimit
         _time = time.time; endTime = _time() + self.t                            # timeLimit
-        for e in it:                                                             # timeLimit
+        for e in init.dfGuard(it):                                               # timeLimit
             yield e                                                              # timeLimit
             if _time() > endTime: break                                          # timeLimit
 def tab(pad:str=" "*4):                                                          # tab
@@ -327,6 +335,8 @@ Example::
     def __ror__(self, s): self.pyperclip.copy(s)                                 # clipboard
 a = [numbers.Number, np.number, str, bool, bytes, k1lib.UValue, cli.conv.Audio]  # clipboard
 if hasTorch: a.append(torch.nn.Module)                                           # clipboard
+if hasRos1: a.append(rosbag.bag.BagMessage)                                      # clipboard
+if hasPandas: a.append(pd.core.arraylike.OpsMixin)                               # clipboard
 settings.atomic.add("deref", tuple(a), "used by deref")                          # clipboard
 Tensor = torch.Tensor; atomic = settings.atomic                                  # clipboard
 class inv_dereference(BaseCli):                                                  # inv_dereference
@@ -342,26 +352,109 @@ class inv_dereference(BaseCli):                                                 
             else:                                                                # inv_dereference
                 try: yield e | self                                              # inv_dereference
                 except: yield e                                                  # inv_dereference
+_rosmsg_tempfile = [None]; _rosmsg_autoInc = k1lib.AutoIncrement()               # inv_dereference
+def rosmsg2BagMessage(msg): # kinda abandoned. Turns out you can't pickle a BagMessage cleanly afterall. I kinda have to do it the long way. If you want to be able to serialize a message, just do `obj | deref()`, it will wrap around using RosMsg(), which is serializable # rosmsg2BagMessage
+    if _rosmsg_tempfile[0] is None: _rosmsg_tempfile[0] = b"" | cli.file()       # rosmsg2BagMessage
+    fn = f"{_rosmsg_tempfile[0]}_{os.getpid()}_{_rosmsg_autoInc()}"              # rosmsg2BagMessage
+    with rosbag.Bag(fn, "w") as bag: bag.write("/default", msg)                  # rosmsg2BagMessage
+    res = rosbag.Bag(fn, "r").read_messages() | cli.item()                       # rosmsg2BagMessage
+    os.remove(fn); return res                                                    # rosmsg2BagMessage
+_rosmsg_tempfile2 = [None]; _rosmsg_autoInc2 = k1lib.AutoIncrement()             # rosmsg2BagMessage
+def _rosmsg_getFn2():                                                            # _rosmsg_getFn2
+    if _rosmsg_tempfile2[0] is None: _rosmsg_tempfile2[0] = b"" | cli.file(); os.remove(_rosmsg_tempfile2[0]) # _rosmsg_getFn2
+    return f"{_rosmsg_tempfile2[0]}_{os.getpid()}_{_rosmsg_autoInc2()}"          # _rosmsg_getFn2
+class RosMsg:                                                                    # RosMsg
+    def __init__(self, msg): self._ab_sentinel = True; self.__msg = msg; self._ab_sentinel = False # RosMsg
+    def __getattr__(self, attr):                                                 # RosMsg
+        if attr == "__msg": return self.__msg                                    # RosMsg
+        return getattr(self.__msg, attr)                                         # RosMsg
+    def __getstate__(self):                                                      # RosMsg
+        fn = _rosmsg_getFn2()                                                    # RosMsg
+        with rosbag.Bag(fn, "w") as bag: bag.write("/default", self.__msg)       # RosMsg
+        with open(fn, "rb") as f: raw = f.read()                                 # RosMsg
+        os.remove(fn); return {"raw": raw}                                       # RosMsg
+    def __setstate__(self, d):                                                   # RosMsg
+        fn = _rosmsg_getFn2()                                                    # RosMsg
+        with open(fn, "wb") as f: f.write(d["raw"])                              # RosMsg
+        with rosbag.Bag(fn) as bag: self.__msg = next(bag.read_messages()).message # RosMsg
+        os.remove(fn)                                                            # RosMsg
+    def __repr__(self): return self.__msg.__repr__()                             # RosMsg
+_rosMsgArrayTypes = k1lib.settings.cli.arrayTypes                                # RosMsg
+class RosMsgPlaceholder:                                                         # RosMsgPlaceholder
+    def __init__(self, idx): self.idx = idx                                      # RosMsgPlaceholder
+def _rosmsg_complex_deref_replace(it, autoInc, msgs):                            # _rosmsg_complex_deref_replace
+    if isinstance(it, np.number): return it.item()                               # _rosmsg_complex_deref_replace
+    elif isinstance(it, k1lib.settings.cli.atomic.deref): return it              # _rosmsg_complex_deref_replace
+    elif isinstance(it, _rosMsgArrayTypes): return it                            # _rosmsg_complex_deref_replace
+    elif isinstance(it, dict):  _d = {k:   _rosmsg_complex_deref_replace(v, autoInc, msgs) for k, v in it.items()}; return _d # _rosmsg_complex_deref_replace
+    elif isinstance(it, tuple): _t = tuple(_rosmsg_complex_deref_replace(k, autoInc, msgs) for k    in it);         return _t # _rosmsg_complex_deref_replace
+    elif isinstance(it, set):   _s = set  (_rosmsg_complex_deref_replace(k, autoInc, msgs) for k    in it);         return _s # _rosmsg_complex_deref_replace
+    elif isinstance(it, genpy.message.Message): idx = autoInc(); msgs[idx] = it; return RosMsgPlaceholder(idx) # _rosmsg_complex_deref_replace
+    elif isinstance(it, RosMsg): idx = autoInc(); msgs[idx] = it.__msg; return RosMsgPlaceholder(idx) # _rosmsg_complex_deref_replace
+    try: iter(it)                                                                # _rosmsg_complex_deref_replace
+    except: return it                                                            # _rosmsg_complex_deref_replace
+    answer = []                                                                  # _rosmsg_complex_deref_replace
+    for e in it:                                                                 # _rosmsg_complex_deref_replace
+        if e is cli.yieldT: return answer                                        # _rosmsg_complex_deref_replace
+        answer.append(_rosmsg_complex_deref_replace(e, autoInc, msgs))           # _rosmsg_complex_deref_replace
+    return answer                                                                # _rosmsg_complex_deref_replace
+def _rosmsg_complex_deref_reconstruct(it, msgs):                                 # _rosmsg_complex_deref_reconstruct
+    if isinstance(it, np.number): return it.item()                               # _rosmsg_complex_deref_reconstruct
+    elif isinstance(it, k1lib.settings.cli.atomic.deref): return it              # _rosmsg_complex_deref_reconstruct
+    elif isinstance(it, _rosMsgArrayTypes): return it                            # _rosmsg_complex_deref_reconstruct
+    elif isinstance(it, dict):  _d = {k:   _rosmsg_complex_deref_reconstruct(v, msgs) for k, v in it.items()}; return _d # _rosmsg_complex_deref_reconstruct
+    elif isinstance(it, tuple): _t = tuple(_rosmsg_complex_deref_reconstruct(k, msgs) for k    in it);         return _t # _rosmsg_complex_deref_reconstruct
+    elif isinstance(it, set):   _s = set  (_rosmsg_complex_deref_reconstruct(k, msgs) for k    in it);         return _s # _rosmsg_complex_deref_reconstruct
+    elif isinstance(it, RosMsgPlaceholder): return msgs[it.idx]                  # _rosmsg_complex_deref_reconstruct
+    try: iter(it)                                                                # _rosmsg_complex_deref_reconstruct
+    except: return it                                                            # _rosmsg_complex_deref_reconstruct
+    answer = []                                                                  # _rosmsg_complex_deref_reconstruct
+    for e in it:                                                                 # _rosmsg_complex_deref_reconstruct
+        if e is cli.yieldT: return answer                                        # _rosmsg_complex_deref_reconstruct
+        answer.append(_rosmsg_complex_deref_reconstruct(e, msgs))                # _rosmsg_complex_deref_reconstruct
+    return answer                                                                # _rosmsg_complex_deref_reconstruct
+class RosMsgComplex:                                                             # RosMsgComplex
+    def __init__(self, data):                                                    # RosMsgComplex
+        """An attempt to speed up serialization of ROS messages.
+Normally, I'd do this::
+
+    [msg1, msg2, ...] | deref() | aS(dill.dumps) | file("...")
+
+But this is a little inefficient as the process of writing to and reading from a temp bag file
+is not that fast. So this kinda bunches up all messages, write them into a single bag file, and
+have clever mechanism to reconstruct the structure.
+
+Turns out lots of messages can bog down the system. This does reduce load time by 2 times and disk
+size by 3 times. So it's effective, but just not wildly effective. This is not exposed automatically
+on the docs cause I don't feel like it's fast enough to justify that, but I couldn't just delete this.""" # RosMsgComplex
+        self.data = data                                                         # RosMsgComplex
+    def __getstate__(self):                                                      # RosMsgComplex
+        fn = _rosmsg_getFn2()                                                    # RosMsgComplex
+        with rosbag.Bag(fn, "w") as bag:                                         # RosMsgComplex
+            msgs = {}; struct = _rosmsg_complex_deref_replace(self.data, k1lib.AutoIncrement(prefix="/_rosmsg_"), msgs) # RosMsgComplex
+            for k, v in msgs.items(): bag.write(k, v)                            # RosMsgComplex
+        with open(fn, "rb") as f: raw = f.read()                                 # RosMsgComplex
+        res = {"struct": dill.dumps(struct), "raw": raw}; os.remove(fn); return res # RosMsgComplex
+    def __setstate__(self, d):                                                   # RosMsgComplex
+        fn = _rosmsg_getFn2()                                                    # RosMsgComplex
+        with open(fn, "wb") as f: f.write(d["raw"])                              # RosMsgComplex
+        msgs = {x.topic:x for x in rosbag.Bag(fn).read_messages()}               # RosMsgComplex
+        self.data = _rosmsg_complex_deref_reconstruct(d["struct"], msgs); os.remove(fn) # RosMsgComplex
 class deref(BaseCli):                                                            # deref
     def __init__(self, maxDepth=float("inf"), igT=True):                         # deref
         """Recursively converts any iterator into a list.
 Example::
 
-    # returns something like "<range_iterator at 0x7fa8c52ca870>"
-    iter(range(5))
-    # returns [0, 1, 2, 3, 4]
-    iter(range(5)) | deref()
-    # returns [2, 3], yieldT stops things early
-    [2, 3, yieldT, 6] | deref()
+
+    iter(range(5))              # returns something like "<range_iterator at 0x7fa8c52ca870>"
+    iter(range(5)) | deref()    # returns [0, 1, 2, 3, 4]
+    [2, 3, yieldT, 6] | deref() # returns [2, 3], yieldT stops things early
 
 You can also specify a ``maxDepth``::
 
-    # returns something like "<list_iterator at 0x7f810cf0fdc0>"
-    iter([range(3)]) | deref(0)
-    # returns [range(3)]
-    iter([range(3)]) | deref(1)
-    # returns [[0, 1, 2]]
-    iter([range(3)]) | deref(2)
+    iter([range(3)]) | deref(0) # returns something like "<list_iterator at 0x7f810cf0fdc0>"
+    iter([range(3)]) | deref(1) # returns [range(3)]
+    iter([range(3)]) | deref(2) # returns [[0, 1, 2]]
 
 There are a few classes/types that are considered atomic, and :class:`deref`
 will never try to iterate over it. If you wish to change it, do something like::
@@ -374,8 +467,7 @@ will never try to iterate over it. If you wish to change it, do something like::
     and :class:`numpy.ndarray` internals"""                                      # deref
         super().__init__(); self.igT = igT                                       # deref
         self.maxDepth = maxDepth; self.depth = 0                                 # deref
-        if hasTorch:                                                             # deref
-            self.arrayType = (torch.Tensor, np.ndarray) if k1lib.settings.startup.or_patch.numpy else torch.Tensor # deref
+        if hasTorch: self.arrayType = (torch.Tensor, np.ndarray) if k1lib.settings.startup.or_patch.numpy else torch.Tensor # deref
         else: self.arrayType = (np.ndarray,) if k1lib.settings.startup.or_patch.numpy else () # deref
     def _typehint(self, inp, depth=float("inf")):                                # deref
         if depth == 0: return inp                                                # deref
@@ -405,6 +497,7 @@ will never try to iterate over it. If you wish to change it, do something like::
         elif isinstance(it, dict):  self.depth += 1; _d = {k:   self.__ror__(v) for k, v in it.items()}; self.depth -= 1; return _d # deref
         elif isinstance(it, tuple): self.depth += 1; _t = tuple(self.__ror__(k) for k    in it);         self.depth -= 1; return _t # deref
         elif isinstance(it, set):   self.depth += 1; _s = set  (self.__ror__(k) for k    in it);         self.depth -= 1; return _s # deref
+        elif hasRos1 and isinstance(it, genpy.message.Message): return RosMsg(it) # return rosmsg2BagMessage(it) # deref
         try: iter(it)                                                            # deref
         except: return it                                                        # deref
         self.depth += 1; answer = []                                             # deref
@@ -419,7 +512,7 @@ there."""                                                                       
         return inv_dereference(self.igT)                                         # deref
     def _jsF(self, meta):                                                        # deref
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # deref
-        return f"const {fIdx} = ({dataIdx}) => {dataIdx}", fIdx                  # deref
+        return f"{fIdx} = ({dataIdx}) => {dataIdx}", fIdx                        # deref
     @staticmethod                                                                # deref
     def js():                                                                    # deref
         """Deref incoming object and turn them into a js object (NOT json string!).
@@ -475,14 +568,14 @@ Example::
     5 | bindec("abcdef", join(","))
 
 :param cats: categories
-:param f: transformation function of the selected elements. Defaulted to :class:`toList`, but others like :class:`join` is useful too""" # bindec
+:param f: transformation function of the selected elements. Defaulted to :class:`~k1lib.cli.conv.toList`, but others like :class:`join` is useful too""" # bindec
         self.cats = cats; self.f = f or cli.toList()                             # bindec
     def __ror__(self, it):                                                       # bindec
         it = bin(int(it))[2:][::-1]                                              # bindec
         return (e for i, e in zip(it, self.cats) if i == '1') | self.f           # bindec
 settings.add("smooth", 10, "default smooth amount, used in utils.smooth")        # bindec
 class smooth(BaseCli):                                                           # smooth
-    def __init__(self, consecutives=None):                                       # smooth
+    def __init__(self, consecutives=None, windowing=False):                      # smooth
         """Smoothes out the input stream.
 Literally just a shortcut for::
 
@@ -494,9 +587,9 @@ Example::
     range(30) | smooth(10) | deref()
 
 Smoothing over :class:`torch.Tensor` or :class:`numpy.ndarray` will
-be much faster, and produce high dimensional results::
+be much faster::
 
-    # returns torch.Tensor with shape (2, 3, 4)
+    # returns torch.Tensor with shape (2)
     torch.randn(10, 3, 4) | smooth(4)
 
 The default consecutive value is in ``settings.cli.smooth``. This
@@ -510,14 +603,14 @@ time, like this::
         plt.plot(x | smooth() | deref(), y | smooth() | deref())
 
 :param consecutives: if not defined, then used the value inside ``settings.cli.smooth``""" # smooth
-        self.b = cli.batched(consecutives or settings.smooth); self.consecutives = consecutives # smooth
-    def __ror__(self, it):                                                       # smooth
-        it = it | self.b                                                         # smooth
-        if isinstance(it, settings.arrayTypes): return it.mean(1)                # smooth
-        return it | cli.toMean().all()                                           # smooth
+        n = consecutives or settings.smooth; self.b = cli.window(n) if windowing else cli.batched(n) # smooth
+        self.consecutives = consecutives; self.windowing = windowing             # smooth
+    def _all_array_opt(self, it, level): return it | (self.b | cli.toMean().all()).all(level) # smooth
+    def __ror__(self, it): return init.dfGuard(it) | self.b | cli.toMean().all() # smooth
     def _jsF(self, meta):                                                        # smooth
+        if self.windowing: raise Exception(f"._jsF() does not support windowing in smooth() yet") # smooth
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # smooth
-        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.smooth({cli.kjs.v(self.consecutives)})", fIdx # smooth
+        return f"{fIdx} = ({dataIdx}) => {dataIdx}.smooth({cli.kjs.v(self.consecutives)})", fIdx # smooth
 def _f(): pass                                                                   # _f
 _code = type(_f.__code__)                                                        # _f
 def disassemble(f=None):                                                         # disassemble
@@ -567,6 +660,9 @@ strange, so this is mainly for visualization. Example::
 
     "." | tree() | deref()
 
+This is way less powerful and structured than clis from the module :mod:`k1lib.cli.ktree`.
+Check that out. This cli is mainly for backwards compability.
+
 :param fL: max number of file per directory included in output
 :param dL: max number of child directories per directory included in output
 :param depth: explore depth
@@ -577,53 +673,159 @@ strange, so this is mainly for visualization. Example::
     b = ~cli.filt(os.path.isfile) | cli.filt(df) | cli.head(dL) | processFolders # tree
     return cli.ls() | ~cli.sortF(os.path.isfile) | (a & b)                       # tree
 class lookup(BaseCli):                                                           # lookup
-    def __init__(self, d:dict, col:int=None, fill=None):                         # lookup
+    def __init__(self, d:dict, col:int=None, fill=None, mode:str="error"):       # lookup
         """Looks up items from a dictionary/object. Example::
 
     d = {"a": 3, "b": 5, "c": 52}
-    # returns [3, 5, 52, 52, 3]
-    "abcca" | lookup(d) | deref()
+    "abcca" | lookup(d) | deref() # returns [3, 5, 52, 52, 3]
 
-    # raises Exception, as "d" does not exist
-    "abccad" | lookup(d) | deref()
-    # returns [3, 5, 52, 52, 3, '(not found)']
-    "abccad" | lookup(d, fill="(not found)") | deref()
-    # returns [3, 5, 52, 52, 3, 'd']
-    "abccad" | lookup(d, fill=input) | deref()
+    "abccad" | lookup(d) | deref()                     # raises Exception, as key "d" does not exist
+    "abccad" | lookup(d, fill="(not found)") | deref() # returns [3, 5, 52, 52, 3, '(not found)'], mode automatically switched to "fill"
+    "abccad" | lookup(d, mode="fill")  | deref()       # returns [3, 5, 52, 52, 3, None]. Do this when you really want to return None
+    "abccad" | lookup(d, fill=input)   | deref()       # returns [3, 5, 52, 52, 3, 'd'], mode automatically switched to "input"
+    "abccad" | lookup(d, mode="input") | deref()       # returns [3, 5, 52, 52, 3, 'd'], similar to above
+    "abccad" | lookup(d, mode="rm")    | deref()       # returns [3, 5, 52, 52, 3], removing the unknown element
 
-    # returns [[0, 3], [1, 5], [2, 52], [3, 52], [4, 3]]
-    [range(5), "abcca"] | transpose() | lookup(d, 1) | deref()
+    [range(5), "abcca"] | transpose() | lookup(d, 1) | deref() # returns [[0, 3], [1, 5], [2, 52], [3, 52], [4, 3]]
+
+The ``mode`` param needs a little explaning. It specifies what should happen when an element is not found
+within the given dictionary. There are 3 modes total:
+- error: if ``.fill`` is not None, then throws an error. If ``.fill`` is specified, then this acts like mode "fill" instead
+- input: returns whatever the input element is
+- rm: removes (aka ignore) the element
+- fill: returns the arg ``.fill``
 
 :param d: any object that can be sliced with the inputs
-:param col: if None, lookup on each row, else lookup a specific
-    column only
-:param fill: if None, throws error if looked up element is not
-    available, else returns the fill value (or the input value if ``fill == input``)""" # lookup
+:param col: if None, lookup on each row, else lookup a specific column only
+:param fill: fill value for elements that are not in the provided dictionary. Explained more above
+:param mode: "error", "input", "rm", "fill". Explained more above"""             # lookup
         self.d = d; self.col = col; self.fill = fill                             # lookup
-        if fill is None: self.f = lambda e: d[e]                                 # lookup
-        elif fill == input: self.f = lambda e: d.get(e, e)                       # lookup
-        else: self.f = lambda e: d.get(e, fill)                                  # lookup
+        if mode == "error": # override .mode so that it's backwards compatible   # lookup
+            if fill is input: mode = "input"; fill = None                        # lookup
+            elif fill is not None: mode = "fill"                                 # lookup
+        self.mode = mode; self.rmSentinel = rmSentinel = object()                # lookup
+        if mode == "error": f = lambda e: d[e]                                   # lookup
+        elif mode == "input": f = lambda e: d.get(e, e)                          # lookup
+        elif mode == "rm": f = lambda e: d.get(e, rmSentinel)                    # lookup
+        elif mode == "fill": f = lambda e: d.get(e, fill)                        # lookup
+        else: raise Exception("Invalid mode. Only 'error', 'input', 'rm' and 'fill' are allowed") # lookup
+        self.f = f                                                               # lookup
+        def fa(it, col):                                                         # lookup
+            if mode == "rm": return it | cli.apply(lambda e: d.get(e, rmSentinel), col) | cli.filt(lambda x: x is not rmSentinel, col) # lookup
+            return it | cli.apply(f, col)                                        # lookup
+        self.fa = fa                                                             # lookup
     def _typehint(self, inp):                                                    # lookup
         t = inferType(list(self.d.values()))                                     # lookup
         if isinstance(t, tListIterSet): return tIter(t.child)                    # lookup
         if isinstance(t, tCollection): return tIter(tLowest(*t.children))        # lookup
         return tIter(tAny())                                                     # lookup
-    def __ror__(self, it): return it | cli.apply(self.f, self.col)               # lookup
+    def __ror__(self, it):                                                       # lookup
+        col = self.col                                                           # lookup
+        if hasPandas and isinstance(it, pd.DataFrame):                           # lookup
+            if col is None: it = init.dfGuard(it)                                # lookup
+            else:                                                                # lookup
+                f = self.f; rmSentinel = self.rmSentinel; c = [f(e) for e in it[list(it)[col]]]; it = it.replaceCol(list(it)[col], c) # lookup
+                return it.iloc[[i for i, e in enumerate(c) if e is not rmSentinel]] if self.mode == "rm" else it # lookup
+                # return pd.DataFrame({getattr(c, "name", ogName if i == col else next(genName)):c for i,c in enumerate(cols)}) # lookup
+        return self.fa(it, col)                                                  # lookup
     def _jsF(self, meta):                                                        # lookup
-        fIdx = init._jsFAuto(); dictIdx = init._jsDAuto(); dataIdx = init._jsDAuto() # lookup
-        if not self.col is None: raise Exception("lookup._jsF() doesn't support custom .col yet") # lookup
-        return f"const {dictIdx} = {json.dumps(self.d)}\nconst {fIdx} = ({dataIdx}) => {dataIdx}.lookup({dictIdx}, {cli.kjs.v(self.col)}, {cli.kjs.v(self.fill)})", fIdx # lookup
-class dictFields(BaseCli):                                                       # dictFields
-    def __init__(self, *fields, default=""):                                     # dictFields
-        """Grab a bunch of dictionary fields.
+        if self.mode not in ("input", "rm", "fill"): raise Exception(f"lookup()._jsF() only supports modes 'input', 'rm' and 'fill'. Either specify a mode, or a default fill value") # lookup
+        fIdx = init._jsFAuto(); dictIdx = f"{init._jsDAuto()}_{round(time.time())}"; dataIdx = init._jsDAuto() # lookup
+        return f"//k1_moveOutStart\n{dictIdx} = {json.dumps(self.d)}; //k1_moveOutEnd\n{fIdx} = ({dataIdx}) => {dataIdx}.lookup({dictIdx}, {cli.kjs.v(self.col)}, {cli.kjs.v(self.fill)}, `{self.mode}`)", fIdx # lookup
+_sorted = sorted                                                                 # lookup
+class lookupRange(BaseCli):                                                      # lookupRange
+    def __init__(self, ranges, col:int=None, sorted=True, fill=None, mode="error"): # lookupRange
+        """Looks up values within some range.
+Example::
+
+    ranges = [[2, 3, "a"], [4, 5, "b"], [6, 7, "c"]]
+    vs = [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5]
+    vs | lookupRange(ranges, mode="error") | deref() # raises an exception cause it can't find "1" in any ranges
+    vs | lookupRange(ranges, mode="fill")  | deref() # returns [None, None, 'a', 'a', None, None, 'b', 'b', None, None]
+    vs | lookupRange(ranges, mode="rm")    | deref() # returns ['a', 'a', 'b', 'b']
+    vs | lookupRange(ranges, mode="input") | deref() # returns [1, 1.5, 'a', 'a', 3, 3.5, 'b', 'b', 5, 5.5]
+
+    vs = list(zip([1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5], "abcdefghij"))
+    vs | lookupRange(ranges, 0, mode="rm") | deref() # returns [['a', 'c'], ['a', 'd'], ['b', 'g'], ['b', 'h']]
+
+So, ``ranges`` should be a table with 3 columns: start, stop and value. This cli will search across all ranges,
+and if the input iterator has values within a single range, it will yield that range's value. The exact
+comparison expression is "start <= input < stop". Internally, there're 2 implementations:
+
+First implementation assumes the ranges are not overlapping, activated by "sorted=True". This will
+assume the ranges are sorted based on the start values, then it searches for the value using binary
+search. Time complexity is O(n*log(m)), where n is the input size, m is the ranges's length
+
+Second implementation doesn't assume the ranges are not overlapping, activated by "sorted=False".
+This won't sort the ranges, and searches for the value using linear search, yielding the first
+range that contains the value. Time complexity is O(n*m)
+
+See also: :class:`lookup`
+
+:param ranges: table of size (N, 3), with each row (start, stop, value)
+:param col: column to act upon
+:param sorted: if True, use binary search, else use linear search. Explained more above
+:param fill: if specified, and if no ranges contain the value, then yield this value instead
+:param mode: explained above. See :class:`lookup` as well"""                     # lookupRange
+        try: ranges[:]; len(ranges)                                              # lookupRange
+        except: ranges = ranges | deref(2)                                       # lookupRange
+        if mode == "error" and fill is not None: mode = "fill"                   # lookupRange
+        if mode == "error" and fill == input: mode = "input"                     # lookupRange
+        self.ranges = ranges; self.col = col; self.sorted = sorted; self.fill = fill; self.mode = mode # lookupRange
+        if mode not in ("error", "rm", "fill", "input"): raise Exception(f".mode can only be 'error', 'rm', 'fill' or 'input'") # lookupRange
+    def __ror__(self, it):                                                       # lookupRange
+        ranges = self.ranges; col = self.col; fill = self.fill; mode = self.mode; sentinel = object(); it = init.dfGuard(it) # lookupRange
+        colIsNone = col is None; modeFill = mode == "fill"; modeRmOrError = mode == "rm" or mode == "error"; modeInput = mode == "input"; modeError = mode == "error" # lookupRange
+        def edit(row, value): row = list(row); row[col] = value; return row      # lookupRange
+        if self.sorted:                                                          # lookupRange
+            for row in it:                                                       # lookupRange
+                v = row if col is None else row[col]                             # lookupRange
+                start = 0; end = len(ranges)-1; e = sentinel                     # lookupRange
+                while start <= end:                                              # lookupRange
+                    mid = round((start + end)/2)                                 # lookupRange
+                    r = ranges[mid]                                              # lookupRange
+                    if r[0] <= v < r[1]: e = r[2]; break                         # lookupRange
+                    if v < r[0]: end = mid-1                                     # lookupRange
+                    else: start = mid+1                                          # lookupRange
+                if colIsNone:                                                    # lookupRange
+                    if modeFill: yield fill if e is sentinel else e              # lookupRange
+                    elif modeRmOrError and e is not sentinel: yield e            # lookupRange
+                    elif modeInput: yield v if e is sentinel else e              # lookupRange
+                    elif modeError: raise KeyError(f"Can't find element {v} in any ranges") # lookupRange
+                else:                                                            # lookupRange
+                    if modeFill: row = list(row); row[col] = fill if e is sentinel else e; yield row # lookupRange
+                    elif modeRmOrError and e is not sentinel: row = list(row); row[col] = e; yield row # lookupRange
+                    elif modeInput: row = list(row); row[col] = v if e is sentinel else e; yield row # lookupRange
+                    elif modeError: raise KeyError(f"Can't find element {v} in any ranges") # lookupRange
+        else:                                                                    # lookupRange
+            for row in it:                                                       # lookupRange
+                v = row if col is None else row[col]                             # lookupRange
+                e = next((vv for x,y,vv in ranges if x <= v < y), sentinel)      # lookupRange
+                if colIsNone:                                                    # lookupRange
+                    if modeFill: yield fill if e is sentinel else e              # lookupRange
+                    elif modeRmOrError and e is not sentinel: yield e            # lookupRange
+                    elif modeInput: yield v if e is sentinel else e              # lookupRange
+                    elif modeError: raise KeyError(f"Can't find element {v} in any ranges") # lookupRange
+                else:                                                            # lookupRange
+                    if modeFill: row = list(row); row[col] = fill if e is sentinel else e; yield row # lookupRange
+                    elif modeRmOrError and e is not sentinel: row = list(row); row[col] = e; yield row # lookupRange
+                    elif modeInput: row = list(row); row[col] = v if e is sentinel else e; yield row # lookupRange
+                    elif modeError: raise KeyError(f"Can't find element {v} in any ranges") # lookupRange
+class getitems(BaseCli):                                                         # getitems
+    def __init__(self, *fields, default=None):                                   # getitems
+        """Basically [input[x] for x in fields].
 Example::
 
     # returns [3, 1, '']
-    {"a": 1, "b": 2, "c": 3} | dictFields("c", "a", "d")
-"""                                                                              # dictFields
-        self.fields = fields; self.default = default                             # dictFields
-    def __ror__(self, d):                                                        # dictFields
-        return [d.get(f, self.default) for f in self.fields]                     # dictFields
+    {"a": 1, "b": 2, "c": 3} | getitems("c", "a", "d")
+"""                                                                              # getitems
+        self.fields = fields; self.default = default                             # getitems
+    def __ror__(self, d):                                                        # getitems
+        ans = []; default = self.default                                         # getitems
+        for f in self.fields:                                                    # getitems
+            try: ans.append(d[f])                                                # getitems
+            except: ans.append(default)                                          # getitems
+        return ans                                                               # getitems
 class backup(BaseCli):                                                           # backup
     def __init__(self):                                                          # backup
         """Backs up a file/folder.
@@ -649,7 +851,7 @@ not available on Windows."""                                                    
 sketch_interceptor = {}                                                          # backup
 class sketch(BaseCli):                                                           # sketch
     _jsF_ctxIdx = None                                                           # sketch
-    def __init__(self, transforms:List[callable]=[], titles:List[str]=None, im:bool=False, ncols:int=None, n:int=None, axes:int=None): # sketch
+    def __init__(self, transforms:List[Callable]=[], titles:List[str]=None, im:bool=False, ncols:int=None, n:int=None, axes:int=None): # sketch
         """Convenience tool to plot multiple matplotlib plots at the same
 time, while still keeping everything short and in 1 line. For this example,
 we're trying to plot x^1, x^2, ..., x^8 on 2 separate plots, one left one
@@ -734,8 +936,8 @@ Check out a gallery of more examples at `kapi/9-mpl <https://mlexps.com/kapi/9-m
             tfStmts = tfs = self.transforms | cli.apply(cli.init.fastF) | cli.op()(Interceptor()).all() | cli.join("; ") # sketch
         sketch._jsF_ctxIdx = None                                                # sketch
         return f"""\
-let {ctxIdx} = null;\n{header}
-const {fIdx} = async ({dataIdx}) => {{ // dataIdx should have
+{ctxIdx} = null;\n{header}
+{fIdx} = async ({dataIdx}) => {{ // dataIdx should have
     const ctx = []; // this is the object that will be sent to the rendering server!
     const titles = {json.dumps(self.titles)} ?? Array({dataIdx}.length);
     for (const i of [...Array({dataIdx}.length).keys()]) {{
@@ -761,7 +963,7 @@ const {fIdx} = async ({dataIdx}) => {{ // dataIdx should have
     }} else {{ throw new Error(res.reason); }}
     // return ctx;
 }}""", fIdx                                                                      # sketch
-        return f"const {fIdx} = ({dataIdx}) => {dataIdx}.repeatFrom({cli.kjs.v(self.limit)})", fIdx # sketch
+        return f"{fIdx} = ({dataIdx}) => {dataIdx}.repeatFrom({cli.kjs.v(self.limit)})", fIdx # sketch
 def _jsF_plt_ctxGuard():                                                         # _jsF_plt_ctxGuard
     if sketch._jsF_ctxIdx is None: raise Exception("Have to wrap any plotting operations around sketch(). So, transform your code from `data | (toJsFunc() | ~aS(plt.plot))` into `[data] | (toJsFunc() | (sketch() | ~aS(plt.plot)))`") # _jsF_plt_ctxGuard
     return sketch._jsF_ctxIdx                                                    # _jsF_plt_ctxGuard
@@ -771,7 +973,7 @@ if hasMpl:                                                                      
     def _jsF_plt_plot(meta, c=None):                                             # _jsF_plt_ctxGuard
         fIdx = init._jsFAuto(); xIdx = init._jsDAuto(); yIdx = init._jsDAuto(); ctxIdx = _jsF_plt_ctxGuard() # _jsF_plt_ctxGuard
         return f"""\
-    const {fIdx} = ({xIdx}, {yIdx}=null) => {{
+    {fIdx} = ({xIdx}, {yIdx}=null) => {{
         if (!{yIdx}) {{ // handle only xIdx is available case
             {yIdx} = {xIdx}; {xIdx} = [...Array({yIdx}.length).keys()];
         }}
@@ -780,21 +982,23 @@ if hasMpl:                                                                      
     settings.kjs.jsF[plt.plot] = _jsF_plt_plot                                   # _jsF_plt_ctxGuard
     def _jsF_plt_title(meta): # version that passes args in js side              # _jsF_plt_ctxGuard
         fIdx = init._jsFAuto(); titleIdx = init._jsDAuto(); ctxIdx = _jsF_plt_ctxGuard() # _jsF_plt_ctxGuard
-        return f"""const {fIdx} = ({titleIdx}) => {{ {ctxIdx}.push(["title", {titleIdx}]); }}""", fIdx # _jsF_plt_ctxGuard
+        return f"""{fIdx} = ({titleIdx}) => {{ {ctxIdx}.push(["title", {titleIdx}]); }}""", fIdx # _jsF_plt_ctxGuard
     settings.kjs.jsF[plt.title] = _jsF_plt_title # below is version that passes args in python side, returns statement, instead of (header, fIdx) like usual # _jsF_plt_ctxGuard
     sketch_interceptor[plt.title] = lambda title: f"""{_jsF_plt_ctxGuard()}.push(["title", `{title}`])""" # _jsF_plt_ctxGuard
     def _jsF_plt_grid(meta):                                                     # _jsF_plt_ctxGuard
         fIdx = init._jsFAuto(); tfIdx = init._jsDAuto(); ctxIdx = _jsF_plt_ctxGuard() # _jsF_plt_ctxGuard
-        return f"""const {fIdx} = ({tfIdx}) => {{ {ctxIdx}.push(["grid", {tfIdx}]); }}""", fIdx # _jsF_plt_ctxGuard
+        return f"""{fIdx} = ({tfIdx}) => {{ {ctxIdx}.push(["grid", {tfIdx}]); }}""", fIdx # _jsF_plt_ctxGuard
     settings.kjs.jsF[plt.grid] = _jsF_plt_grid; sketch_interceptor[plt.grid] = lambda tf=True: f"""{_jsF_plt_ctxGuard()}.push(["grid", {cli.kjs.v(tf)}])""" # _jsF_plt_ctxGuard
-    def _jsF_plt_legend(meta):                                                   # _jsF_plt_ctxGuard
+    def _jsF_plt_legend(meta, framealpha=1):                                     # _jsF_plt_ctxGuard
         fIdx = init._jsFAuto(); legendIdx = init._jsDAuto(); ctxIdx = _jsF_plt_ctxGuard() # _jsF_plt_ctxGuard
-        return f"""const {fIdx} = ({legendIdx}) => {{ {ctxIdx}.push(["legend", {legendIdx}]); }}""", fIdx # _jsF_plt_ctxGuard
-    settings.kjs.jsF[plt.legend] = _jsF_plt_legend; sketch_interceptor[plt.legend] = lambda legend=None: f"""{_jsF_plt_ctxGuard()}.push(["legend", {cli.kjs.v(legend)}])""" # _jsF_plt_ctxGuard
+        return f"""{fIdx} = ({legendIdx}) => {{ {ctxIdx}.push(["legend", {legendIdx}, {framealpha}]); }}""", fIdx # _jsF_plt_ctxGuard
+    settings.kjs.jsF[plt.legend] = _jsF_plt_legend; sketch_interceptor[plt.legend] = lambda legend=None, framealpha=1: f"""{_jsF_plt_ctxGuard()}.push(["legend", {cli.kjs.v(legend)}, {cli.kjs.v(framealpha)}])""" # _jsF_plt_ctxGuard
                                                                                  # _jsF_plt_ctxGuard
     sketch_interceptor[plt.xlim] = lambda left=None, right=None: f"""{_jsF_plt_ctxGuard()}.push(["xlim", {cli.kjs.v(left)}, {cli.kjs.v(right)}])""" # _jsF_plt_ctxGuard
     sketch_interceptor[plt.ylim] = lambda bottom=None, top=None: f"""{_jsF_plt_ctxGuard()}.push(["ylim", {cli.kjs.v(bottom)}, {cli.kjs.v(top)}])""" # _jsF_plt_ctxGuard
     sketch_interceptor[plt.xscale] = lambda scale: f"""{_jsF_plt_ctxGuard()}.push(["xscale", {cli.kjs.v(scale)}])""" # _jsF_plt_ctxGuard
+    sketch_interceptor[plt.xlabel] = lambda label: f"""{_jsF_plt_ctxGuard()}.push(["xlabel", {cli.kjs.v(label)}])""" # _jsF_plt_ctxGuard
+    sketch_interceptor[plt.ylabel] = lambda label: f"""{_jsF_plt_ctxGuard()}.push(["ylabel", {cli.kjs.v(label)}])""" # _jsF_plt_ctxGuard
 import numbers, sys; from collections import deque                               # _jsF_plt_ctxGuard
 class syncStepper(BaseCli):                                                      # syncStepper
     def __init__(self, col=0, sort=False):                                       # syncStepper
@@ -882,7 +1086,7 @@ See also: :class:`~k1lib.cli.structural.latch`
             self._append(stIdx, val2, elem2)                                     # syncStepper
         return res, changed                                                      # syncStepper
     def __ror__(self, sts): # sts = "streams"                                    # syncStepper
-        col = self.col                                                           # syncStepper
+        col = self.col; it = init.dfGuard(it)                                    # syncStepper
         # --------------------- All of this is just to figure out the type of the column dynamically. So painful --------------------- # syncStepper
         samples, sts = sts | self.colPreprocess.all() | cli.apply(cli.peek()) | cli.transpose() | cli.cut(col) + cli.iden() | cli.apply(list) # syncStepper
         if len([e for e in sts if e != []]) == 0: return # no elements to yield at all! # syncStepper
@@ -948,7 +1152,7 @@ starts from the last element of the previous list
         self.col = col; self.log = log; self.offset = offset; self.inverted = False # zeroes
     def __invert__(self): res = zeroes(self.col, self.log, self.offset); res.inverted = True; return res # zeroes
     def __ror__(self, it):                                                       # zeroes
-        col = self.col; log = self.log; offset = self.offset                     # zeroes
+        col = self.col; log = self.log; offset = self.offset; it = init.dfGuard(it) # zeroes
         if self.inverted:                                                        # zeroes
             def gen():                                                           # zeroes
                 currentOffset = offset                                           # zeroes
@@ -999,26 +1203,101 @@ Example::
     arr | normalize(2)         # returns array with 2nd (0-indexing!) column have mean around 0. Other columns not touched
     arr | normalize(2, mode=1) # returns array with 2nd (0-indexing!) column have mean around 0.5
 
+Modes:
+
+- 0: ``(x - x.mean()) / x.std()``
+- 1: ``(x - x.min()) / (x.max() - x.min())``
+- 2: ``a = log10(x); (a - a.min()) / (a.max() - a.min())``
+
 :param col: column to apply the normalization to
-:param mode: 0 for ``(x - x.mean())/s.std()``, 1 for ``(x - x.min())/(x.max() - x.min())``""" # normalize
+:param mode: see above"""                                                        # normalize
         self.col = col; self.mode = mode                                         # normalize
+    def _all_array_opt(self, it, level):                                         # normalize
+        col = self.col; n = len(it.shape); s = slice(None, None, None); mode = self.mode # normalize
+        log10 = np.log10 if isinstance(it, np.ndarray) else torch.log10          # normalize
+        if col is None:                                                          # normalize
+            # (*level, N, *rest (>0)) -> (*level, N, rest) -> (*level, N*rest) -> (*level) (this is mean & std) -> (*level, N, *rest) # normalize
+            if level+1 == len(it.shape): it = it[(*[s]*len(it.shape), None)]; n += 1 # normalize
+            b = it | cli.joinSt(n-level-2).all(level+1); c = b | cli.joinSt().all(level) # normalize
+            if mode == 0:                                                        # normalize
+                mean = c.mean(level)[(*[s]*level,None,None)]                     # normalize
+                std = c.std(level)[(*[s]*level,None,None)]                       # normalize
+                return ((b - mean)/std).reshape(it.shape)                        # normalize
+            elif mode == 1:                                                      # normalize
+                min_ = c.min(level)[(*[s]*level,None,None)]                      # normalize
+                max_ = c.max(level)[(*[s]*level,None,None)]                      # normalize
+                return ((b - min_)/(max_ - min_)).reshape(it.shape)              # normalize
+            else:                                                                # normalize
+                min_ = log10(c).min(level)[(*[s]*level,None,None)]               # normalize
+                max_ = log10(c).max(level)[(*[s]*level,None,None)]               # normalize
+                return ((log10(b) - min_)/(max_ - min_)).reshape(it.shape)       # normalize
+        else:                                                                    # normalize
+            # (*level, N, F, *rest (>0)) -> (*level, N, *rest) -> (*level, N, rest) -> (*level, N*rest) -> (*level) (this is mean & std) -> (*level, N, F, *rest) # normalize
+            a = np.copy(it) if isinstance(it, np.ndarray) else torch.clone(it); unsqueezed = False; s = slice(None, None, None) # normalize
+            if level+2 == len(a.shape): a = a[(*[s]*len(a.shape), None)]; unsqueezed = True; n += 1 # normalize
+            b = a[(*[slice(None,None,None)]*(level+1),col)] | cli.joinSt(n-level-3).all(level+1) # (*level, N, rest (>0, hence unsqueeze)) # normalize
+            c = b | cli.joinSt(len(b.shape)-level-1).all(level) # (*level, N*rest) # normalize
+            if mode == 0:                                                        # normalize
+                mean = c.mean(level)[(*[s]*level,None,None)]                     # normalize
+                std = c.std(level)[(*[s]*level,None,None)]                       # normalize
+                b[:] = (b - mean)/std                                            # normalize
+            elif mode == 1:                                                      # normalize
+                min_ = c.min(level)[(*[s]*level,None,None)]                      # normalize
+                max_ = c.max(level)[(*[s]*level,None,None)]                      # normalize
+                b[:] = (b - min_)/(max_ - min_)                                  # normalize
+            else:                                                                # normalize
+                min_ = log10(c).min(level)[(*[s]*level,None,None)]               # normalize
+                max_ = log10(c).max(level)[(*[s]*level,None,None)]               # normalize
+                b[:] = (log10(b) - min_)/(max_ - min_)                           # normalize
+            return (a | cli.joinSt().all(len(a.shape)-2)) if unsqueezed else a   # normalize
+        return NotImplemented                                                    # normalize
     def __ror__(self, x):                                                        # normalize
-        col = self.col; mode = self.mode                                         # normalize
+        col = self.col; mode = self.mode; x = init.dfGuard(x)                    # normalize
         if isinstance(x, k1lib.settings.cli.arrayTypes):                         # normalize
-            dims = len(x.shape)                                                  # normalize
-            if col is None: return (x - x.mean())/x.std() if mode == 0 else (x - x.min())/(x.max() - x.min()) # normalize
+            dims = len(x.shape); log10 = np.log10 if isinstance(x, np.ndarray) else torch.log10 # normalize
+            if col is None:                                                      # normalize
+                if mode == 0: return (x - x.mean())/x.std()                      # normalize
+                elif mode == 1: return (x - x.min())/(x.max() - x.min())         # normalize
+                else: x = log10(x); return (x - x.min())/(x.max() - x.min())     # normalize
             else:                                                                # normalize
                 if mode == 0: xc = x[:,col]; x[:,col] = (xc - xc.mean())/xc.std(); return x # normalize
-                else: xc = x[:,col]; x[:,col] = (xc - xc.min())/(xc.max() - xc.min()); return x # normalize
+                elif mode == 1: xc = x[:,col]; x[:,col] = (xc - xc.min())/(xc.max() - xc.min()); return x # normalize
+                else: xc = log10(x[:,col]); x[:,col] = (xc - xc.min())/(xc.max() - xc.min()); return x # normalize
         if col is None: return np.array(list(x)) | self                          # normalize
         else:                                                                    # normalize
-            it = x; ans = []; it = it | cli.deref(2)                             # normalize
+            it = x; ans = []; it = it | cli.deref(2); log10 = math.log10         # normalize
+            if len(it) == 0: return []                                           # normalize
             if mode == 0:                                                        # normalize
                 mean = [row[col] for row in it] | cli.toMean()                   # normalize
                 std = [row[col] for row in it] | cli.toStd()                     # normalize
-                for row in it: row[col] = (row[col]-mean)/std; ans.append(row)   # normalize
-            else:                                                                # normalize
+                for row in it: row = list(row); row[col] = (row[col]-mean)/std; ans.append(row) # normalize
+            elif mode == 1:                                                      # normalize
                 _min = min([row[col] for row in it])                             # normalize
                 _max = max([row[col] for row in it])                             # normalize
-                for row in it: row[col] = (row[col]-_min)/(_max-_min); ans.append(row) # normalize
+                for row in it: row = list(row); row[col] = (row[col]-_min)/(_max-_min); ans.append(row) # normalize
+            else:                                                                # normalize
+                _min = min([log10(row[col]) for row in it])                      # normalize
+                _max = max([log10(row[col]) for row in it])                      # normalize
+                for row in it: row = list(row); row[col] = (log10(row[col])-_min)/(_max-_min); ans.append(row) # normalize
             return ans                                                           # normalize
+class branch(BaseCli):                                                           # branch
+    def __init__(self, f, f1, f2):                                               # branch
+        """Works like an if statement, for when you don't want to make a separate
+function as it's too time consuming.
+
+    3 | branch(lambda x: x>2, lambda x: x+4, lambda x: x+5) # returns 7
+    3 | branch(op()>2, op()+4, op()+5)                      # returns 7
+    3 | branch("x>2", "x+4", "x+5")                         # returns 7
+
+    3 | aS(lambda x: (x + 4) if (x > 2) else (x + 5))       # returns 7
+
+So all of them kinda does the same thing as the 4th line. Is it worth it? Debatable, but I've
+had so many times that I have to wrap things in parenthesis around expressions to make sure
+it's not doing anything weird and that takes long enough to disrupt my thought process
+that I kinda have to make this
+
+:param f: predicate function. If returns True, use the first function (f1), else use the second function (f2)""" # branch
+        self.f = f; self._fC = cli.fastF(f)                                      # branch
+        self.f1 = f1; self._fC1 = cli.fastF(f1)                                  # branch
+        self.f2 = f2; self._fC2 = cli.fastF(f2)                                  # branch
+    def __ror__(self, it): return self._fC1(it) if self._fC(it) else self._fC2(it) # branch
