@@ -11,22 +11,31 @@ def mysqlCnf(user, password, host, port):                                       
     fn = f"""[client]\nuser = "{user}"\npassword = "{password or ''}"\nhost = "{host}"\nport = "{port}" """ | cli.file() # mysqlCnf
     try: yield fn                                                                # mysqlCnf
     finally: os.remove(fn)                                                       # mysqlCnf
-settings.cred.add("sql", k1lib.Settings()                                        # mysqlCnf
-    .add("mode", "my", env="K1_SQL_MODE")                                        # mysqlCnf
-    .add("host", "127.0.0.1", "host name of db server, or db file name if mode='lite'. Warning: mysql's mysqldump won't resolve domain names, so it's best to pass in ip addresses", env="K1_SQL_HOST") # mysqlCnf
-    .add("port", 3306, env="K1_SQL_PORT")                                        # mysqlCnf
-    .add("user", "admin", sensitive=True, env="K1_SQL_USER")                     # mysqlCnf
-    .add("password", "admin", sensitive=True, env="K1_SQL_PASSWORD")             # mysqlCnf
-    .add("verbose", False, "if True, will print out all executed queries")       # mysqlCnf
-, "anything related to sql, used by k1lib.cli.lsext.sql. See docs for that class for more details") # mysqlCnf
-mysqlConn = k1.dep("mysql.connector", "mysql-connector-python", "https://pypi.org/project/mysql-connector-python/") # mysqlCnf
-pgConn = k1.dep("psycopg2", "psycopg2-binary", "https://pypi.org/project/psycopg2/") # mysqlCnf
-sqlite3 = k1.dep("sqlite3")                                                      # mysqlCnf
-qD = {"my": "`", "pg": "", "lite": ""} # quote dict                              # mysqlCnf
-default = object()                                                               # mysqlCnf
+rowCaches = set() # k1lib.cache objects for caching table[id]                    # mysqlCnf
+def cb_rowCache_size(s,v):                                                       # cb_rowCache_size
+    for rC in rowCaches: rC.maxsize = v                                          # cb_rowCache_size
+def cb_rowCache_timeout(s, v):                                                   # cb_rowCache_timeout
+    for rC in rowCaches: rC.timeout = v                                          # cb_rowCache_timeout
+settings.cred.add("sql", k1lib.Settings()                                        # cb_rowCache_timeout
+    .add("mode", "my", env="K1_SQL_MODE")                                        # cb_rowCache_timeout
+    .add("host", "127.0.0.1", "host name of db server, or db file name if mode='lite'. Warning: mysql's mysqldump won't resolve domain names, so it's best to pass in ip addresses", env="K1_SQL_HOST") # cb_rowCache_timeout
+    .add("port", 3306, env="K1_SQL_PORT")                                        # cb_rowCache_timeout
+    .add("user", "admin", sensitive=True, env="K1_SQL_USER")                     # cb_rowCache_timeout
+    .add("password", "admin", sensitive=True, env="K1_SQL_PASSWORD")             # cb_rowCache_timeout
+    .add("verbose", False, "if True, will print out all executed queries")       # cb_rowCache_timeout
+    .add("sanitize", False, "if True, will sanitize all string columns with MarkupSafe", env=("K1_SQL_SANITIZE", lambda x: x.lower()[0] == "t")) # cb_rowCache_timeout
+    .add("cache", k1lib.Settings()                                               # cb_rowCache_timeout
+         .add("size", 300, "Size of the cache, 0 to disable it", cb_rowCache_size, env=("K1_SQL_CACHE_SIZE", lambda x: int(x))) # cb_rowCache_timeout
+         .add("timeout", 1, "After this number of seconds, the cached item will expire", cb_rowCache_timeout, env=("K1_SQL_CACHE_TIMEOUT", lambda x: float(x))), "Cache settings for table accesses. I.e table[id]") # cb_rowCache_timeout
+, "anything related to sql, used by k1lib.cli.lsext.sql. See docs for that class for more details") # cb_rowCache_timeout
+mysqlConn = k1.dep("mysql.connector", "mysql-connector-python", "https://pypi.org/project/mysql-connector-python/") # cb_rowCache_timeout
+pgConn = k1.dep("psycopg2", "psycopg2-binary", "https://pypi.org/project/psycopg2/") # cb_rowCache_timeout
+sqlite3 = k1.dep("sqlite3"); markupsafe = k1.dep("markupsafe", "MarkupSafe", "https://pypi.org/project/MarkupSafe/") # cb_rowCache_timeout
+default = object(); qD = {"my": "`", "pg": "", "lite": ""} # quote dict          # cb_rowCache_timeout
 def stripMemView(x): return bytes(x) if isinstance(x, memoryview) else x # postgresql returns memory view objects for bytea columns, instead of just raw bytes, so gotta strip it # stripMemView
+class alldump(list): pass # dump of all databases                                # alldump
 class sql:                                                                       # sql
-    def __init__(self, host=default, port=default, user=default, password=default, mode=default): # sql
+    def __init__(self, host=default, port=default, user=default, password=default, mode=default, db=None): # sql
         """Creates a connection to a SQL database.
 Example::
 
@@ -53,6 +62,7 @@ Example::
     users[1:10]                                                # grabs users with id from 1 (inclusive) to 10 (exclusive)
     users[1].firstname = "Reimu"                               # sets the first name of user with id 1 to "Reimu"
     users[1] = {"firstname": "Reimu", "lastname": "Hakurei"}   # sets first name and last name of user with id 1
+    for user in users: user.firstname = "Reimu"                # loops through all users and change the firstname to "Reimu"
     users.insert(firstname="Yuyuko", lastname="Saigyouji")     # inserts a new row
     users.insertBulk(firstname=["Yuyuko", "Marisa"], lastname=["Saigyouji", "Kirisame"]) # inserts multiple rows at once
     users | toBytes()                                          # dumps this specific table, returns Iterator[str]
@@ -77,8 +87,9 @@ Execute and display/print "settings" in a new cell to see all of them.
         if mode not in ("my", "pg", "lite"): raise Exception(f"Supports only 'my' (MySQL), 'pg' (PostgreSQL) and 'lite' (SQLite) for now, don't support {mode}") # sql
         if mode == "lite": host = os.path.expanduser(host)                       # sql
         self.host = host; self.port = port; self.user = user or os.environ.get("SQL_USER") or os.environ.get("USER") # sql
-        self.password = password or os.environ.get("SQL_PASSWORD"); self.db = None; self.mode = mode; self.conn = None; self.refresh() # sql
+        self.password = password or os.environ.get("SQL_PASSWORD"); self.db = db; self.mode = mode; self.conn = None; self.refresh() # sql
         self.star = "%s" if mode == "my" or mode == "pg" else "?"                # sql
+    def _copy(self, db=None): return sql(self.host, self.port, self.user, self.password, self.mode, db or self.db) # sql
     def refresh(self):                                                           # sql
         """Sometimes, the connection errors out for whatever reason, so this method is to
 reestablish the connection. You don't need to worry about this though, as on every query,
@@ -114,15 +125,23 @@ if it detects that the connection has dropped, it will automatically try to refr
                 try: res = cur.fetchall() # some commands like "use database1", this errors out, but it's perfectly normal behavior # sql
                 except: pass                                                     # sql
             if desc: desc_ = cur.description                                     # sql
-            if commit: self.conn.commit()                                        # sql
+            if commit:                                                           # sql
+                if self.mode == "pg":                                            # sql
+                    try: self.conn.commit() # sometimes postgresql would close the connection. No idea why, so am gonna just catch this # sql
+                    except: pass                                                 # sql
+                else: self.conn.commit()                                         # sql
             cur.close(); return res, desc_                                       # sql
-        except: # execute again, hopefully to clear out connection lost errors. Connection is even lost when the db is on the same host! Like, wtf? # sql
+        except: # execute again, hopefully to clear out connection lost errors. Connection is even lost when the db is on the same host! Like, wtf? This happens with mysql only tho # sql
             self.refresh(); cur = self.cursor(); cur.execute(query, args); res = None; desc_ = None # sql
             if fetch:                                                            # sql
                 try: res = cur.fetchall()                                        # sql
                 except: pass                                                     # sql
             if desc: desc_ = cur.description                                     # sql
-            if commit: self.conn.commit()                                        # sql
+            if commit:                                                           # sql
+                if self.mode == "pg":                                            # sql
+                    try: self.conn.commit() # sometimes postgresql would close the connection. No idea why, so am gonna just catch this # sql
+                    except: pass                                                 # sql
+                else: self.conn.commit()                                         # sql
             cur.close(); return res, desc_                                       # sql
     def query(self, query, *args, **kw):                                         # sql
         """Executes a query. Returns the resulting table (if select query).
@@ -142,8 +161,8 @@ Example::
         except: ans = None                                                       # sql
         cur.close(); self.conn.commit(); return ans                              # sql
     def _ls(self):                                                               # sql
-        if self.mode == "my": return [sqldb(self, e[0]) for e in self.query("show databases")] # sql
-        elif self.mode == "pg": return [sqldb(self, e[0]) for e in self.query("select datname from pg_database where datistemplate=false")] # sql
+        if self.mode == "my": return [sqldb(self._copy(e[0]), e[0]) for e in self.query("show databases")] # sql
+        elif self.mode == "pg": return [sqldb(self._copy(e[0]), e[0]) for e in self.query("select datname from pg_database where datistemplate=false")] # sql
         elif self.mode == "lite": return [sqldb(self, "default")]                # sql
     def __repr__(self): return f"<sql mode={self.mode} host={self._host}>"       # sql
     @property                                                                    # sql
@@ -153,33 +172,45 @@ Example::
     def _cnfCtx(self): return mysqlCnf(self.user, self.password, self.host, self.port) # sql
     def _toBytes(self):                                                          # sql
         if self.mode == "my":                                                    # sql
-            with self._cnfCtx() as fn: yield from None | cli.cmd(f"mysqldump --defaults-file={fn} --single-transaction --hex-blob --all-databases") # sql
-        elif self.mode == "pg": yield from None | cli.cmd(f"PGPASSWORD={self.password} pg_dumpall -h {self.host} -p {self.port} -U {self.user}") # sql
+            with self._cnfCtx() as fn: k1lib.depCli("mysqldump"); return alldump(None | cli.cmd(f"mysqldump --defaults-file={fn} --single-transaction --hex-blob --all-databases")) # sql
+        elif self.mode == "pg": k1lib.depCli("pg_dumpall"); return alldump(None | cli.cmd(f"PGPASSWORD={self.password} pg_dumpall -h {self.host} -p {self.port} -U {self.user}")) # sql
         else: raise Exception(f"All databases dump of mode {self.mode} is not supported yet") # sql
     def __ror__(self, it): # restoring a backup                                  # sql
         if self.mode == "my":                                                    # sql
             def restore(fn):                                                     # sql
+                k1lib.depCli("mysql")                                            # sql
                 with self._cnfCtx() as cnfFn: None | cli.cmd(f"mysql --defaults-file={cnfFn} < {fn}") | cli.ignore() # sql
             if isinstance(it, str):     restore(it)                              # sql
             else: fn = it | cli.file(); restore(fn); os.remove(fn)               # sql
+        elif self.mode == "pg":                                                  # sql
+            if isinstance(it, str): fn = it; isStr = True                        # sql
+            elif not isinstance(it, alldump): raise Exception("The sql commands piped in is from a specific database, while you haven't chosen a particular database from this sql connection yet. Do something like `s = sql(...); db = s['some_db_name']; ['some sql'] | db`, instead of `['some sql'] | s` like you're doing now") # sql
+            else: fn = it | cli.file(); isStr = False                            # sql
+            try: None | cli.cmd(f"PGPASSWORD={self.password} psql -h {self.host} -p {self.port} -U {self.user} -d postgres < {fn}") | cli.ignore() # sql
+            finally:                                                             # sql
+                if not isStr: os.remove(fn)                                      # sql
         else: raise Exception(f"Restoring database from .sql file of mode {self.mode} is not supported yet") # sql
     def __len__(self): return len(self._ls())                                    # sql
-    def __getitem__(self, idx):                                                  # sql
+    @lru_cache                                                                   # sql
+    def _getitem(self, idx):                                                     # sql
         if isinstance(idx, str):                                                 # sql
             lsres = [x for x in self._ls() if x.name == idx]                     # sql
             if len(lsres) == 1: return lsres[0]                                  # sql
             else: raise Exception(f"Database '{idx}' does not exist, can't retrieve it") # sql
         return self._ls()[idx]                                                   # sql
+    def __getitem__(self, idx): return self._getitem(idx)                        # sql
     def __iter__(self): return iter(self._ls())                                  # sql
     def __delitem__(self, idx):                                                  # sql
         if isinstance(idx, str):                                                 # sql
             if self.mode == "pg": idx = idx.lower()                              # sql
             lsres = [x for x in self._ls() if x.name == idx]                     # sql
             if len(lsres) == 1:                                                  # sql
-                if self.mode == "my" or self.mode == "pg": return self.query(f"drop database {idx}") # sql
+                if self.mode == "my": return self.query(f"drop database {idx}")  # sql
+                elif self.mode == "pg": self._changeDb("postgres"); return self.query(f"drop database {idx} with (force)") # sql
                 else: raise Exception("Currently only support dropping databases in mysql and postgresql") # sql
             else: raise Exception(f"Database '{idx}' does not exist, can't delete it") # sql
         else: raise Exception("Only supports deleting with table names. Use this like `del db['some_table']`") # sql
+class dbdump(list): pass                                                         # dbdump
 class sqldb:                                                                     # sqldb
     def __init__(self, sql:sql, name:str):                                       # sqldb
         """A sql database representation. Not expected to be instatiated by you. See also: :class:`sql`""" # sqldb
@@ -191,8 +222,11 @@ Example::
     db = ...
     db.query("insert into users (name, age) values (%s, %s)", "Reimu", 25)
 """                                                                              # sqldb
-        self.sql._changeDb(self.name); return self.sql.query(query, *args)       # sqldb
-    def queryDesc(self, query, *args): self.sql._changeDb(self.name); return self.sql.queryDesc(query, *args) # sqldb
+        # self.sql._changeDb(self.name)                                          # sqldb
+        return self.sql.query(query, *args)                                      # sqldb
+    def queryDesc(self, query, *args):                                           # sqldb
+        # self.sql._changeDb(self.name);                                         # sqldb
+        return self.sql.queryDesc(query, *args)                                  # sqldb
     def queryMany(self, query, *args):                                           # sqldb
         """Executes multiple queries at the same time in this database.
 Example::
@@ -200,7 +234,8 @@ Example::
     db = ...
     db.queryMany("insert into users (name, age) values (%s, %s)", [("Reimu", 25), ("Marisa", 26)])
 """                                                                              # sqldb
-        self.sql._changeDb(self.name); return self.sql.queryMany(query, *args)   # sqldb
+        # self.sql._changeDb(self.name)                                          # sqldb
+        return self.sql.queryMany(query, *args)                                  # sqldb
     def _ls(self):                                                               # sqldb
         if self.sql.mode == "my": return [sqltable(self.sql, self, e[0]) for e in self.query(f"show tables")] # sqldb
         if self.sql.mode == "pg": return [sqltable(self.sql, self, e[0]) for e in self.query(f"select table_name from information_schema.tables where table_schema = 'public'")] # sqldb
@@ -208,12 +243,25 @@ Example::
     def __repr__(self): return f"<sqldb host={self.sql._host} db={self.name}>"   # sqldb
     def _toBytes(self):                                                          # sqldb
         if self.sql.mode == "my":                                                # sqldb
-            with self.sql._cnfCtx() as fn: yield from None | cli.cmd(f"mysqldump --defaults-file={fn} --single-transaction --hex-blob --databases {self.name}") # sqldb
-        elif self.sql.mode == "pg": yield from None | cli.cmd(f"PGPASSWORD={self.sql.password} pg_dump -h {self.sql.host} -p {self.sql.port} -U {self.sql.user} -d {self.name}") # sqldb
+            with self.sql._cnfCtx() as fn: return dbdump(None | cli.cmd(f"mysqldump --defaults-file={fn} --single-transaction --hex-blob --databases {self.name}")) # sqldb
+        elif self.sql.mode == "pg": return dbdump(None | cli.cmd(f"PGPASSWORD={self.sql.password} pg_dump -h {self.sql.host} -p {self.sql.port} -U {self.sql.user} -d {self.name}")) # sqldb
         else: raise Exception(f"Database dump of mode {self.sql.mode} is not supported yet") # sqldb
-    def __ror__(self, it): q = qD[self.sql.mode]; return self.sql.__ror__([f"USE {q}{self.name}{q};", *it]) # sqldb
+    def __ror__(self, it):                                                       # sqldb
+        mode = self.sql.mode; q = qD[mode]                                       # sqldb
+        if mode == "my":                                                         # sqldb
+            if isinstance(it, str):                                              # sqldb
+                with open(it, "r") as f: it = f.readlines() # loads file to ram  # sqldb
+            return self.sql.__ror__([f"USE {q}{self.name}{q};", *it])            # sqldb
+        elif mode == "pg":                                                       # sqldb
+            if isinstance(it, str): fn = it; isStr = True                        # sqldb
+            elif isinstance(it, alldump): self.sql.__ror__(it); return           # sqldb
+            else: fn = it | cli.file(); isStr = False                            # sqldb
+            try: None | cli.cmd(f"PGPASSWORD={self.sql.password} psql -h {self.sql.host} -p {self.sql.port} -U {self.sql.user} -d {self.name} < {fn}") | cli.ignore() # sqldb
+            finally:                                                             # sqldb
+                if not isStr: os.remove(fn)                                      # sqldb
     def __len__(self): return len(self._ls())                                    # sqldb
-    def __getitem__(self, idx):                                                  # sqldb
+    @k1.cache(100, 10)                                                           # sqldb
+    def _getitem(self, idx):                                                     # sqldb
         if isinstance(idx, str):                                                 # sqldb
             mode = self.sql.mode                                                 # sqldb
             if mode == "my" or mode == "lite": lsres = [x for x in self._ls() if x.name == idx] # sqldb
@@ -221,6 +269,7 @@ Example::
             if len(lsres) == 1: return lsres[0]                                  # sqldb
             else: raise Exception(f"Table '{idx}' does not exist, can't retrieve it") # sqldb
         return self._ls()[idx]                                                   # sqldb
+    def __getitem__(self, idx): return self._getitem(idx)                        # sqldb
     def __iter__(self): return iter(self._ls())                                  # sqldb
     def __delitem__(self, idx):                                                  # sqldb
         if isinstance(idx, str):                                                 # sqldb
@@ -229,10 +278,14 @@ Example::
             if len(lsres) == 1: return self.query(f"drop table {idx}")           # sqldb
             else: raise Exception(f"Table '{idx}' does not exist, can't delete it") # sqldb
         else: raise Exception("Only supports deleting with table names. Use this like `del db['some_table']`") # sqldb
+class tbldump(list): pass                                                        # tbldump
 class sqltable:                                                                  # sqltable
     def __init__(self, sql, sqldb, name:str):                                    # sqltable
         """A sql table representation. Not expected to be instantiated by you. See also: :class:`sql`""" # sqltable
-        self.sql = sql; self.sqldb = sqldb; self.name = name; self._cols = None  # sqltable
+        self.sql = sql; self.sqldb = sqldb; self.name = name; self._cols = None; self.__col2Type = None # sqltable
+    def _col2Type(self):                                                         # sqltable
+        if self.__col2Type == None: self.__col2Type = {row[0]: row[1].lower() for row in self._describe()[1:]} # sqltable
+        return self.__col2Type                                                   # sqltable
     def _cat(self, ser):                                                         # sqltable
         cols = self.cols; _2 = [] # clis that can't be optimized, stashed away to be merged with ser later on # sqltable
         q = qD[self.sql.mode]; clis = deque(ser.clis); o1 = None; o2 = None; o3 = [] # cut(), head() and filt() opts # sqltable
@@ -263,7 +316,7 @@ Example::
     @lru_cache                                                                   # sqltable
     def _describe(self):                                                         # sqltable
         if self.sql.mode == "my": return self.sqldb.query(f"describe `{self.name}`") | cli.insert(["Field", "Type", "Null", "Key", "Default", "Extra"]) | cli.deref() # sqltable
-        if self.sql.mode == "pg": return self.sqldb.query(f"select column_name, data_type, is_nullable, column_default, ordinal_position from information_schema.columns where table_name='{self.name}'") | cli.insert(["column_name", "data_type", "is_nullable", "column_default", "ordinal_position"]) | cli.deref() # sqltable
+        if self.sql.mode == "pg": return self.sqldb.query(f"select column_name, data_type, is_nullable, column_default, ordinal_position from information_schema.columns where table_name='{self.name}' order by ordinal_position") | cli.insert(["column_name", "data_type", "is_nullable", "column_default", "ordinal_position"]) | cli.deref() # sqltable
         if self.sql.mode == "lite": return self.sqldb.query(f"pragma table_info([{self.name}])") | cli.insert(["cid", "name", "type", "notnull", "dflt_value", "pk"]) | cli.deref() # sqltable
     def insert(self, **kwargs):                                                  # sqltable
         """Inserts a row.
@@ -273,12 +326,17 @@ Example::
     table.insert(firstname="Yuyuko", lastname="Saigyouji")
 """                                                                              # sqltable
         q = qD[self.sql.mode]; keys = ", ".join([f"{q}{x}{q}" for x in kwargs.keys()]); values = ", ".join([self.sql.star]*len(kwargs)) # sqltable
-        mode = self.sql.mode                                                     # sqltable
+        mode = self.sql.mode; san = settings.cred.sql.sanitize; vs = []; _typeD = self._col2Type() # sqltable
+        for k, v in kwargs.items():                                              # sqltable
+            if isinstance(v, dict) or _typeD.get(k, "") == "json": vs.append(json.dumps(v)) # sqltable
+            elif isinstance(v, (set, tuple)) or _typeD.get(k, "") == "array": vs.append(list(v)) # sqltable
+            elif san and isinstance(v, str): vs.append(markupsafe.escape(v))     # sqltable
+            else: vs.append(v)                                                   # sqltable
         if mode == "my" or mode == "lite":                                       # sqltable
-            self.query(f"insert into {self.name} ({keys}) values ({values})", *kwargs.values()) # sqltable
+            self.query(f"insert into {self.name} ({keys}) values ({values})", *vs) # sqltable
             if mode == "my": return self[self.query("select last_insert_id()")[0][0]] # sqltable
             if mode == "lite": return self[self.sql._lastCur.lastrowid]          # sqltable
-        elif mode == "pg": return self[self.query(f"insert into {self.name} ({keys}) values ({values}) returning id", *kwargs.values())[0][0]] # sqltable
+        elif mode == "pg": return self[self.query(f"insert into {self.name} ({keys}) values ({values}) returning id", *vs)[0][0]] # sqltable
     def insertBulk(self, **kwargs):                                              # sqltable
         """Inserts a row.
 Example::
@@ -287,10 +345,16 @@ Example::
     table.insertBulk(firstname=["Yuyuko", "Marisa"], lastname=["Saigyouji", "Kirisame"])
 """                                                                              # sqltable
         q = qD[self.sql.mode]; keys = ", ".join([f"{q}{x}{q}" for x in kwargs.keys()]); values = ", ".join([self.sql.star]*len(kwargs)) # sqltable
-        self.queryMany(f"insert into {self.name} ({keys}) values ({values})", list(kwargs.values() | cli.T())) # sqltable
+        mode = self.sql.mode; san = settings.cred.sql.sanitize; vs = []; _typeD = self._col2Type() # sqltable
+        for k, v in kwargs.items():                                              # sqltable
+            if isinstance(v[0], dict) or _typeD.get(k, "") == "json": vs.append([json.dumps(x) for x in v]) # sqltable
+            elif isinstance(v[0], (set, tuple)) or _typeD.get(k, "") == "array": vs.append([list(x) for x in v]) # sqltable
+            elif san and isinstance(v[0], str): vs.append([markupsafe.escape(x) for x in v]) # sqltable
+            else: vs.append(v)                                                   # sqltable
+        self.queryMany(f"insert into {self.name} ({keys}) values ({values})", list(vs | cli.T())) # sqltable
         if self.sql.mode == "my": return self[self.query("select last_insert_id()")[0][0]] # sqltable
         if self.sql.mode == "lite": return self[self.sql._lastCur.lastrowid]     # sqltable
-    def _update(self, idx, **kwargs):                                            # sqltable
+    def _update(self, _idx, **kwargs):                                           # sqltable
         """Updates a row.
 Example::
 
@@ -298,7 +362,13 @@ Example::
     table.update(3, firstname="Youmu", lastname="Konpaku")
 """                                                                              # sqltable
         q = qD[self.sql.mode]; p1 = ", ".join([f"{q}{k}{q} = {self.sql.star}" for k in kwargs.keys()]) # sqltable
-        self.query(f"update {self.name} set {p1} where {self.idCol} = {idx}", *kwargs.values()) # sqltable
+        san = settings.cred.sql.sanitize; values = []; _typeD = self._col2Type() # sqltable
+        for k, v in kwargs.items():                                              # sqltable
+            if isinstance(v, dict) or _typeD.get(k, "") == "json": values.append(json.dumps(v)) # sqltable
+            elif isinstance(v, (set, tuple)) or _typeD.get(k, "") == "array": values.append(list(v)) # sqltable
+            elif san and isinstance(v, str): values.append(markupsafe.escape(v)) # sqltable
+            else: values.append(v)                                               # sqltable
+        self.query(f"update {self.name} set {p1} where {self.idCol} = {_idx}", *values) # sqltable
     def info(self, out=False):                                                   # sqltable
         """Preview table.
 Example::
@@ -330,6 +400,7 @@ Example::
             with k1.captureStdout() as out: gen()                                # sqltable
             return out()                                                         # sqltable
         else: gen()                                                              # sqltable
+    def _ls(self): return self.info()                                            # sqltable
     def query(self, query, *args):                                               # sqltable
         """Executes a query in this table's database. Returns the resulting table (if select query).
 Example::
@@ -349,18 +420,25 @@ Example::
         return self.sqldb.queryMany(query, *args)                                # sqltable
     def select(self, query, *args):                                              # sqltable
         """Pretty much identical to :meth:`query`, but this postprocess the results
-a little bit, and package them into :class:`sqlrow` objects. Expected to start with 'select *'""" # sqltable
-        if not query.strip().lower().startswith("select *"): raise Exception(".select() requires the query to start with 'select *'!") # sqltable
+a little bit, and package them into :class:`sqlrow` objects. Example::
+
+    table = ...
+    table.select("where name = %s", "Reimu")
+"""                                                                              # sqltable
+        lq = query.strip().lower()                                               # sqltable
+        if lq.startswith("select") and not lq.startswith("select *"): raise Exception(".select() requires the query to start with 'select *', or remove 'select * from table' statement entirely!") # sqltable
+        if not lq.startswith("select"): query = f"select * from {self.name} {query}" # sqltable
         query = query.replace("select *", f"select {self.scols}").replace("SELECT *", f"select {self.scols}") # sqltable
         res = self.query(query, *args); sql = self.sql; return [sqlrow(sql, self, e) for e in res] # sqltable
     def __repr__(self): return f"<sqltable host={self.sql._host} db={self.sqldb.name} table={self.name}>" # sqltable
     def _toBytes(self):                                                          # sqltable
         if self.sql.mode == "my":                                                # sqltable
-            with self.sql._cnfCtx() as fn: yield from None | cli.cmd(f"mysqldump --defaults-file={fn} --single-transaction --hex-blob {self.sqldb.name} {self.name}") # sqltable
-        elif self.sql.mode == "pg": yield from None | cli.cmd(f"PGPASSWORD={self.sql.password} pg_dump -h {self.sql.host} -p {self.sql.port} -U {self.sql.user} -d {self.sqldb.name} -t {self.name}") # sqltable
+            with self.sql._cnfCtx() as fn: return tbldump(None | cli.cmd(f"mysqldump --defaults-file={fn} --single-transaction --hex-blob {self.sqldb.name} {self.name}")) # sqltable
+        elif self.sql.mode == "pg": return tbldump(None | cli.cmd(f"PGPASSWORD={self.sql.password} pg_dump -h {self.sql.host} -p {self.sql.port} -U {self.sql.user} -d {self.sqldb.name} -t {self.name}")) # sqltable
         else: raise Exception(f"Table dump of mode {self.sql.mode} is not supported yet") # sqltable
     def __ror__(self, it): return self.sqldb.__ror__(it)                         # sqltable
     def __len__(self): return self.query(f"select count(*) from {self.name}")[0][0] # sqltable
+    def __iter__(self): return self.select("select * from valves")               # sqltable
     @property                                                                    # sqltable
     def scols(self): q = qD[self.sql.mode]; return ", ".join([f"{q}{c}{q}" for c in self.cols]) # string columns # sqltable
     def lookup(self, **kwargs):                                                  # sqltable
@@ -381,6 +459,8 @@ Example::
         else: return self.cols[0]                                                # sqltable
     @property                                                                    # sqltable
     def idColPos(self): idCol = self.idCol; return [i for i,x in enumerate(self.cols) if x == idCol][0] if self.sql.mode == "pg" else 0 # sqltable
+    _cache = k1.cache(settings.cred.sql.cache.size, settings.cred.sql.cache.timeout); rowCaches.add(_cache) # sqltable
+    @_cache                                                                      # sqltable
     def __getitem__(self, idx):                                                  # sqltable
         mode = self.sql.mode; idCol = self.idCol; idColPos = self.idColPos       # sqltable
         q = qD[mode]; scols = ", ".join([f"{q}{c}{q}" for c in self.cols])       # sqltable
@@ -436,6 +516,7 @@ class sqlrow:                                                                   
                 self._sqltable._update(self._row[self._sqltable.idColPos], **{attr: value}); self.__dict__[attr] = value # sqlrow
                 idx = {x:y for x,y in zip(self._sqltable.cols, range(len(self._row)))}[attr] # sqlrow
                 row = list(self._row); row[idx] = value; self._row = row; self._data[attr] = value # sqlrow
+    def json(self): return self._data                                            # sqlrow
     def __len__(self): return len(self._row)                                     # sqlrow
     def __repr__(self):                                                          # sqlrow
         ans = []                                                                 # sqlrow
@@ -444,6 +525,7 @@ class sqlrow:                                                                   
             elif isinstance(elem, bytes): ans.append(f"{k}=({len(elem)} len) {elem[:100]}..." if len(elem) > 100 else f"{k}=({len(elem)} len) {elem}") # sqlrow
             else: ans.append(f"{k}={elem}")                                      # sqlrow
         return "(" + f", ".join(ans) + ")"                                       # sqlrow
+settings.cli.atomic.baseAnd = (*settings.cli.atomic.baseAnd, sql, sqldb, sqltable, sqlrow) # sqlrow
 boto3 = k1.dep("boto3") # if below so that the tests would run since I have loaded the creds from my startup.py # sqlrow
 if "minio" not in settings.cred.__dict__: settings.cred.add("minio", k1lib.Settings().add("host", "https://localhost:9000", env="K1_MINIO_HOST").add("access_key", "", sensitive=True, env="K1_MINIO_ACCESS_KEY").add("secret_key", "", sensitive=True, env="K1_MINIO_SECRET_KEY"), "anything related to minio buckets, used by k1lib.cli.lsext.minio") # sqlrow
 def minio(host=None, access_key=None, secret_key=None) -> "s3":                  # minio
@@ -478,6 +560,7 @@ Example::
     obj = bucket | ls() | item()                # grabs the first object within this bucket, returns object of type s3obj
     obj = bucket["some_key"]                    # or, grab a specific object
     obj.key, obj.size, obj.lastModified         # some fields directly accessible
+    del bucket["some_key"]                      # deletes the object from the bucket
 
     obj = "abc\ndef" | bucket.upload("somekey") # uploads a file by piping the contents in, returns s3obj
     obj = b"abc\ndef"| bucket.upload()          # same as above, but with an auto-generated key
@@ -544,6 +627,7 @@ you will receive a :class:`s3obj` object.
         res = self.client.head_object(Bucket=self.name, Key=key)                 # s3bucket
         data = {"Key": key, "LastModified": res["LastModified"], "Size": int(res["ResponseMetadata"]["HTTPHeaders"]["content-length"]), "StorageClass": None} # s3bucket
         return s3obj(self.client, self.name, data)                               # s3bucket
+    def __delitem__(self, key:str): self.client.delete_object(Bucket=self.name, Key=key) # s3bucket
 class s3obj:                                                                     # s3obj
     def __init__(self, client, bucket:str, data):                                # s3obj
         """Represents an S3 object. Not intended to be instantiated directly.

@@ -1148,7 +1148,7 @@ If you don't specify anything, then all indexes will be sliced::
 
 As for why the strange name, think of this operation as "AĀ". In statistics,
 say you have a set "A", then "not A" is commonly written as A with an overline
-"Ā". So "AA\_" represents "AĀ", and that it first returns the selection A.
+"Ā". So "AA\\_" represents "AĀ", and that it first returns the selection A.
 
 :param wraps: if True, then the first example will return [[5, [1, 6, 3, 7]]]
     instead, so that A has the same signature as Ā"""                            # AA_

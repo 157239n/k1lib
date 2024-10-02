@@ -9,6 +9,8 @@ try: import matplotlib.animation
 except: pass
 try: import matplotlib.pyplot as plt
 except: pass
+try: import PIL; import PIL.Image; hasPIL = True
+except: hasPIL = False
 __all__ = ["dummy"]
 def dummy():                                                                     # dummy
     """Does nothing. Only here so that you can read source code of this file and

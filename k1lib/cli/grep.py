@@ -10,7 +10,7 @@ def jsfGuard(cond, s=""):                                                       
     if cond: Exception(f"grep._jsF() does not support custom {s} parameter")     # jsfGuard
 inf = float("inf")                                                               # jsfGuard
 class grep(BaseCli):                                                             # grep
-    def __init__(self, pattern:Union[str, Callable[[Any], bool]], before:int=0, after:int=0, N:int=float("inf"), sep:bool=False, col:int=None, extract:str=None): # grep
+    def __init__(self, pattern:Union[str, Callable[[Any], bool]], before:int=0, after:int=0, N:int=float("inf"), sep:bool=False, col:int=None, extract:str=None, lower:bool=False): # grep
         """Find lines that has the specified pattern.
 Example::
 
@@ -87,13 +87,14 @@ Regex quick cheatsheet:
 :param after: lines after the hit. Outputs independent lines
 :param N: max sections to output
 :param sep: whether to separate out the sections as lists
-:param col: searches for pattern in a specific column"""                         # grep
+:param col: searches for pattern in a specific column
+:param lower: converts input text to lower case before trying to match"""        # grep
         super().__init__(); self.pattern = pattern                               # grep
         if isinstance(pattern, str):                                             # grep
             self._f = re.compile(pattern).search; self.mode = 0 # make func quickly accessible # grep
         else: self._f = cli.op.solidify(pattern); self.mode = 1 # mode for either regex or normal funcs # grep
         self.before = before; self.after = after; self.col = col; self.N = N; self.sep = sep; self.inverted = False # grep
-        self.tillPattern = None; self.tillAfter = None; self._tillF = lambda x: False; self.extract = extract # grep
+        self.tillPattern = None; self.tillAfter = None; self._tillF = lambda x: False; self.extract = extract; self.lower = lower # grep
         if extract:                                                              # grep
             extGuard(before, "`before` has to be zero")                          # grep
             extGuard(after, "`after` has to be zero")                            # grep
@@ -122,10 +123,11 @@ all. Instead, do something like this::
         else: self._tillF = cli.op.solidify(pattern)                             # grep
         self.tillAfter = self.after; self.after = inf; return self               # grep
     def __ror__(self, it:Iterator[str]) -> Iterator[str]:                        # grep
-        self.sectionIdx = 0; col = self.col; _f = self._f; _tillF = self._tillF  # grep
+        self.sectionIdx = 0; col = self.col; _f = self._f; _tillF = self._tillF; lower = self.lower # grep
         if self.sep:                                                             # grep
             elems = []; idx = 0                                                  # grep
             s = self._clone(); s.sep = False                                     # grep
+            if lower: it = (x.lower() for x in it)                               # grep
             for line in (it | s):                                                # grep
                 if s.sectionIdx > idx: # outputs whatever remaining              # grep
                     if len(elems) > 0: yield list(elems)                         # grep
@@ -135,12 +137,13 @@ all. Instead, do something like this::
         if self.extract:                                                         # grep
             group = self.extract                                                 # grep
             if col is None:                                                      # grep
+                if lower: it = (x.lower() for x in it)                           # grep
                 for line in it:                                                  # grep
                     res = _f(line)                                               # grep
                     if res: yield res.group(group)                               # grep
             else:                                                                # grep
                 for line in it:                                                  # grep
-                    line = list(line); res = _f(line[col])                       # grep
+                    line = list(line); res = _f(line[col].lower() if lower else line[col]) # grep
                     if res: line[col] = res.group(group); yield line             # grep
                                                                                  # grep
             return                                                               # grep
@@ -150,6 +153,7 @@ all. Instead, do something like this::
             if col != None: line = list(line); elem = line[col]                  # grep
             else: elem = line                                                    # grep
             if self.mode == 0 and not isinstance(elem, (str, bytes)): elem = f"{elem}" # grep
+            if lower: elem = elem.lower()                                        # grep
             if _f(elem): # new section                                           # grep
                 self.sectionIdx += 1; counter = self.after+1; cRO.revert()       # grep
                 if self.sectionIdx > self.N: return                              # grep
@@ -182,11 +186,11 @@ works. Example::
         if not isinstance(self.pattern, str): raise Exception(f"grep._jsF() does not support pattern that's not a string") # grep
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto(); argIdx = init._jsDAuto(); p = self.pattern # grep
         for x,y in self.pattern | grep("\ue157", sep=True).till("\ue239") | cli.apply(cli.join("")) | cli.filt("x") | cli.apply(lambda x: [x, x.replace("\ue157", "${").replace("\ue239", "}")]): p = p.replace(x, y) # grep
-        return f"{fIdx} = ({dataIdx}) => {dataIdx}.grep(`{p}`, {{col: {cli.kjs.v(self.col)}, inv: {json.dumps(inverted)}}})", fIdx # grep
+        return f"{fIdx} = ({dataIdx}) => {dataIdx}.grep(`{p}`, {{col: {cli.kjs.v(self.col)}, inv: {json.dumps(inverted)}, lower: {json.dumps(self.lower)}}})", fIdx # grep
 class grepTemplate(BaseCli):                                                     # grepTemplate
     def __init__(self, pattern:str, template:str):                               # grepTemplate
         """Searches over all lines, pick out the match, and expands
-it to the templateand yields"""                                                  # grepTemplate
+it to the template and yields"""                                                 # grepTemplate
         super().__init__()                                                       # grepTemplate
         self.pattern = re.compile(pattern); self.template = template             # grepTemplate
     def __ror__(self, it:Iterator[str]):                                         # grepTemplate

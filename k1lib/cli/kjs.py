@@ -78,12 +78,12 @@ return the same object passed in. Useful for streamlining building out other cli
 class Arg:                                                                       # Arg
     def __init__(self, arg):                                                     # Arg
         if isinstance(arg, str):                                                 # Arg
-            name = arg; type_ = str; default = ""                                # Arg
+            name = arg; type_ = str; default = ""; label = arg                   # Arg
         elif isinstance(arg, (tuple, list)):                                     # Arg
-            if len(arg) == 3:                                                    # Arg
-                name, type_, default = arg                                       # Arg
+            if len(arg) == 4:   name, type_, default, label = arg                # Arg
+            elif len(arg) == 3: name, type_, default = arg; label = name         # Arg
             elif len(arg) == 2:                                                  # Arg
-                name, type_ = arg                                                # Arg
+                name, type_ = arg; label = name                                  # Arg
                 if type_ == str: default = ""                                    # Arg
                 if type_ == int: default = 1                                     # Arg
                 if type_ == float: default = 1.0                                 # Arg
@@ -91,13 +91,13 @@ class Arg:                                                                      
                 if isinstance(type_, (range, k1lib.serve.slider)): default = round((type_.start + type_.stop)/2) # surprisingly no bug here where .step != 1, because <input type="range"> covered us # Arg
                 if isinstance(type_, list): default = type_[0]                   # Arg
                 if isinstance(type_, k1lib.serve.date): default = time.time() | cli.toIso() # Arg
-            else: raise Exception(f"Argument has to specify 3 values: (name:str, type, default value), or 2 values: (name:str, type)") # Arg
+            else: raise Exception(f"Argument has to specify 4 values: (name:str, type, default value, label) or 3 values: (name:str, type, default value), or 2 values: (name:str, type)") # Arg
         else: raise Exception(f"Can't parse argument `{arg}`. It must be either the argument name alone, or a tuple of (name:str, type, default value)") # Arg
-        self.idx = cli.init._jsDAuto(); self.name = name; self.type_ = type_; self.default = default; self.arg = arg # Arg
+        self.idx = cli.init._jsDAuto(); self.name = name; self.type_ = type_; self.default = default; self.label = label; self.arg = arg # Arg
     def html(self):                                                              # Arg
-        idx = self.idx; name = self.name; t = self.type_; default = self.default # Arg
-        if t == str: return f"<input type='text' value='{default}' placeholder='{name}' id='{idx}' style='padding: 4px 4px;'>" # Arg
-        if t == int or t == float: return f"<input type='number' value='{default}' placeholder='{name}' id='{idx}' style='padding: 4px 4px;'>" # Arg
+        idx = self.idx; name = self.name; t = self.type_; default = self.default; label = self.label # Arg
+        if t == str: return f"<input type='text' value='{default}' placeholder='{label}' id='{idx}' style='padding: 4px 4px;'>" # Arg
+        if t == int or t == float: return f"<input type='number' value='{default}' placeholder='{label}' id='{idx}' style='padding: 4px 4px;'>" # Arg
         if t == bool: return f"<input type='checkbox' {'checked' if default else ''} id='{idx}' style='padding: 4px 4px;'>" # Arg
         if isinstance(t, (range, k1lib.serve.slider)): return f"<div style='display: flex; flex-direction: row; align-items: center'><input type='range' id='{idx}' min='{t.start}' max='{t.stop}' value='{default}' step='{t.step}' /><span id='{idx}_preview' style='margin-left: 8px'></span></div>" # Arg
         if isinstance(t, list):                                                  # Arg
@@ -136,14 +136,12 @@ class Arg:                                                                      
         raise Exception(f"Don't know type {t} on .onchange()")                   # Arg
     def copy(self): return Arg(self.arg)                                         # Arg
 class _JsFuncInterface:                                                          # _JsFuncInterface
-    def __init__(self, jsFunc, mode, args, debounce, delay):                     # _JsFuncInterface
-        self.jsFunc = jsFunc; self.mode = mode; self.args = [a.copy() for a in args]; self.debounce = debounce; self.delay = delay # _JsFuncInterface
+    def __init__(self, jsFunc, mode, args, debounce, delay, dataIdx, hideIdx, refreshPeriod): # _JsFuncInterface
+        self.jsFunc = jsFunc; self.mode = mode; self.args = [a.copy() for a in args]; self.debounce = debounce; self.delay = delay; self.dataIdx = dataIdx; self.hideIdx = hideIdx; self.refreshPeriod = refreshPeriod # _JsFuncInterface
         if delay and delay < debounce: raise Exception(f"delay value ({delay}) is lower than debounce value ({debounce}), which doesn't make sense. Please raise delay, or lower the debounce value") # _JsFuncInterface
     def _repr_html_(self):                                                       # _JsFuncInterface
-        pre = init._jsFAuto(); mode = self.mode; args = self.args; debounce = self.debounce*1000 # _JsFuncInterface
-        postprocess = ""                                                         # _JsFuncInterface
-        if mode == "html":                                                       # _JsFuncInterface
-            res = "val"; postprocess = f"""
+        pre = init._jsFAuto(); mode = self.mode; args = self.args; hideIdx = self.hideIdx; debounce = self.debounce*1000; postprocess = "" # _JsFuncInterface
+        if mode == "html": res = "val"; postprocess = f"""
 containerDiv = document.createElement('div'); containerDiv.innerHTML = val;
 for (const scriptElem of containerDiv.querySelectorAll('script')) eval(scriptElem.textContent);""" # _JsFuncInterface
         elif mode == "pre": res = "`<pre>${val}</pre>`"                          # _JsFuncInterface
@@ -151,57 +149,45 @@ for (const scriptElem of containerDiv.querySelectorAll('script')) eval(scriptEle
         elif mode == "jsone": res = "`<pre>${JSON.stringify(val, null, 2)}</pre>`" # _JsFuncInterface
         elif mode == "table": res = """ '<table>' + val.map((v) => "<tr>" + v.map((e) => `<td>${e}</td>`).join("") + "</tr>").join("") + '</table>' """ # _JsFuncInterface
         else: raise Exception(f"Unknown interface output mode {mode}")           # _JsFuncInterface
-        inps = "".join([f"<div>{a.name}</div><div>{a.html()}</div>" for a in args]) # _JsFuncInterface
-        inps = f"""<div style='display: grid; grid-template-columns: 1fr 3fr; width: 300px; align-items: center'>{inps}</div>""" # _JsFuncInterface
-        onchanges = "".join([a.onchange(f"{pre}_reload") for a in args])         # _JsFuncInterface
-        values = ", ".join([a.value() for a in args])                            # _JsFuncInterface
-        preview = "\n".join([a.preview() for a in args])                         # _JsFuncInterface
-        delayCode = f"(async () => {{ while (true) {{ await new Promise(r => setTimeout(r, {self.delay*1000})); await {pre}_reload_core(); }} }})();" if self.delay else "" # _JsFuncInterface
-        return f"""\
+        if hideIdx == 0: inps = "".join([f"<div>{a.label}</div><div>{a.html()}</div>" for a in args]) # _JsFuncInterface
+        else:                                                                    # _JsFuncInterface
+            inps = ""                                                            # _JsFuncInterface
+            for i, a in enumerate(args):                                         # _JsFuncInterface
+                if i == hideIdx: inps += f"""<div id="{pre}_plus" class="kjs_hidden_plus" onclick="Array.from(document.querySelectorAll('.{pre}_inp_hidden')).map((x) => x.style.display = null); document.querySelector('#{pre}_plus').remove();">+</div>""" # _JsFuncInterface
+                if i < hideIdx: inps += f"<div>{a.label}</div><div>{a.html()}</div>" # _JsFuncInterface
+                else: inps += f"""<div class="{pre}_inp_hidden" style="display: none">{a.label}</div><div class="{pre}_inp_hidden" style="display: none">{a.html()}</div>""" # _JsFuncInterface
+        inps = f"""<div style='display: grid; grid-template-columns: 1fr 3fr; column-gap: 12px; row-gap: 4px; width: 400px; align-items: center'>{inps}</div>""" # _JsFuncInterface
+        onchanges = "".join([a.onchange(f"{pre}_reload") for a in args]); values = ", ".join([a.value() for a in args]); preview = "\n".join([a.preview() for a in args]) # _JsFuncInterface
+        delayCode = f"(async () => {{ while (true) {{ await new Promise(r => setTimeout(r, {self.delay*1000})); await {pre}_reload_core(); }} }})();" if self.delay else ""; return f"""\
 <!-- k1lib.JsFuncInterface -->
-{inps}
-<pre id="{pre}_error" style="color: red"></pre><div id="{pre}_loading" style="margin-top: 4px">&nbsp;</div><div id="{pre}_result"></div>
-<script src="https://k1js.com/dist/amd/latest.js"></script>
-<script>
+{inps}<pre id="{pre}_error" style="color: red"></pre><div id="{pre}_loading" class="k1_jsFunc_loading" style="margin-top: 4px">&nbsp;</div><div id="{pre}_result" class="k1_jsFunc_result"></div>
+<script src="https://k1js.com/dist/amd/latest.js"></script><script>
     k1_loadScript = (src) => {{ return new Promise((resolve, reject) => {{ var script = document.createElement('script'); script.src = src; script.onload = resolve; document.head.appendChild(script); }}); }}
     {pre}_loadF = () => {{
-        {self.jsFunc.fn}
-        window.{self.jsFunc.fIdx} = {self.jsFunc.fIdx}; {pre}_error = document.querySelector("#{pre}_error");
-        {pre}_resultDiv = document.querySelector("#{pre}_result");
-        {pre}_loadingDiv = document.querySelector("#{pre}_loading"); const runningCoreHandle = [null];
+        {self.jsFunc.fn}; window.{self.jsFunc.fIdx} = {self.jsFunc.fIdx}; {pre}_error = document.querySelector("#{pre}_error");
+        {pre}_resultDiv = document.querySelector("#{pre}_result"); {pre}_loadingDiv = document.querySelector("#{pre}_loading"); const runningCoreHandle = [null];
         const {pre}_reload_core = async (e) => {{
             if (runningCoreHandle[0]) {{ runningCoreHandle[0].cancel = true; }}
             const handle = {{"cancel": false}}; runningCoreHandle[0] = handle;
             try {{
-                {pre}_error.innerHTML = ""; {pre}_loadingDiv.innerHTML = "(loading...)";
-                const val = await {self.jsFunc.fIdx}({values});
+                {pre}_error.innerHTML = ""; {pre}_loadingDiv.innerHTML = "(loading...)"; const val = await {self.jsFunc.fIdx}({values});
                 if (!handle.cancel) {{ {pre}_loadingDiv.innerHTML = "&nbsp;"; {pre}_resultDiv.innerHTML = {res}; {postprocess} }}
-            }} catch (e) {{ if (!handle.cancel) {pre}_error.innerHTML = e.stack; console.log(e.stack); }}
-            runningCoreHandle[0] = null;
-        }};
-        let {pre}_reload_timeout = null;
+            }} catch (e) {{ if (!handle.cancel) {pre}_error.innerHTML = e.stack; console.log(e.stack); }} runningCoreHandle[0] = null;
+        }}; let {pre}_reload_timeout = null;
         const {pre}_reload = async (e) => {{
-            {preview}
-            if ({debounce} <= 0) return {pre}_reload_core();
+            {preview}; if ({debounce} <= 0) return {pre}_reload_core();
             else {{ clearTimeout({pre}_reload_timeout); {pre}_reload_timeout = setTimeout({pre}_reload_core, {debounce}); }}
-        }}
-        {onchanges}; {delayCode}; {pre}_reload(null);
-    }};
-    if (window.k1lib_jsF_envLoaded) {{
-        (async () => {{
-            while (window.k1lib_jsF_envLoaded !== 2) await new Promise(r => setTimeout(r, 100)); // waits for 100ms when the env is not ready yet
-            {pre}_loadF(); }})();
-    }} else {{
-        window.k1lib_jsF_envLoaded = 1; // some initial env setups
-        (async () => {{ // loading up acorn, a JS AST analyzer
-            await k1_loadScript("https://cdnjs.cloudflare.com/ajax/libs/acorn/8.11.3/acorn.js");
-            await k1_loadScript("https://cdnjs.cloudflare.com/ajax/libs/acorn-walk/8.3.2/walk.js")
-        }})();
+        }}; {onchanges}; {delayCode}; {pre}_reload(null); {self.dataIdx}.reload = {pre}_reload;
+        {self.dataIdx}.reload = () => {pre}_reload(null); if ({self.refreshPeriod}) setInterval(() => {{ {pre}_reload(null); }}, {self.refreshPeriod*1000});
+        {self.dataIdx}.reloadOnDiff = (asyncF, periodS, oldValue=null) => {{ setInterval(async () => {{ const res = await asyncF(); if (oldValue !== res) {{ oldValue = res; {pre}_reload(null); }} }}, periodS*1000); }}
+    }}; if (window.k1lib_jsF_envLoaded) {{ (async () => {{ while (window.k1lib_jsF_envLoaded !== 2) await new Promise(r => setTimeout(r, 100)); /* waits for 100ms when the env is not ready yet */ {pre}_loadF(); }})();
+    }} else {{ window.k1lib_jsF_envLoaded = 1; // some initial env setups
+        (async () => {{ await k1_loadScript("https://cdnjs.cloudflare.com/ajax/libs/acorn/8.11.3/acorn.js"); await k1_loadScript("https://cdnjs.cloudflare.com/ajax/libs/acorn-walk/8.3.2/walk.js")
+        }})(); // loading up acorn, a JS AST analyzer, just to know what variables to expose globally
         async function extractVariableNamesAtDepthOne(funcString) {{ // courtesy of chatgpt-4.5
             while (!window.acorn) await new Promise(r => setTimeout(r, 100)); // loops until acorn is sure to be loaded
             const ast = acorn.parse(funcString, {{ ecmaVersion: 'latest', sourceType: 'script' }}); const declaredVariables = new Set(); let depth = 0;
-            const customWalker = {{
-                ...acorn.walk.base,
+            const customWalker = {{ ...acorn.walk.base,
                 Function            (node, state, c) {{ if (depth === 1 && node.id)                         declaredVariables.add(node.id.name); depth++; acorn.walk.base.Function            (node, state, c); depth--; }},
                 VariableDeclarator  (node, state, c) {{ if (depth === 1)                                    declaredVariables.add(node.  id.name);        acorn.walk.base.VariableDeclarator  (node, state, c);          }},
                 AssignmentExpression(node, state, c) {{ if (depth === 1 && node.left.type === 'Identifier') declaredVariables.add(node.left.name);        acorn.walk.base.AssignmentExpression(node, state, c);          }}
@@ -209,29 +195,22 @@ for (const scriptElem of containerDiv.querySelectorAll('script')) eval(scriptEle
         }}; window.k1lib_jsF_captureLocalVariables = extractVariableNamesAtDepthOne;
         // trying multiple loading schemes, because in a live jupyter nb, it's using umd, while in an exported jupyter nb, it's using amd. The madness of JS lol
         (async () => {{ try {{ require(['k1js'], function(k1js) {{ (async () => {{ window.k1js = await k1js; window.k1lib_jsF_envLoaded = 2; {pre}_loadF(); }})(); }}); }} catch (e) {{}} }})();
-        (async () => {{ try {{
-            const res = await (await fetch("https://k1js.com/dist/umd/latest.js")).text();
-            eval(res); window.k1js = await k1js; window.k1lib_jsF_envLoaded = 2; {pre}_loadF();
-        }} catch (e) {{}} }})();
-    }}
-</script>"""                                                                     # _JsFuncInterface
+        (async () => {{ try {{ const res = await (await fetch("https://k1js.com/dist/umd/latest.js")).text(); eval(res); window.k1js = await k1js; window.k1lib_jsF_envLoaded = 2; {pre}_loadF(); }} catch (e) {{}} }})();
+    }}</script>"""                                                               # _JsFuncInterface
 class JsFunc:                                                                    # JsFunc
-    def __init__(self, fn:str, fIdx:str, args, _async):                          # JsFunc
+    def __init__(self, fn:str, fIdx:str, args, _async, dataIdx, hideIdx):        # JsFunc
         """Represents a generated function from :class:`toJsFunc` .
 More docs are available at that class.
 
 This is not supposed to be instantiated by the end user. Please
 use :class:`toJsFunc` instead. It's here for documentation purposes only"""      # JsFunc
-        self.fn = fn; self.fIdx = fIdx; self.args = args; self._async = _async   # JsFunc
-    def __repr__(self):                                                          # JsFunc
-        fn = self.fn.split('\n') | cli.head(300).all() | cli.join('\n')          # JsFunc
-        return f"""<JsFunc {self.fIdx}>\n\nGenerated JS function:\n\n{fn}"""     # JsFunc
+        self.fn = fn; self.fIdx = fIdx; self.args = args; self._async = _async; self.dataIdx = dataIdx; self.hideIdx = hideIdx # JsFunc
+    def __repr__(self): fn = self.fn.split('\n') | cli.head(300).all() | cli.join('\n'); return f"""<JsFunc {self.fIdx}>\n\nGenerated JS function:\n\n{fn}""" # JsFunc
     def _repr_html_(self):                                                       # JsFunc
-        fn = self.fn.split('\n') | cli.join('\n')                                # JsFunc
-        header = html.escape(f"<JsFunc {self.fIdx}>") + "<br>Generated JS function:" # JsFunc
+        fn = self.fn.split('\n') | cli.join('\n'); header = html.escape(f"<JsFunc {self.fIdx}>") + "<br>Generated JS function:" # JsFunc
         try: return f"""{header}<br><br>{k1lib.fmt.js(fn)}"""                    # JsFunc
         except: return f"<pre style='overflow-x: auto'>{html.escape(repr(self))}</pre>" # JsFunc
-    def interface(self, mode="html", debounce:float=0.03, delay:float=None):     # JsFunc
+    def interface(self, mode="html", debounce:float=0.03, delay:float=None, refreshPeriod:float=0): # JsFunc
         """Creates an interface.
 
 Different output modes:
@@ -244,14 +223,15 @@ Different output modes:
 
 :param mode: see above
 :param debounce: if specified, will wait for that many seconds until the user hasn't modified the input UIs.
-    If function is not async (meaning it should executes quite fast), then this param will be ignored""" # JsFunc
-        return _JsFuncInterface(self, mode, self.args, debounce if self._async else 0, delay) # JsFunc
+    If function is not async (meaning it should executes quite fast), then this param will be ignored
+:param refreshPeriod: if specified, automatically reruns the function every `refreshPeriod` seconds""" # JsFunc
+        return _JsFuncInterface(self, mode, self.args, debounce if self._async else 0, delay, self.dataIdx, self.hideIdx, refreshPeriod) # JsFunc
 def moveOut(code:str): # move "k1_moveOutStart - k1_moveOutEnd" blocks to the top # moveOut
     pattern = r'//k1_moveOutStart(.*?)//k1_moveOutEnd'; matches = re.findall(pattern, code, re.DOTALL); heads = [] # moveOut
     def process_match(match): heads.append(match.group(1).strip()); return ''    # moveOut
     res = re.sub(pattern, process_match, code, flags=re.DOTALL); pre = '\n'.join(heads); return f"//k1_moveOutStart\n{pre}\n//k1_moveOutEnd\n{res}" # moveOut
 class toJsFunc(BaseCli):                                                         # toJsFunc
-    def __init__(self, *args, delay:float=None):                                 # toJsFunc
+    def __init__(self, *args, delay:float=None, objName=None, hideIdx:int=0):    # toJsFunc
         """Capture cli operations and transpiles all of them to JS, to quickly
 build functionalities in JS. Example::
 
@@ -290,18 +270,18 @@ UI:
     arg5 = ("character", ["reimu", "marisa", "cirno"])
     jsF = list(range(100)) | (toJsFunc(arg1, arg2, arg3, arg4, arg5) | head("n") & head("on*10") | aS("[*x, character, someNum**2, len(extraText)*2]"))
     jsF.interface("json")
-"""                                                                              # toJsFunc
-        super().__init__(capture=True)                                           # toJsFunc
-        self.args = [Arg(a) for a in args]                                       # toJsFunc
+
+:param delay: debounce period
+:param objName: js object name that's exposed so that you can manually change the client's state
+:param hideIdx: (purely for aesthetics, nothing functional) if 0, show all arg boxes. If 2, show only first 2 arg boxes, then hide the rest under a plus button that when clicked, will show the rest of the boxes""" # toJsFunc
+        super().__init__(capture=True); self.args = [Arg(a) for a in args]; self.objName = objName; self.hideIdx = hideIdx # toJsFunc
     def __ror__(self, it) -> JsFunc:                                             # toJsFunc
-        header, fn, _async = k1lib.kast.asyncGuard(self.capturedSerial._jsF(("root",))) # used to be (kast, self.args) # toJsFunc
-        header = "\n".join([f"    {e}" for e in header.split("\n")]); fIdx = init._jsFAuto(); dataIdx = init._jsDAuto() # toJsFunc
-        return JsFunc(moveOut(f"""
-{dataIdx} = {it | cli.deref.js()};
+        objName = self.objName; header, fn, _async = k1lib.kast.asyncGuard(self.capturedSerial._jsF(("root",))) # used to be (kast, self.args) # toJsFunc
+        header = "\n".join([f"    {e}" for e in header.split("\n")]); fIdx = init._jsFAuto(); dataIdx = init._jsDAuto(); objS = f"{objName} = " if objName else "" # toJsFunc
+        objS2 = f"window.{objName} = {objName};" if objName else ""; return JsFunc(moveOut(f"""
+{objS}{dataIdx} = {{ inputData: {it | cli.deref.js()}, reload: null }};{objS2}
 async function {fIdx}({', '.join([a.name for a in self.args])}) {{
-{header}
-    return {'await ' if _async else ''}{fn}({dataIdx});
-}}"""), fIdx, self.args, _async)                                                 # toJsFunc
+{header}; return {'await ' if _async else ''}{fn}({dataIdx}.inputData); }}"""), fIdx, self.args, _async, dataIdx, self.hideIdx) # toJsFunc
     def _jsF(self, meta):                                                        # toJsFunc
         """Hidden feature, cause this is getting way too complicated and this idea has not been fully fleshed out yet
 
@@ -311,21 +291,14 @@ async function {fIdx}({', '.join([a.name for a in self.args])}) {{
     Here's a dead simple example::
 
         jsF = 3 | (toJsFunc() | op()+2 | (toJsFunc("args", "are", "ignored", "here") | aS("x*2")))
-
 """                                                                              # toJsFunc
         fIdx = cli.init._jsFAuto(); dataIdx = cli.init._jsDAuto(); argIdx = cli.init._jsDAuto(); pre = cli.init._jsDAuto(); # toJsFunc
         h1,f1,a1 = k1lib.kast.asyncGuard(self.capturedSerial._jsF(meta))         # toJsFunc
         return f"""//k1_moveOutStart\nlet {dataIdx} = null;\n{h1}\n//k1_moveOutEnd
 {fIdx} = ({argIdx}) => {{ // returns html string that will run the function on load
-    {dataIdx} = {argIdx};
-    return unescape(`<div id='{pre}_div'></div>
-        %3Cscript%3E
-            setTimeout({'async ' if a1 else ''}() => {{
-                console.log("executed");
-                document.querySelector('#{pre}_div').innerHTML = {'await ' if a1 else ''}{f1}({dataIdx})
-            }}, 100);
-        %3C/script%3E`);
-}};""", fIdx                                                                     # toJsFunc
+    {dataIdx} = {argIdx}; return unescape(`<div id='{pre}_div'></div>%3Cscript%3E
+        setTimeout({'async ' if a1 else ''}() => {{ console.log("executed"); document.querySelector('#{pre}_div').innerHTML = {'await ' if a1 else ''}{f1}({dataIdx}); }}, 100);
+    %3C/script%3E`); }};""", fIdx                                                # toJsFunc
 class executeScriptTags(BaseCli):                                                # executeScriptTags
     def __init__(self):                                                          # executeScriptTags
         """In JS-transpiled code, will extract out all script tags and execute them a
@@ -338,9 +311,7 @@ the script tags will be extracted and executed. In normal Python mode, does effe
 and thus is similar to :class:`~k1lib.cli.utils.iden`."""                        # executeScriptTags
         pass                                                                     # executeScriptTags
     def __ror__(self, it): return it                                             # executeScriptTags
-    def _jsF(self, meta):                                                        # executeScriptTags
-        fIdx = cli.init._jsFAuto(); dataIdx = cli.init._jsDAuto()                # executeScriptTags
-        return f"""\
+    def _jsF(self, meta): fIdx = cli.init._jsFAuto(); dataIdx = cli.init._jsDAuto(); return f"""\
 {fIdx} = ({dataIdx}) => {{
     const dummyElem = document.createElement("div"); dummyElem.innerHTML = {dataIdx};
     (async () => {{ // execute all script tags a few moments after returning. This feels iffy and might be error-prone, but it's the simplest solution for now
@@ -348,8 +319,7 @@ and thus is similar to :class:`~k1lib.cli.utils.iden`."""                       
         await (new Promise(r => setTimeout(r, 30)));
         try {{ for (const script of dummyElem.getElementsByTagName("script")) {{
             const vars = await k1lib_jsF_captureLocalVariables(`function f1() {{ ${{script.innerHTML}} }}`)
-            let s = script.innerHTML; for (const v of vars) s += `window.${{v}} = ${{v}};`; eval(s);
+            let s = script.innerHTML + ";"; for (const v of vars) s += `window.${{v}} = ${{v}};`; eval(s);
         }} }} catch (e) {{ console.log(`Error encountered: ${{e}}. Stack trace: ${{e.stack}}`) }}
     }})(); return {dataIdx};
 }}""", fIdx                                                                      # executeScriptTags
-        pass                                                                     # executeScriptTags

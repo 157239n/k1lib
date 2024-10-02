@@ -4,13 +4,13 @@
 """
 from typing import Callable, Iterator, Tuple, Union, Dict, Any, List
 from k1lib import isNumeric; import k1lib, contextlib, warnings
-import random, math, sys, io, os, numpy as np, functools
+import random, math, sys, io, os, numpy as np, functools, time, traceback, threading
 plt = k1lib.dep.plt
 try: import torch; hasTorch = True
 except: hasTorch = False
 __all__ = ["Object", "Range", "Domain", "AutoIncrement", "Wrapper", "Every",
            "RunOnce", "MaxDepth", "MovingAvg", "Absorber",
-           "Settings", "settings", "_settings", "UValue", "ConstantPad"]
+           "Settings", "settings", "_settings", "UValue", "ConstantPad", "AutoUpdateValue"]
 class Object:                                                                    # Object
     """Convenience class that acts like :class:`~collections.defaultdict`. You
 can use it like a normal object::
@@ -373,7 +373,7 @@ int given."""                                                                   
     def copy(self): return Domain(*(r.copy() for r in self.ranges))              # Domain
     def intIter(self, step:int=1, start:int=0):                                  # Domain
         """Yields ints in all ranges of this domain. If first range's domain
-is :math:`(-\inf, a)`, then starts at the specified integer"""                   # Domain
+is :math:`(-\\inf, a)`, then starts at the specified integer"""                  # Domain
         if len(self.ranges) == 0: return                                         # Domain
         for r in self.ranges:                                                    # Domain
             x = int(start) if r.start == -inf else int(r.start)                  # Domain
@@ -1242,3 +1242,27 @@ that too::
     def __ror__(self, s): return self.__call__(s)                                # ConstantPad
     @staticmethod                                                                # ConstantPad
     def multi(n, *args, **kwargs): return [ConstantPad(*args, **kwargs) for i in range(n)] # ConstantPad
+class AutoUpdateValue:                                                           # AutoUpdateValue
+    def __init__(self, genF, every=10):                                          # AutoUpdateValue
+        """Value that is auto updated every specified number of seconds.
+This is to perform periodic calculations that are heavy, but packaged in a
+nice and clean format. Example::
+
+    v = k1.AutoUpdateValue(lambda: 3)
+    v.value                      # returns 3
+
+    def trouble(): raise Exception("Something went wrong")
+    v = AutoUpdateValue(trouble)
+    v.exc                        # returns "<class 'Exception'>\\ue004Something went wrong"
+    v.tb                         # returns traceback as string
+
+:param genF: function to generate the value
+:param every: refresh period"""                                                  # AutoUpdateValue
+        self.value = None; self.hash = None; self.genF = genF; self.exc = None; self.tb = None; self.lastUpdated = None; self.calc() # AutoUpdateValue
+        def inner():                                                             # AutoUpdateValue
+            while True: time.sleep(every); self.calc()                           # AutoUpdateValue
+        threading.Thread(target=inner).start()                                   # AutoUpdateValue
+    def calc(self):                                                              # AutoUpdateValue
+        try: self.value = self.genF(); self.lastUpdated = time.time(); self.hash = hash(self.value) # AutoUpdateValue
+        except Exception as e: self.exc = f"{type(e)}\ue004{e}"; self.tb = traceback.format_exc(); print(self.exc, self.tb) # AutoUpdateValue
+    def __call__(self): return self.value                                        # AutoUpdateValue

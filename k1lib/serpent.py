@@ -62,7 +62,7 @@ in json, so kinda have to roll my own solution"""                               
 #     matches = re.findall("[a-zA-Z_\-\"\[\]]+[ ]*=", lua); replacements = [m.rstrip("= ").strip("[]\"'") for m in matches] # listCorrection
 #     for x, y in zip(matches, replacements): lua = lua.replace(x, f'"{y}": ')   # listCorrection
 #     return json.loads(lua.replace(" ", ""))                                    # listCorrection
-p1 = re.compile("[a-zA-Z0-9_\-\"\[\]]+[ ]*=")                                    # listCorrection
+p1 = re.compile("[a-zA-Z0-9_\\-\"\\[\\]]+[ ]*=")                                 # listCorrection
 def loads_monolith(lua:str) -> object:                                           # loads_monolith
     """Not intended for the end user. Core loading mechanism. See :meth:`loads`""" # loads_monolith
     lua = listCorrection(lua); matches = sorted(re.findall(p1, lua), key=lambda x: -len(x)) # loads_monolith

@@ -420,6 +420,6 @@ Example::
 """                                                                              # asyncGuard
     if data is NotImplemented: return NotImplemented                             # asyncGuard
     header, fIdx = data                                                          # asyncGuard
-    g1 = cli.grep(f"{fIdx}[ ]*=[ ]*(?P<g>(async)|((?!\(*)))[ ]*\(", extract="g") # asyncGuard
-    g2 = cli.grep(f"(?P<g>async)[ ]*function[ ]*{fIdx}\(", extract="g")          # asyncGuard
+    g1 = cli.grep(f"{fIdx}[ ]*=[ ]*(?P<g>(async)|((?!\\(*)))[ ]*\\(", extract="g") # asyncGuard
+    g2 = cli.grep(f"(?P<g>async)[ ]*function[ ]*{fIdx}\\(", extract="g")         # asyncGuard
     x = header.split("\n"); return [header, fIdx, len(list(g1(x))) + len(list(g2(x))) > 0] # asyncGuard

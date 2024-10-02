@@ -33,7 +33,7 @@ also an alias shorthand for this called :class:`aS`. Example::
 Like :class:`apply`, you can also use this as a decorator like this::
 
     @aS
-    def f(x):n
+    def f(x):
         return x+2
     # returns 5
     3 | f
@@ -1520,7 +1520,7 @@ All examples from :class:`applyMp` should work perfectly here.
         self.prefetch = prefetch or int(1e9); self.timeout = timeout; self.bs = bs; self.sync = sync # applyTh
     def __ror__(self, it):                                                       # applyTh
         if self.bs > 1:                                                          # applyTh
-            yield from (it | cli.batched(self.bs, True) | applyTh(apply(self.f), self.prefetch, self.timeout, sync=self.sync) | cli.joinStreams()); return # applyTh
+            yield from (it | cli.batched(self.bs, True) | applyTh(apply(self.f) | aS(list), self.prefetch, self.timeout, sync=self.sync) | cli.joinStreams()); return # applyTh
         datas = deque(); it = iter(it); kwargs = self.kwargs; sync = self.sync   # applyTh
         innerF = fastF(self.f); timeout = self.timeout                           # applyTh
         def f(line, wrapper): wrapper.value = innerF(line, **kwargs)             # applyTh

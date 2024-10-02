@@ -363,7 +363,7 @@ fails to run::
         return inp                                                               # serial
     def __ror__(self, it:Iterator[Any]) -> Iterator[Any]:                        # serial
         if self._hasTrace: # slower, but tracable                                # serial
-            for cli in self._clis_after_capture_analysis: it = it | cli          # serial
+            for cli in self.clis: it = it | cli                                  # serial
         else: # faster, but not tracable                                         # serial
             for cli in self._cliCs: it = cli(it)                                 # serial
         return it                                                                # serial

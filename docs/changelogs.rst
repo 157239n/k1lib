@@ -9,12 +9,18 @@ Changelogs
 
 Cli:
 
-- something
+- Added :class:`~utils.toFileType`, :class:`~utils.toQr`, :class:`~utils.toExcel`, :class:`~utils.toMdTable`
+
+:class:`~lsext.sql` modifications:
+
+- Added lots of caching mechanisms: s["db"], db["table"] and table["id"]
+- Allowed setting json columns using dict
+- Added option to automatically html escape for text fields, to avoid cross site scripting
 
 Generic:
 
 - Added :meth:`~k1lib.aes_encrypt` and :meth:`~k1lib.aes_decrypt`
-- Added :meth:`k1lib.viz.Clipboard`, :meth:`k1lib.viz.Download`
+- Added :meth:`k1lib.viz.Clipboard`, :meth:`k1lib.viz.Download`, :meth:`k1lib.viz.Popup`, :meth:`k1lib.viz.qrScanner`
 
 `1.6 </1.6>`_ - Mar 8th, 2024
 -------------------------------

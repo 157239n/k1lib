@@ -17,8 +17,8 @@ class AccF(Callback):                                                           
 Built in default accuracies functions are fine, if you don't do something too
 dramatic/different. Expected variables in :class:`~k1lib.Learner`:
 
-- y:  :class:`~torch.Tensor` of shape (\*N, C)
-- yb: :class:`~torch.Tensor` of shape (\*N,)
+- y:  :class:`~torch.Tensor` of shape (\\*N, C)
+- yb: :class:`~torch.Tensor` of shape (\\*N,)
 
 Deposits variables into :class:`~k1lib.Learner`:
 

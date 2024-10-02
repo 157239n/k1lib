@@ -514,7 +514,7 @@ Example::
 
 So, the generated file has 120 lines in total. Each line is 10 bytes (9 for
 the string, and 1 for the new line character). Splitting the file into 31
-fragments will result in 32 seek points (:math:`p_i\quad i\in[1, n+1]`).
+fragments will result in 32 seek points (:math:`p_i\\quad i\\in[1, n+1]`).
 
 Also notice how the returned seek position is not the position of the character
 themselves, but the character right after. So if we're splitting by the new line

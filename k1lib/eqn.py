@@ -21,7 +21,7 @@ the end user."""                                                                
             sign = i * 2 - 1                                                     # Eqn
             for e in side.split("+"): # side is reactants or products            # Eqn
                 e = e.strip()                                                    # Eqn
-                number = re.findall("^[0-9.\/]*", e)[0]                          # Eqn
+                number = re.findall("^[0-9.\\/]*", e)[0]                         # Eqn
                 term, number = (e, 1) if number == "" else (e[e.find(number) + len(number):], eval(str(number))) # Eqn
                 term = term.strip(); self.system.terms.add(term)                 # Eqn
                 if term not in self: self[term] = 0                              # Eqn

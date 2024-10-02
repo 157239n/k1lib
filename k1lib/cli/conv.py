@@ -15,10 +15,10 @@ an iterator and output a single object (like getting max, min, std, mean values)
 __all__ = ["toNdArray", "toTensor", "toRange", "toList",
            "toSum", "toProd", "toAvg", "toMean", "toStd", "toMedian", "toMax", "toMin", "toArgmin", "toArgmax",
            "toImg", "toRgb", "toRgba", "toGray", "toDict",
-           "toFloat", "toInt", "toBytes", "toDataUri", "toAnchor", "toHtml",
+           "toFloat", "toInt", "toRoman", "toBytes", "toDataUri", "toAnchor", "toHtml",
            "toAscii", "toHash", "toCsv", "toYaml", "Audio", "toAudio", "toUnix", "toIso", "toYMD", "toLinks",
-           "toMovingAvg", "toCm", "Pdf", "toPdf", "toDist", "toAngle", "idxsToNdArray", "toFileType"]
-import re, k1lib, math, os, numpy as np, io, json, base64, unicodedata, inspect, time
+           "toMovingAvg", "toCm", "Pdf", "toPdf", "toDist", "toAngle", "idxsToNdArray", "toFileType", "toQr", "toExcel", "toMdTable"]
+import re, k1lib, math, os, numpy as np, io, json, base64, unicodedata, inspect, time, functools
 from k1lib.cli.init import BaseCli, T, yieldT; import k1lib.cli as cli, k1lib.cli.init as init
 from k1lib.cli.typehint import *; mpl = k1lib.dep.mpl; plt = k1lib.dep.plt; yaml = k1lib.dep.yaml; pd = k1lib.dep.pd; cm = k1lib.dep.cm; cv2 = k1lib.dep.cv2
 from collections import deque, defaultdict; from typing import Iterator, Any, List, Set, Tuple, Dict, Callable, Union
@@ -370,8 +370,9 @@ def cropToContentNp(ogIm, pad=10):                                              
     coords = np.argwhere(im.max()-im); x_min, y_min = coords.min(axis=0); x_max, y_max = coords.max(axis=0) # cropToContentNp
     return ogIm[x_min-pad:x_max+1+pad, y_min-pad:y_max+1+pad] if dim == 2 else ogIm[:,x_min-pad:x_max+1+pad, y_min-pad:y_max+1+pad] # cropToContentNp
 def cropToContentPIL(im, pad=0):                                                 # cropToContentPIL
-    im = im | toTensor(int) | cli.op().numpy() | cli.aS(cropToContentNp, pad)    # cropToContentPIL
-    return torch.from_numpy(im).permute(1, 2, 0) | toImg() if len(im.shape) > 2 else im | toImg() # cropToContentPIL
+    im = im | toNdArray(int) | cli.aS(cropToContentNp, pad)                      # cropToContentPIL
+    # return torch.from_numpy(im).permute(1, 2, 0) | toImg() if len(im.shape) > 2 else im | toImg() # cropToContentPIL
+    return np.transpose(im, (1, 2, 0)) | toImg() if len(im.shape) > 2 else im | toImg() # cropToContentPIL
 class toImg(BaseCli):                                                            # toImg
     blurb="Converts multiple data types into a PIL image"                        # toImg
     def __init__(self, closeFig=True, crop=True):                                # toImg
@@ -678,6 +679,22 @@ See also: :meth:`toFloat`"""                                                    
     }}
     return ans;
 }}""", fIdx                                                                      # toInt
+import collections                                                               # toInt
+_romans = collections.OrderedDict(); _romans[1000] = "M"; _romans[900] = "CM"; _romans[500] = "D"; _romans[400] = "CD"; _romans[100] = "C"; _romans[90] = "XC"; _romans[50] = "L"; _romans[40] = "XL"; _romans[10] = "X"; _romans[9] = "IX"; _romans[5] = "V"; _romans[4] = "IV"; _romans[1] = "I" # toInt
+def _roman_num(num):                                                             # _roman_num
+    for r in _romans.keys():                                                     # _roman_num
+        x, y = divmod(num, r); yield _romans[r] * x; num -= (r * x)              # _roman_num
+        if num <= 0: break                                                       # _roman_num
+class toRoman(BaseCli):                                                          # toRoman
+    def __init__(self):                                                          # toRoman
+        """Converts integer to roman numerals.
+Example::
+
+    3  | toRoman() # returns "III"
+    19 | toRoman() # returns "XIX"
+"""                                                                              # toRoman
+        pass                                                                     # toRoman
+    def __ror__(self, x): return _roman_num(x) | cli.join("")                    # toRoman
 class toBytes(BaseCli):                                                          # toBytes
     blurb="Converts several object types to bytes"                               # toBytes
     def __init__(self, dataType=None):                                           # toBytes
@@ -820,7 +837,7 @@ Example::
         if hasPlotly and isinstance(it, plotly.graph_objs._figure.Figure):       # toHtml
             out = io.StringIO(); it.write_html(out); out.seek(0); return out.read() # toHtml
         if isinstance(it, mpl.figure.Figure): res = mpld3.fig_to_html(it); plt.close(it); return res # toHtml
-        if hasGraphviz and isinstance(it, graphviz.Digraph):                     # toHtml
+        if hasGraphviz and (isinstance(it, graphviz.Digraph) or isinstance(it, graphviz.Graph)): # toHtml
             import tempfile; a = tempfile.NamedTemporaryFile()                   # toHtml
             it.render(a.name, format="svg");                                     # toHtml
             fn = f"{a.name}.svg"; im = cli.cat(fn) | cli.join("")                # toHtml
@@ -1065,6 +1082,7 @@ to get it in a different timezone, do this::
             self.tz = dateutil.tz.gettz(tz)                                      # toIso
             if self.tz is None and tz: raise Exception(f"Timezone '{tz}' not found. You can get a list of all available timezones at `toUnix.tzs()`") # toIso
     def __ror__(self, it):                                                       # toIso
+        if it is None: return it                                                 # toIso
         d = dt.fromtimestamp(it)                                                 # toIso
         if self.tz: return d.astimezone(self.tz).strftime('%Y-%m-%dT%H:%M:%S')   # toIso
         else: return d.strftime('%Y-%m-%dT%H:%M:%S')                             # toIso
@@ -1149,7 +1167,7 @@ splendidly."""                                                                  
         chars = " \t,;" # random characters to split, so that the first instance in a line doesn't overshadow the ones after # toLinks
         self.preprocess = cli.serial(*[(cli.op().split(ch).all() | cli.joinSt()) for ch in settings.toLinks.splitChars]) # toLinks
         protocols = "|".join([f"({p})" for p in settings.toLinks.protocols])     # toLinks
-        self.g = cli.grep(f"(?P<g>({protocols})" + "://[^\(\)\[\]\<\>\{\}\'\" ]*)", extract="g") # toLinks
+        self.g = cli.grep(f"(?P<g>({protocols})" + "://[^\\(\\)\\[\\]\\<\\>\\{\\}\'\" ]*)", extract="g") # toLinks
         self.href = cli.grep('href="(?P<g>.+)"', extract="g") & cli.grep("href='(?P<g>.+)'", extract="g") | cli.joinSt() # toLinks
         self.post = cli.joinSt() | cli.aS(set)                                   # toLinks
     def __ror__(self, it):                                                       # toLinks
@@ -1265,9 +1283,10 @@ again, so have to make it
             plt.colorbar(cm.ScalarMappable(norm=normFunc(*it | cli.cut(col) | cli.toMin() & cli.toMax()), cmap=cmap), ax=plt.gca(), label=title) # toCm
             return it | (cli.normalize(col, 2) if log else cli.normalize(col, 1)) | cli.apply(cmap, col) # toCm
 PyPDF2 = k1lib.dep("PyPDF2", url="https://pypdf2.readthedocs.io/")               # toCm
+pymupdf = k1lib.dep("pymupdf", url="https://pymupdf.readthedocs.io/")            # toCm
 class Pdf:                                                                       # Pdf
     def __init__(self, fn):                                                      # Pdf
-        self.fn = fn; self._handle = None; self._open()                          # Pdf
+        self.fn = os.path.expanduser(fn); self._handle = None; self._open()      # Pdf
     def _open(self):                                                             # Pdf
         if self._handle is not None: return                                      # Pdf
         self._handle = open(self.fn, 'rb')                                       # Pdf
@@ -1285,18 +1304,35 @@ class Pdf:                                                                      
     def __len__(self): return self._npages                                       # Pdf
 class PdfPage:                                                                   # PdfPage
     def __init__(self, pdf:Pdf, i:int):                                          # PdfPage
-        self.pdf = pdf; self.i = i                                               # PdfPage
+        self.pdf = pdf; self.i = i; self._cached_fitz = None                     # PdfPage
     def __repr__(self): return f"<PdfPage page={self.i} #pages={len(self.pdf)} fn='{self.pdf.fn}'>" # PdfPage
     def _cat(self):                                                              # PdfPage
         self.pdf._open()                                                         # PdfPage
-        with open(self.pdf.fn, 'rb') as o:                                       # PdfPage
-            startTime = time.time()                                              # PdfPage
-            page = self.pdf._reader.pages[self.i]                                # PdfPage
-            return page.extract_text().split("\n")                               # PdfPage
+        with open(self.pdf.fn, 'rb') as o: return self.pdf._reader.pages[self.i].extract_text().split("\n") # PdfPage
+    def _fitz(self):                                                             # PdfPage
+        if self._cached_fitz is None: self._cached_fitz = pymupdf.open(self.pdf.fn)[self.i] # PdfPage
+        return self._cached_fitz                                                 # PdfPage
+    def blocks(self, heightFrac=0.01, group=False, ratio=False):                 # PdfPage
+        """Grab text blocks. Returns blocks in reading order.
+Example::
+
+    page = "some_pdf_file.pdf" | toPdf() | item() # grabs first page
+    page.blocks()           # returns [[[92.95, 187.05, 116.05, 199.84], "some text"], [...], ...]
+    page.blocks(group=True) # returns [[[[92.95, 187.05, 116.05, 199.84], "some text"], [[x1, y1, x2, y2], "text on same row"]], [...], ...]
+    page.blocks(ratio=True) # returns [[[0.1, 0.3, 0.2, 0.32], "some text"], [...], ...]
+
+:param heightFrac: if 2 text blocks are too close together in y direction (delta height < heightFrac * document height),
+    then group those together, sort by x, then joins. So the result goes from top left to bottom right
+:param group: if True, returns blocks of rows instead of joining all of them together by default
+:param ratio: if True, return coordinate ratios with width and height, instead of absolute pixels""" # PdfPage
+        blocks = self._fitz().get_text("blocks") | cli.filt("x==0", 6) | cli.sort(1) | cli.apply(lambda row: row[:5]) | cli.deref() # PdfPage
+        width, height = self._shape(); ratioF = (cli.apply(lambda x: x/width, [0, 2]) | cli.apply(lambda y: y/height, [1, 3])) if ratio else cli.iden() # PdfPage
+        return blocks | cli.batchedTrigger(1, delta=height*heightFrac, adj=False) | cli.apply(cli.sort(0) | ratioF | cli.apply(lambda row: [row[:4], row[4]])) | (cli.iden() if group else cli.joinSt()) | cli.deref() # PdfPage
     def _toImg(self, **kwargs):                                                  # PdfPage
         k1lib.depCli("pdftoppm"); fn2 = b"" | cli.file(); fn = self.pdf.fn.replace("'", "\\'"); i = self.i # PdfPage
         None | cli.cmd(f"pdftoppm -f {i+1} -l {i+1} -jpeg '{fn}' {fn2} -singlefile") | cli.deref() # PdfPage
         im = f"{fn2}.jpg" | cli.toImg(); os.remove(f"{fn2}.jpg"); os.remove(fn2); return im # PdfPage
+    def _shape(self, idx=None): d = (self._fitz().rect.width, self._fitz().rect.height); return d if idx is None else d[idx] # PdfPage
 _pdf_initialized = [False]                                                       # PdfPage
 def _pdf_init():                                                                 # _pdf_init
     if _pdf_initialized[0]: return                                               # _pdf_init
@@ -1311,6 +1347,7 @@ Example::
     len(pdf)         # get number of pages
     pdf[2] | cat()   # get text content of 2nd (0-indexed) page
     pdf[2] | toImg() # converts 2nd page to an image
+    pdf[2].blocks()  # grabs a list of text blocks, ordered top to bottom, like [[[x1, y1, x2, y2], "some text"], [...], ...]
 """                                                                              # toPdf
         _pdf_init()                                                              # toPdf
     def __ror__(self, it) -> Pdf: return Pdf(it)                                 # toPdf
@@ -1414,3 +1451,95 @@ cli."""                                                                         
             it | cli.file(fn); res = None | cli.cmd(f"file {fn}") | cli.item(); os.remove(fn) # toFileType
         else: raise Exception("toFileType() only accepts either path (string) or file content (bytes)") # toFileType
         return res.replace(f"{fn}: ", "")                                        # toFileType
+qrcode = k1lib.dep("qrcode", url="https://github.com/lincolnloop/python-qrcode") # toFileType
+class toQr(BaseCli):                                                             # toQr
+    def __init__(self):                                                          # toQr
+        """Creates a QR code PIL image encoding the specified text.
+Example::
+
+    "abc" | toQr()
+"""                                                                              # toQr
+        pass                                                                     # toQr
+    def __ror__(self, it):                                                       # toQr
+        if not isinstance(it, str): it = f"{it}"                                 # toQr
+        return qrcode.make(it).get_image()                                       # toQr
+openpyxl = k1lib.dep("openpyxl", url="https://openpyxl.readthedocs.io/en/stable/") # toQr
+class ExcelFile:                                                                 # ExcelFile
+    def __init__(self, fn): self.fn = fn; self.wb = openpyxl.load_workbook(fn)   # ExcelFile
+    @functools.lru_cache                                                         # ExcelFile
+    def _ls(self): return [ExcelSheet(self.wb, self.fn, name) for name in self.wb.sheetnames] # ExcelFile
+    def __getitem__(self, key):                                                  # ExcelFile
+        if key not in self.wb.sheetnames: raise Exception(f"Sheet {key} doesn't exist") # ExcelFile
+        return ExcelSheet(self.wb, self.fn, key)                                 # ExcelFile
+    def __repr__(self): return f"<ExcelFile fn='{self.fn}'>"                     # ExcelFile
+class ExcelSheet:                                                                # ExcelSheet
+    def __init__(self, wb, fn, name): self.wb = wb; self.fn = fn; self.name = name; self.ref = wb[name] # ExcelSheet
+    def _cat(self): return [[x.value for x in row] for row in self.ref]          # ExcelSheet
+    def __repr__(self): return f"<ExcelSheet fn='{self.fn}' name='{self.name}'>" # ExcelSheet
+@functools.lru_cache                                                             # ExcelSheet
+def num2ExcelCol(x):                                                             # num2ExcelCol
+    s = ""                                                                       # num2ExcelCol
+    while x >= 0: s = chr(ord("A") + (x % 26)) + s; x = x // 26 - 1              # num2ExcelCol
+    return s                                                                     # num2ExcelCol
+class toExcel(BaseCli):                                                          # toExcel
+    def __init__(self):                                                          # toExcel
+        """2 modes:
+
+1) Reads an excel file and returns an :class:`ExcelFile` object that can do many things.
+
+This mode is activated when the input is a string, which it is interpreted as a file name.
+Example::
+
+    workbook = "somefile.xlsx" | toExcel() # reads the file
+    worksheet = workbook | ls()            # lists out all sheets within the workbook
+    worksheet | cat()                      # grabs all cells' values, returns List[List[Any]]
+
+2) Converts a python table to excel sheet in bytes.
+Example::
+
+    # returns bytes of the excel file, merging A1:B1, with all correct column widths
+    [["A", None, "B"], [1, 2, 3]] | toExcel()
+    # saves to the specified file
+    [["A", None, "B"], [1, 2, 3]] | toExcel() | file("somefile.xlsx")
+"""                                                                              # toExcel
+        pass                                                                     # toExcel
+    def __ror__(self, it):                                                       # toExcel
+        if isinstance(it, str): return ExcelFile(it)                             # toExcel
+        data = it; wb = openpyxl.Workbook(); ws = wb.active                      # toExcel
+        for nR, row in enumerate(data):                                          # toExcel
+            d = []; l = []                                                       # toExcel
+            for nC, e in row | cli.insId():                                      # toExcel
+                if e is not None and len(l) == 0: l.append([nC, e])              # toExcel
+                elif e is not None and len(l) > 0: d.append(l); l = [[nC, e]]    # toExcel
+                elif e is None: l.append([nC, e])                                # toExcel
+            if len(l) > 0: d.append(l)                                           # toExcel
+            for group in d:                                                      # toExcel
+                sC1 = num2ExcelCol(group[0][0]); sC2 = num2ExcelCol(group[-1][0]) # toExcel
+                if len(group) > 1: ws.merge_cells(f"{sC1}{nR+1}:{sC2}{nR+1}")    # toExcel
+                ws[f"{sC1}{nR+1}"] = group[0][1]                                 # toExcel
+        colWidths = data | cli.aS(lambda x: len(f'{x or ""}')).all(2) | cli.T() | cli.apply(cli.toMax()) | cli.deref() # toExcel
+        for i, x in enumerate(colWidths): ws.column_dimensions[num2ExcelCol(i)].width = 5+x # toExcel
+        fn = b"" | cli.file(); wb.save(fn); contents = cli.cat(fn, False); os.remove(fn); return contents # toExcel
+class toMdTable():                                                               # toMdTable
+    def __init__(self):                                                          # toMdTable
+        """Converts incoming table to a nice markdown table.
+Example::
+
+    ["ABC", [1,2,3], "456", "789"] | toMdTable()
+
+That returns::
+
+    ['| A  | B  | C  |',
+     '| -- | -- | -- |',
+     '| 1  | 2  | 3  |',
+     '| 4  | 5  | 6  |',
+     '| 7  | 8  | 9  |']
+
+Honestly this is just a convenience function, as you can typically just do ``table | display()``
+and that'd be enough in a jupyter environment. But I was trying to use obsidian and want to
+generate a table that obsidian can understand"""                                 # toMdTable
+        pass                                                                     # toMdTable
+    def __ror__(self, it):                                                       # toMdTable
+        data = it | cli.deref(2); data = [*data[:1], [], *data[1:]] | cli.T.wrap(cli.iden(), fill="") | cli.pretty("|   ") | cli.apply(lambda x: f"|   {x}|".replace("   |","  |").replace("|   ","| ")) | cli.deref() # toMdTable
+        if len(data)>1: data[1] = data[1].replace(*" -").replace("|-","| ").replace("-|"," |") | cli.deref() # toMdTable
+        return data                                                              # toMdTable

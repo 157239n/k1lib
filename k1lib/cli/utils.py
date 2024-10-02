@@ -16,7 +16,7 @@ try: import genpy, rosbag; hasRos1 = True
 except: hasRos1 = False
 try: import pandas as pd; pd.core; hasPandas = True
 except: hasPandas = False
-__all__ = ["size", "shape", "item", "rItem", "iden", "join", "wrapList",
+__all__ = ["size", "shape", "resize", "item", "rItem", "iden", "join", "wrapList",
            "equals", "reverse", "ignore", "rateLimit", "timeLimit", "tab", "indent",
            "clipboard", "deref", "bindec", "smooth", "disassemble",
            "tree", "lookup", "lookupRange", "getitems", "backup", "sketch", "syncStepper", "zeroes", "normalize", "branch"]
@@ -38,26 +38,18 @@ class size(BaseCli):                                                            
         """Returns number of rows and columns in the input.
 Example::
 
-    # returns (3, 2)
-    [[2, 3], [4, 5, 6], [3]] | shape()
-    # returns 3
-    [[2, 3], [4, 5, 6], [3]] | shape(0)
-    # returns 2
-    [[2, 3], [4, 5, 6], [3]] | shape(1)
-    # returns (2, 0)
-    [[], [2, 3]] | shape()
-    # returns (3,)
-    [2, 3, 5] | shape()
-    # returns 3
-    [2, 3, 5] | shape(0)
-    # returns (3, 2, 2)
-    [[[2, 1], [0, 6, 7]], 3, 5] | shape()
-    # returns (1, 3)
-    ["abc"] | shape()
-    # returns (1, 2, 3)
-    [torch.randn(2, 3)] | shape()
-    # returns (2, 3, 5)
-    shape()(np.random.randn(2, 3, 5))
+    [[2, 3], [4, 5, 6], [3]]    | shape()  # returns (3, 2)
+    [[2, 3], [4, 5, 6], [3]]    | shape(0) # returns 3
+    [[2, 3], [4, 5, 6], [3]]    | shape(1) # returns 2
+    [[], [2, 3]]                | shape()  # returns (2, 0)
+    [2, 3, 5]                   | shape()  # returns (3,)
+    [2, 3, 5]                   | shape(0) # returns 3
+    [[[2, 1], [0, 6, 7]], 3, 5] | shape()  # returns (3, 2, 2)
+    ["abc"]                     | shape()  # returns (1, 3)
+    [torch.randn(2, 3)]         | shape()  # returns (1, 2, 3)
+    shape()(np.random.randn(2, 3, 5))      # returns (2, 3, 5)
+    "some_img.jpg" | toImg()    | shape()  # returns (width, height) for a particular image
+    some_pandas_data_frame      | shape()  # returns dataframe's (#rows, #columns)
 
 :class:`shape` is an alias of this cli. Use whichever is more intuitive for you.
 
@@ -80,6 +72,7 @@ Example::
                 except: pass                                                     # size
         if hasPIL and isinstance(it, PIL.Image.Image): return it.size if idx is None else it.size[idx] # size
         if hasPandas and isinstance(it, pd.core.frame.DataFrame): s = (len(it), it.size//len(it)); return s if idx is None else s[idx] # size
+        if hasattr(it, "_shape"): return it._shape(self.idx)                     # size
         if idx is None:                                                          # size
             answer = []                                                          # size
             try:                                                                 # size
@@ -95,7 +88,34 @@ Example::
         post = "" if self.idx is None else f"[{cli.kjs.v(self.idx)}]"            # size
         return f"{fIdx} = ({dataIdx}) => {dataIdx}.shape(){post}", fIdx          # size
 shape = size                                                                     # size
-noFill = object()                                                                # size
+class resize(BaseCli):                                                           # resize
+    def __init__(self, width=0, height=0, max=0):                                # resize
+        """Resizes the image coming in to a new value.
+Example::
+
+    img = "path/some_img.jpg" | toImg() # loads image up
+    img | shape()                       # returns (400, 600) in this example, meaning width is 400, height is 600
+    img | resize(200)                   # resizes image to (200, 300), keeping aspect ratio
+    img | resize(height=300)            # resizes image to (200, 300), keeping aspect ratio)
+    img | resize(200, 200)              # resizes image to (200, 200), disregarding aspect ratio
+    img | resize(max=200)               # resizes image so that the biggest length is 200
+"""                                                                              # resize
+        self.width = width; self.height = height; self.max = max                 # resize
+    def __ror__(self, it):                                                       # resize
+        width = self.width; height = self.height; max = self.max                 # resize
+        if hasPIL and isinstance(it, PIL.Image.Image):                           # resize
+            rWidth = it.size[0]; rHeight = it.size[1]; ratio = 1 # real width & height # resize
+            if width > 0 and height > 0:                                         # resize
+                if (max < width or max < height) and max > 0: raise Exception(f"max value ({max}) lower than width or height ") # resize
+                try: return it.resize((width, height), resample=PIL.Image.Resampling.LANCZOS) # resize
+                except: return it.resize((width, height))                        # resize
+            if width > 0 and height == 0: ratio = width / rWidth                 # resize
+            if height > 0 and width == 0: ratio = height / rHeight               # resize
+            if max > 0: ratio = min(ratio, max/rWidth, max/rHeight)              # resize
+            try: return it.resize((int(rWidth*ratio), int(rHeight*ratio)), resample=PIL.Image.Resampling.LANCZOS) # resize
+            except: return it.resize((int(rWidth*ratio), int(rHeight*ratio)))    # resize
+        raise Exception(f"Doesn't know how to resize object of type {type(it)}") # resize
+noFill = object()                                                                # resize
 class item(BaseCli):                                                             # item
     def __init__(self, amt:int=1, fill=noFill):                                  # item
         """Returns the first element of the input iterator.

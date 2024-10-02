@@ -18,7 +18,7 @@ try: import PIL; hasPIL = True
 except: hasPIL = False
 __all__ = ["SliceablePlot", "plotSegments", "Carousel", "Toggle", "ToggleImage",
            "Scroll", "confusionMatrix", "FAnim", "mask", "PDF", "Html", "onload",
-           "Clipboard", "Download", "Table"]
+           "Clipboard", "Download", "qrScanner", "Popup", "Table"]
 class _PlotDecorator:                                                            # _PlotDecorator
     """The idea with decorators is that you can do something like this::
 
@@ -249,13 +249,13 @@ There's also a builtin search functionality that works like this::
         "<h1>abc</h1><div>Some content 1</div>",
         "<h1>def</h1><div>Some other content 2</div>",
         "<h1>ghi</h1><div>Another content 3</div>",
-    ] | Carousel(searchMode=1)
+    ] | viz.Carousel(searchMode=1)
 
     [
         ["<h1>abc</h1>", "<div>Some content 1</div>"],
         ["<h1>def</h1>", "<div>Some other content 2</div>"],
         ["<h1>ghi</h1>", "<div>Another content 3</div>"],
-    ] | Carousel(searchMode=2)
+    ] | viz.Carousel(searchMode=2)
 
 The first mode will search for some text inside the html content. The second mode
 will search inside the title only, that means it's expecting to receive Iterator[title, html/img]
@@ -644,11 +644,48 @@ whatever's piped into this into a file. Example::
         setTimeout(() => {{ icon.innerHTML = atob('{base64.b64encode(icons['download'].encode()).decode()}'); }}, 1000);
     }}
 </script>""")                                                                    # Download
+def qrScanner(fName=None, facing="environment"):                                 # qrScanner
+    """Returns some nice Html displaying a live video feed that calls a function when a QR code is identified.
+Example::
+
+    ht = viz.qrScanner("qrIdentified")
+    viz.Html(ht + "<script>function qrIdentified(data) { console.log("qr: ", data); }</script>")
+
+After executing that in a cell, it should display a live video feed
+
+:param fName: js function name to be triggered
+:param facing: 'environment' or 'user', determines the camera location"""        # qrScanner
+    if not fName: raise Exception("Please specify a JS function name to be called whenever the scanner detected a QR code") # qrScanner
+    pre = cli.init._jsDAuto(); return Html(f"""
+<video id="{pre}_video" style="max-width: 100%" autoplay></video><canvas id="{pre}_canvas" style="display:none;"></canvas>
+<script src="https://static.aigu.vn/jsQR.js"></script>
+<script>
+    const {pre}_video = document.querySelector("#{pre}_video"); const {pre}_canvas = document.querySelector("#{pre}_canvas"); var {pre}_ctx = {pre}_canvas.getContext('2d');
+    navigator.mediaDevices.getUserMedia({{ video: {{ facingMode: '{facing}' }} }})
+        .then(function(stream) {{ var video = document.getElementById('{pre}_video'); video.srcObject = stream; video.play(); requestAnimationFrame({pre}_tick); }})
+        .catch(function(err) {{ console.error('Error accessing the camera: ', err); }});
+
+    async function {pre}_tick() {{
+        {pre}_ctx.drawImage({pre}_video, 0, 0, {pre}_canvas.width, {pre}_canvas.height);
+        var imageData = {pre}_ctx.getImageData(0, 0, {pre}_canvas.width, {pre}_canvas.height);
+        var code = jsQR(imageData.data, imageData.width, imageData.height);
+        if (code) {fName}(code.data); requestAnimationFrame({pre}_tick);
+    }}
+</script>""")                                                                    # qrScanner
+def Popup(elem:str, popup:str):                                                  # Popup
+    """Makes an popup appear at the bottom right of an element after clicking on it.
+Example::
+
+    a = viz.Popup("<button>abc</button>", "<div>popup content</div>")
+    b = f"{a}<pre>some\\nother\\ncontent</pre>" | toHtml()
+"""                                                                              # Popup
+    pre = cli.init._jsDAuto(); return f"""<div id="{pre}_rel" onclick="{pre}_onclick(this)" style="position:relative;width:min-content">{elem}<div id="{pre}_popup" style="position:absolute;display:none;background:white;padding:12px;box-shadow:rgba(0,0,0,0.15) 1.95px 1.95px 2.6px;border-radius:12px;" tabindex="0">{popup}</div></div>
+<script>(async () => {{ window.{pre}_onclick = () => {{ const rel = document.querySelector("#{pre}_rel"); const popup = document.querySelector("#{pre}_popup"); popup.style.left = rel.clientWidth + "px"; popup.style.top = rel.clientHeight + "px"; popup.style.display = "block"; popup.focus(); popup.onblur = () => {{ popup.style.display = "none"; }} }} }})();</script>""" | cli.toHtml() # Popup
 class Table(cli.BaseCli):                                                        # Table
     def __init__(self, headers:"list[str]"=None,                                 # Table
-                 onclickFName:str=None, ondeleteFName:str=None, oneditFName:str=None, # Table
-                 colOpts:"list[list[str]]"=None,                                 # Table
-                 selectable=False, selectCallback:str=None, height=None):        # Table
+                 onclickFName:str=None, ondeleteFName:str=None, oneditFName:str=None, onclickHeaderFName:str=None, # Table
+                 colOpts:"list[list[str]]"=None, sortF:str=None,                 # Table
+                 selectable=False, selectCallback:str=None, height=None, objName:str=None): # Table
         """Returns some nice Html displaying a table.
 Example::
 
@@ -686,53 +723,67 @@ Say you have 3 columns, and you want:
 Then "colOpts" should be [["json", ["jsonWidth", 500], "clipboard"], [], ["clipboard"]]
 
 :param headers: a list of column names
-:param onclickFName:  global function that will be called whenever the user clicks on a specific item
-:param ondeleteFName: global function that will be called whenever the user wants to delete a specific row
-:param oneditFName:   global function that will be called whenever the user finishes editing a specific row
+:param onclickFName:       global function that will be called whenever the user clicks on a specific item
+:param ondeleteFName:      global function that will be called whenever the user wants to delete a specific row
+:param oneditFName:        global function that will be called whenever the user finishes editing a specific row
+:param onclickHeaderFName: global function that will be called whenever the user clicks on a specific header
 :param colOpts: column options
+:param sortF: takes in [table (list[list[str | number]]), col (int)] and returns the sorted table. Can put :data:`True` in for the default sorter
 :param selectable: if True, make the row bold when user clicks on it, else don't do that
 :param selectCallback: function name to inject into global namespace so as to trigger
     internal selection. Does not cascade to onclickFName"""                      # Table
-        self.headers = headers; self.onclickFName = onclickFName; self.ondeleteFName = ondeleteFName # Table
-        self.oneditFName = oneditFName; self.colOpts = colOpts; self.selectable = selectable; self.selectCallback = selectCallback # Table
-        self.height = height                                                     # Table
+        self.headers = headers; self.onclickFName = onclickFName; self.ondeleteFName = ondeleteFName; self.onclickHeaderFName = onclickHeaderFName # Table
+        self.oneditFName = oneditFName; self.colOpts = colOpts; self.sortF = sortF; self.selectable = selectable; self.selectCallback = selectCallback # Table
+        self.height = height; self.objName = objName                             # Table
     def _scripts(self, pre): # common scripts section between __ror__() and _jsF() # Table
-        onclickFName = self.onclickFName; ondeleteFName = self.ondeleteFName; oneditFName = self.oneditFName; selectCallback = self.selectCallback; # Table
-        height = f"""document.querySelector("#{pre}_tableWrap").scrollTop = e.getBoundingClientRect().top - document.querySelector("#{pre}_table").getBoundingClientRect().top - 80;""" if self.height else ""; return f"""
-    if (!window.alertCallback) window.alertCallback = alert;
-    window.{selectCallback} = (predicate) => {{ // scans entire existing table for rows that satify the predicate function
-        data = {pre}_data;
+        height = f"""document.querySelector("#{pre}_tableWrap").scrollTop = e.getBoundingClientRect().top - document.querySelector("#{pre}_table").getBoundingClientRect().top - 80;""" if self.height else ""; selectCallback = f"""
+    window.{self.selectCallback} = (predicate) => {{ // scans entire existing table for rows that satify the predicate function. Kinda deprecated function, use {pre}_obj.selectId() instead!
+        data = {pre}_obj.data;
         for (let i = 0; i < data.length; i++) document.querySelector("#{pre}_row_" + i).style.backgroundColor = "";
         for (let i = 0; i < data.length; i++) if (predicate(data[i])) {{
             e = document.querySelector("#{pre}_table").querySelector("#{pre}_row_" + i);
             {height}
-            e.style.backgroundColor = "#dddddd"; {pre}_selectedRow = i; break
+            e.style.backgroundColor = "#dddddd"; {pre}_obj.selectedRowId = i; {pre}_obj.selectedRow = data[i]; break
         }}
-    }}
+    }}""" if self.selectCallback else ""; ondeleteFName = self.ondeleteFName; pre_delete = f"""
     {pre}_delete = async (row, i, e) => {{
-        e.stopPropagation();
+        if (e) e.stopPropagation();
         try {{ // if the function don't raise any error, then actually delete the element, else just alert the user that the operation failed
             if ({ondeleteFName}.constructor.name === "AsyncFunction") res = await {ondeleteFName}(row, i, e);
             else res = {ondeleteFName}(row, i, e);
             if (res === "dont_delete") return;
             document.querySelector("#{pre}_row_" + i).remove();
+            {pre}_obj.data[i] = null;
         }} catch (e) {{ if (e.message !== "\ue000nopropagate") window.alertCallback(e); }}
+    }}""" if self.ondeleteFName else ""; oneditFName = self.oneditFName; pre_edit = f"""
+    {pre}_edit = async (row, rowi, e) => {{
+        if (e) e.stopPropagation(); nodes = Array.from(document.querySelectorAll("#{pre}_row_" + rowi + " > .k1TableElement"));
+        for (let i = 0; i < nodes.length; i++) {{
+            nodes[i].innerHTML = "<input type='text' class='input input-bordered' />";
+            nodes[i].querySelector("input").value = {pre}_obj.data[rowi][i];
+            nodes[i].onclick = (e) => {{ if (e) e.stopPropagation(); }}
+        }}
+        document.querySelector("#{pre}_row_" + rowi + ">.editIcon").innerHTML = "<span style='cursor: pointer' onclick='{pre}_finishedEdit({pre}_obj.data[" + rowi + "], " + rowi + ", event)'></span>"
+        document.querySelector("#{pre}_row_" + rowi + ">.editIcon>span").innerHTML = atob('{base64.b64encode(icons['check'].encode()).decode()}')
     }}
-    {pre}_selectedRow = -1;
-    {pre}_select = async (row, i, e) => {{
-        if (i < 0) return;
-        e.stopPropagation();
-        if ({json.dumps(self.selectable)}) {{
-            if ({pre}_selectedRow >= 0) document.querySelector("#{pre}_row_" + {pre}_selectedRow).style.backgroundColor = "";
-            if (i >= 0) {{
-                s = document.querySelector("#{pre}_row_" + i).style;
-                if ({pre}_selectedRow === i) {{ s.backgroundColor = ""; {pre}_selectedRow = -1; }} else {{ s.backgroundColor = "#dddddd"; {pre}_selectedRow = i; }}
-            }}
-        }}
-        if ({json.dumps(onclickFName)}) {{ // if the function don't raise any error, then actually delete the element's ui, else just alert the user that the operation failed
-            try {{ if ({onclickFName}.constructor.name === "AsyncFunction") await {onclickFName}(row, i, e); else {onclickFName}(row, i, e);
-            }} catch (e) {{ if (e.message !== "\ue000nopropagate") window.alertCallback(e); }}
-        }}
+    {pre}_finishedEdit = async (row, rowi, e) => {{
+        if (e) e.stopPropagation(); console.log("finishedEdit:", row, rowi, e);
+        nodes  = Array.from(document.querySelectorAll("#{pre}_row_" + rowi + ">.k1TableElement"))
+        inputs = Array.from(document.querySelectorAll("#{pre}_row_" + rowi + ">.k1TableElement>input"));
+        values = inputs.map((inp) => inp.value);
+        try {{ // if the function don't raise any error, then actually registers the element, else just alert the user that the operation failed
+            if ({oneditFName}.constructor.name === "AsyncFunction") res = await {oneditFName}(row, values, rowi, e);
+            else res = {oneditFName}(row, values, rowi, e);
+            for (let i = 0; i < nodes.length; i++) {{ nodes[i].innerHTML = values[i]; }}
+            {pre}_obj.data[rowi] = values;
+            document.querySelector("#{pre}_row_" + rowi + ">.editIcon").innerHTML = "<span style='cursor: pointer' onclick='{pre}_edit({pre}_obj.data[" + rowi + "], " + rowi + ", event)'></span>";
+            document.querySelector("#{pre}_row_" + rowi + ">.editIcon>span").innerHTML = atob('{base64.b64encode(icons['edit'].encode()).decode()}');
+        }} catch (e) {{ if (e.message !== "\ue000nopropagate") window.alertCallback(e); }}
+    }}""" if self.oneditFName else ""; pre_clip = f"""
+    {pre}_clip = async (e, rowi, elemi) => {{
+        const value = {pre}_obj.data[rowi][elemi]; {pre}_copyToClipboard((typeof(value) === "string") ? value : JSON.stringify(value), rowi, elemi);
+        const icon = document.querySelector("#{pre}_copy_icon_" + rowi + "_" + elemi); icon.innerHTML = atob('{base64.b64encode(icons['check'].encode()).decode()}');
+        setTimeout(() => {{ icon.innerHTML = atob('{base64.b64encode(icons['copy'].encode()).decode()}'); }}, 1000);
     }}
     {pre}_copyToClipboard = (text, rowi, elemi) => {{
         let textArea, elem;
@@ -741,45 +792,35 @@ Then "colOpts" should be [["json", ["jsonWidth", 500], "clipboard"], [], ["clipb
             elem = document.querySelector("#{pre}_elem_" + rowi + "_" + elemi); elem.appendChild(textArea);
             textArea.focus(); textArea.select(); document.execCommand('copy');
         }} finally {{ if (textArea) elem.removeChild(textArea); }}
-    }}
-    {pre}_edit = async (row, rowi, e) => {{
-        e.stopPropagation(); nodes = Array.from(document.querySelectorAll("#{pre}_row_" + rowi + " > .k1TableElement"));
-        for (let i = 0; i < nodes.length; i++) {{
-            nodes[i].innerHTML = "<input type='text' class='input input-bordered' />";
-            nodes[i].querySelector("input").value = {pre}_data[rowi][i];
-            nodes[i].onclick = (e) => {{ e.stopPropagation(); }}
+    }}""" if self._colOpts_hasClip() else ""                                     # Table
+        onclickHeader = ""; headerCommon = f"""let col=null;try{{col=parseInt(e.target.id.split("_").at(-1));}}catch(e){{}}""" # Table
+        if self.onclickHeaderFName and not self.sortF: onclickHeader = f"""{headerCommon}{self.onclickHeaderFName}(e, col);""" # Table
+        elif self.sortF: onclickHeader = f"{self.onclickHeaderFName}(e, col)" if self.onclickHeaderFName else ""; onclickHeader = f"""
+{headerCommon}; let sortF = ({json.dumps(isinstance(self.sortF, str))}) ? {self.sortF} : ((data, col) => {{ return data.toSorted((a,b) => (a[col] === b[col]) ? 0 : ((a[col] > b[col]) ? 1 : -1)); }});
+let asc = true; let headerEId = e.target.id; if (e.target.innerHTML.trim().at(-1) == "↑") asc = false;
+let newData = sortF({pre}_obj.data.filter((x) => x !== null), col); {pre}_obj.data = asc ? newData : newData.toReversed(); {pre}_obj.renderRaw();
+let headerE = document.querySelector("#"+headerEId); headerE.innerHTML = headerE.innerHTML.replaceAll("↑","").replaceAll("↓","").trim() + " " + (asc ? "↑" : "↓");
+e.target = headerE; {onclickHeader};"""                                          # Table
+        onclickFName = self.onclickFName; pre_select = f"""
+    {pre}_select = async (row, i, e, visual=false) => {{ // visual: if true, only update the visuals, else also runs the custom onclickFName function
+        if (i < 0) {{ {onclickHeader}return; }}; if (e) e.stopPropagation();
+        if ({json.dumps(self.selectable)}) {{
+            if ({pre}_obj.selectedRowId >= 0) document.querySelector("#{pre}_row_" + {pre}_obj.selectedRowId).style.backgroundColor = ""; s = document.querySelector("#{pre}_row_" + i).style;
+            if ({pre}_obj.selectedRowId === i) {{ s.backgroundColor = ""; {pre}_obj.selectedRowId = -1; {pre}_obj.selectedRow = null; }} else {{ s.backgroundColor = "#dddddd"; {pre}_obj.selectedRowId = i; {pre}_obj.selectedRow = row; }}
+        }} if (!visual && {json.dumps(onclickFName)}) {{
+            try {{ if ({onclickFName}.constructor.name === "AsyncFunction") await {onclickFName}(row, i, e); else {onclickFName}(row, i, e);
+            }} catch (e) {{ if (e.message !== "\ue000nopropagate") window.alertCallback(e); }}
         }}
-        document.querySelector("#{pre}_row_" + rowi + ">.editIcon").innerHTML = "<span style='cursor: pointer' onclick='{pre}_finishedEdit({pre}_data[" + rowi + "], " + rowi + ", event)'></span>"
-        document.querySelector("#{pre}_row_" + rowi + ">.editIcon>span").innerHTML = atob('{base64.b64encode(icons['check'].encode()).decode()}')
-    }}
-    {pre}_finishedEdit = async (row, rowi, e) => {{
-        e.stopPropagation(); console.log("finishedEdit:", row, rowi, e);
-        nodes  = Array.from(document.querySelectorAll("#{pre}_row_" + rowi + ">.k1TableElement"))
-        inputs = Array.from(document.querySelectorAll("#{pre}_row_" + rowi + ">.k1TableElement>input"));
-        values = inputs.map((inp) => inp.value);
-        try {{ // if the function don't raise any error, then actually registers the element, else just alert the user that the operation failed
-            if ({oneditFName}.constructor.name === "AsyncFunction") res = await {oneditFName}(row, values, rowi, e);
-            else res = {oneditFName}(row, values, rowi, e);
-            for (let i = 0; i < nodes.length; i++) {{ nodes[i].innerHTML = values[i]; }}
-            {pre}_data[rowi] = values;
-            document.querySelector("#{pre}_row_" + rowi + ">.editIcon").innerHTML = "<span style='cursor: pointer' onclick='{pre}_edit({pre}_data[" + rowi + "], " + rowi + ", event)'></span>";
-            document.querySelector("#{pre}_row_" + rowi + ">.editIcon>span").innerHTML = atob('{base64.b64encode(icons['edit'].encode()).decode()}');
-        }} catch (e) {{ if (e.message !== "\ue000nopropagate") window.alertCallback(e); }}
-    }}
-    {pre}_clip = async (e, rowi, elemi) => {{
-        const value = {pre}_data[rowi][elemi]; {pre}_copyToClipboard((typeof(value) === "string") ? value : JSON.stringify(value), rowi, elemi);
-        const icon = document.querySelector("#{pre}_copy_icon_" + rowi + "_" + elemi); icon.innerHTML = atob('{base64.b64encode(icons['check'].encode()).decode()}');
-        setTimeout(() => {{ icon.innerHTML = atob('{base64.b64encode(icons['copy'].encode()).decode()}'); }}, 1000);
-    }}"""                                                                        # Table
+    }}""" if onclickFName or onclickHeader or self.selectable or self.sortF else ""; return f"""if (!window.alertCallback) window.alertCallback = alert; {selectCallback}{pre_delete}{pre_edit}{pre_clip}{pre_select}""" # Table
     def __ror__(self, it) -> Html:                                               # Table
-        headers = self.headers; onclickFName = self.onclickFName; ondeleteFName = self.ondeleteFName; oneditFName = self.oneditFName; colOpts = self.colOpts # Table
+        headers = self.headers; onclickFName = self.onclickFName; onclickHeaderFName = self.onclickHeaderFName; ondeleteFName = self.ondeleteFName; oneditFName = self.oneditFName; selectable = self.selectable; colOpts = self.colOpts # Table
         it = it | cli.deref(2); pre = cli.init._jsDAuto(); N = len(it);          # Table
         try: F = max([len(x) for x in it])                                       # Table
         except: F = len(self.headers) if self.headers else 1000                  # Table
         colOpts = [] if colOpts is None else list(colOpts)                       # Table
         for i in range(F-len(colOpts)): colOpts.append([])                       # Table
         def felem(i, e, rowi):                                                   # Table
-            idx = f"id='{pre}_elem_{rowi}_{i}' class='k1TableElement'"           # Table
+            idx = f"id='{pre}_elem_{rowi}_{i}' class='k1TableElement {pre}_elem'" # Table
             res = [opt[1] for opt in colOpts[i] if not isinstance(opt, str) and opt[0] == "pad"]; pad = res[0] if len(res) > 0 else 10; style = f"position: relative; padding: {pad}px" # Table
             copy = f"<div style='position: absolute; top: 0px; right: 0px'><span id='{pre}_copy_icon_{rowi}_{i}' style='cursor: pointer' onclick='{pre}_clip(event, {rowi}, {i})'>{icons['copy']}</span></div>" if "clipboard" in colOpts[i] and rowi >= 0 else "" # Table
             if "json" in colOpts[i] and rowi >= 0:                               # Table
@@ -789,52 +830,74 @@ Then "colOpts" should be [["json", ["jsonWidth", 500], "clipboard"], [], ["clipb
             return f"<td {idx} style='{style}'>{copy}{e}</td>"                   # Table
         def frow(i, row):                                                        # Table
             row = [felem(_i, e, i) for _i,e in enumerate(row)]                   # Table
-            if oneditFName: row = ["<td></td>", *row] if i < 0 else [f"<td class='editIcon'><span style='cursor: pointer' onclick='{pre}_edit({pre}_data[{i}], {i}, event)'>{icons['edit']}</span></td>", *row] # Table
-            if ondeleteFName: row = ["<td></td>", *row] if i < 0 else [f"<td class='deleteIcon'><span style='cursor: pointer' onclick='{pre}_delete({pre}_data[{i}], {i}, event)'>{icons['delete']}</span></td>", *row] # Table
-            sticky = "style='position: sticky; top: 0px; background: white; z-index: 100'" if i < 0 else ""; sig = f"id='{pre}_row_{i}' {sticky}" # Table
-            sig = f"<tr {sig} onclick='{pre}_select({pre}_data[{i}], {i}, event)'>" if onclickFName else f"<tr {sig} >"; return sig + "".join(row) + "</tr>" # Table
+            if oneditFName: row = ["<td></td>", *row] if i < 0 else [f"<td class='editIcon'><span style='cursor: pointer' onclick='{pre}_edit({pre}_obj.data[{i}], {i}, event)'>{icons['edit']}</span></td>", *row] # Table
+            if ondeleteFName: row = ["<td></td>", *row] if i < 0 else [f"<td class='deleteIcon'><span style='cursor: pointer' onclick='{pre}_delete({pre}_obj.data[{i}], {i}, event)'>{icons['delete']}</span></td>", *row] # Table
+            sticky = "style='position: sticky; top: 0px; background: white; z-index: 100'" if i < 0 else ""; sig = f"id='{pre}_row_{i}' class='{pre}_row' {sticky}" # Table
+            sig = f"<tr {sig} onclick='{pre}_select({pre}_obj.data[{i}], {i}, event)'>" if onclickFName or onclickHeaderFName or selectable or self.sortF else f"<tr {sig} >"; return sig + "".join(row) + "</tr>" # Table
         contents = "".join([frow(i, row) for i,row in ([(-1, headers), *enumerate(it)] if headers else enumerate(it))]); # Table
-        height = [f"<div id='{pre}_tableWrap' style='height:{self.height}px;overflow-y:auto'>", "</div>"] if self.height else ["", ""]; return Html(f"""
-{height[0]}<table id='{pre}_table'>{contents}</table>{height[1]}
-<script>
-    {pre}_data = {json.dumps(it)};
-    {self._scripts(pre)}
-</script>""")                                                                    # Table
-    def _jsF(self, meta):                                                        # Table
-        fIdx = cli.init._jsFAuto(); dataIdx = cli.init._jsDAuto(); pre = cli.init._jsDAuto(); # Table
-        frow = cli.init._jsFAuto(); felem = cli.init._jsFAuto(); height = f"height: {self.height}px;" if self.height else "" # Table
-        # header, fn, _async = k1lib.kast.asyncGuard(self.capturedSerial._jsF(meta)) # Table
-        headers = self.headers; onclickFName = self.onclickFName; ondeleteFName = self.ondeleteFName; oneditFName = self.oneditFName; colOpts = self.colOpts # Table
-        height = [f"<div id='{pre}_tableWrap' style='height:{self.height}px;overflow-y:auto'>", "</div>"] if self.height else ["", ""]; # Table
-        colOpts = [] if colOpts is None else list(colOpts); return f"""
-{fIdx}_colOpts = {json.dumps(colOpts)};
-{felem} = (i, e, rowi) => {{
-    idx = `id='{pre}_elem_${{rowi}}_${{i}}' class='k1TableElement'`
-    res = {fIdx}_colOpts[i].filter((x) => typeof(x) !== "string").filter((x) => x[0] == "pad").map((x) => x[1]); pad = res.length > 0 ? res[0] : 10; style = `position: relative; padding: ${{pad}}px`
-    copy = ({fIdx}_colOpts[i].includes("clipboard") && rowi >= 0) ? `<div style='position: absolute; top: 0px; right: 0px'><span id='{pre}_copy_icon_${{rowi}}_${{i}}' style='cursor: pointer' onclick='{pre}_clip(event, ${{rowi}}, ${{i}})'>{icons['copy']}</span></div>` : ""
-    if ({fIdx}_colOpts[i].includes("json") && rowi >= 0) {{
-        res = {fIdx}_colOpts[i].filter((x) => typeof(x) !== "string").filter((x) => x[0] == "jsonWidth"). map((x) => x[1]); maxWidth  = (res.length > 0) ? res[0] : 400;
-        res = {fIdx}_colOpts[i].filter((x) => typeof(x) !== "string").filter((x) => x[0] == "jsonHeight").map((x) => x[1]); maxHeight = (res.length > 0) ? res[0] : 300;
+        height = [f"<div id='{pre}_tableWrap' style='max-height:{self.height}px;overflow-y:auto'>", "</div>"] if self.height else ["", ""] # Table
+        scriptS = f"""<script>{self._js_genFuncs(pre)};{pre}_obj.data = {json.dumps(it)};{self._scripts(pre)}</script>""" if self._dynamism("script") or self._dynamism("func") else "" # Table
+        return Html(f"""{height[0]}<table id='{pre}_table'>{contents}</table>{height[1]}{scriptS}""") # Table
+    def _dynamism(self, mode="script"): # whether I need to (loosely) include self._scripts() or self._js_genFuncs() or not # Table
+        if mode == "script": return self.onclickHeaderFName or self.onclickFName or self.oneditFName or self.ondeleteFName or self.selectable or self._colOpts_hasClip() # Table
+        elif mode == "func": return self.selectCallback or self.objName or self.sortF # Table
+        else: raise Exception("Don't have that mode")                            # Table
+    def _js_genFuncs(self, pre, gens=False):                                     # Table
+        """:param gens: whether you *would* like to include gen JS functions or not""" # Table
+        objNameAssign = f"window.{self.objName} = {pre}_obj;" if self.objName else ""; funcDyn = self._dynamism("func"); funcS = f"""
+    renderRaw: () => {{ document.querySelector("#{pre}_table").innerHTML = ({json.dumps(self.headers)} ? [[-1, {json.dumps(self.headers)}], ...{pre}_obj.data.map((x,i) => [i,x])] : {pre}_obj.data.map((x,i) => [i,x])).map(([i, row]) => {pre}_frow(i, row)).join(""); }},
+    _diff: (oldData, newData) => {{ // returns true if there's a diff
+        if (oldData.length !== newData.length) return true;
+        for (let i = 0; i < oldData.length; i++) {{
+            if (oldData[i].length !== newData[i].length) return true;
+            for (let j = 0; j < oldData[0].length; j++) if (oldData[i][j] !== newData[i][j]) return true;
+        }} return false;
+    }},
+    update: (newData, selectOldRow=true) => {{ // update
+        if (!{pre}_obj._diff({pre}_obj.data, newData)) return; // if newData is the same as old, then don't update anything
+        {pre}_obj.data = newData; const selected = {pre}_obj.selectedRowId >= 0;
+        let oldId = ({pre}_obj.selectedRow || [0])[0]; {pre}_obj.selectedRowId = -1; {pre}_obj.selectedRow = null;
+        {pre}_obj.renderRaw(); setTimeout(() => {{ if (selectOldRow && selected) {pre}_obj.selectId(oldId, true); }}, 0);
+    }}, select: (idx, visual=false) => {{ {pre}_select({pre}_obj.data[idx], idx, null, visual); }}, // select specific row from top to bottom in {pre}_obj.data
+    selectId: (idx, visual=false) => {{ // select specific row that has first element equal to idx
+        const res = {pre}_obj.data.map((row, i) => [i, row]).filter(([i, row]) => row[0] == idx);
+        if (res.length > 0) {pre}_obj.select(res[0][0], visual);
+    }}""" if funcDyn else ""; genS = f"""{pre}_colOpts = {json.dumps(self._niceColOpts())};
+{pre}_felem = (i, e, rowi) => {{
+    colOpt = {pre}_colOpts[i] || [];
+    idx = `id='{pre}_elem_${{rowi}}_${{i}}' class='k1TableElement {pre}_elem'`
+    res = colOpt.filter((x) => typeof(x) !== "string").filter((x) => x[0] == "pad").map((x) => x[1]); pad = res.length > 0 ? res[0] : 10; style = `position: relative; padding: ${{pad}}px`
+    copy = (colOpt.includes("clipboard") && rowi >= 0) ? `<div style='position: absolute; top: 0px; right: 0px'><span id='{pre}_copy_icon_${{rowi}}_${{i}}' style='cursor: pointer' onclick='{pre}_clip(event, ${{rowi}}, ${{i}})'>{icons['copy']}</span></div>` : ""
+    if (colOpt.includes("json") && rowi >= 0) {{
+        res = colOpt.filter((x) => typeof(x) !== "string").filter((x) => x[0] == "jsonWidth"). map((x) => x[1]); maxWidth  = (res.length > 0) ? res[0] : 400;
+        res = colOpt.filter((x) => typeof(x) !== "string").filter((x) => x[0] == "jsonHeight").map((x) => x[1]); maxHeight = (res.length > 0) ? res[0] : 300;
         escapeHtml = (x) => x.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
         return `<td ${{idx}} style='text-align: left; ${{style}}'>${{copy}}<pre style='max-width: ${{maxWidth}}px; max-height: ${{maxHeight}}px; overflow-x: auto; overflow-y: auto; background-color: transparent'>${{escapeHtml(JSON.stringify(e, null, 2))}}</pre></td>`
-    }}
-    return `<td ${{idx}} style='${{style}}'>${{copy}}${{e}}</td>`
+    }} return `<td ${{idx}} style='${{style}}'>${{copy}}${{e}}</td>`
 }};
-{frow} = (i, row) => {{
-    row = row.map((e,_i) => {felem}(_i, e, i));
-    if ({json.dumps(oneditFName)}) row = i < 0 ? ["<td></td>", ...row] : [`<td class='editIcon'><span style='cursor: pointer' onclick='{pre}_edit({pre}_data[${{i}}], ${{i}}, event)'>{icons['edit']}</span></td>`, ...row];
-    if ({json.dumps(ondeleteFName)}) row = i < 0 ? ["<td></td>", ...row] : [`<td class='deleteIcon'><span style='cursor: pointer' onclick='{pre}_delete({pre}_data[${{i}}], ${{i}}, event)'>{icons['delete']}</span></td>`, ...row];
+{pre}_frow = (i, row) => {{
+    row = row.map((e,_i) => {pre}_felem(_i, e, i));
+    if ({json.dumps(self.oneditFName)}) row = i < 0 ? ["<td></td>", ...row] : [`<td class='editIcon'><span style='cursor: pointer' onclick='{pre}_edit({pre}_obj.data[${{i}}], ${{i}}, event)'>{icons['edit']}</span></td>`, ...row];
+    if ({json.dumps(self.ondeleteFName)}) row = i < 0 ? ["<td></td>", ...row] : [`<td class='deleteIcon'><span style='cursor: pointer' onclick='{pre}_delete({pre}_obj.data[${{i}}], ${{i}}, event)'>{icons['delete']}</span></td>`, ...row];
     sticky = i < 0 ? "style='position: sticky; top: 0px; background: white; z-index: 100'" : "";
-    return `<tr id='{pre}_row_${{i}}' ${{sticky}} onclick='{pre}_select({pre}_data[${{i}}], ${{i}}, event)'>` + row.join("") + "</tr>";
-}};
+    let onclickS = ({json.dumps(self.onclickFName or self.onclickHeaderFName or self.onclickFName or self.sortF)}) ? `onclick='{pre}_select({pre}_obj.data[${{i}}], ${{i}}, event)'` : "";
+    return `<tr id='{pre}_row_${{i}}' class='{pre}_row' ${{sticky}} ${{onclickS}}>` + row.join("") + "</tr>";
+}};""" if funcDyn or gens else ""                                                # Table
+        return f"""{pre}_obj = {{ selectedRowId: -1, selectedRow: null, data: [], {funcS} }}; {objNameAssign}; {genS}""" # Table
+    def _niceColOpts(self): return [] if self.colOpts is None else list(self.colOpts) # Table
+    def _colOpts_hasClip(self): return self._niceColOpts() | cli.filt(lambda x: "clipboard" in x) | cli.shape(0) # Table
+    def _jsF(self, meta):                                                        # Table
+        fIdx = cli.init._jsFAuto(); dataIdx = cli.init._jsDAuto(); pre = cli.init._jsDAuto(); # Table
+        height = f"height: {self.height}px;" if self.height else ""              # Table
+        # header, fn, _async = k1lib.kast.asyncGuard(self.capturedSerial._jsF(meta)) # Table
+        headers = self.headers; height = [f"<div id='{pre}_tableWrap' style='height:{self.height}px;overflow-y:auto'>", "</div>"] if self.height else ["", ""]; return f"""
+{self._js_genFuncs(pre, True)}
 {fIdx} = (it) => {{
     const N = it.length; const F = (N > 0) ? (it.map(x => x.length).toMax()) : ({json.dumps(headers)} ? {json.dumps(headers)}.length : 1000);
-    for (const i of [...Array(F-{fIdx}_colOpts.length).keys()]) {fIdx}_colOpts.push([]);
-    contents = ({json.dumps(headers)} ? [[-1, {json.dumps(headers)}], ...it.map((x,i) => [i,x])] : it.map((x,i) => [i,x])).map(([i, row]) => {frow}(i, row)).join("");
-    return unescape(`
+    for (const i of [...Array(F-{pre}_colOpts.length).keys()]) {pre}_colOpts.push([]);
+    contents = ({json.dumps(headers)} ? [[-1, {json.dumps(headers)}], ...it.map((x,i) => [i,x])] : it.map((x,i) => [i,x])).map(([i, row]) => {pre}_frow(i, row)).join(""); return unescape(`
 {height[0]}<table id="{pre}_table">${{contents}}</table>{height[1]}
 %3Cscript%3E
-    {pre}_data = JSON.parse(atob('${{btoa(JSON.stringify(it))}}'));
+    {pre}_obj.data = JSON.parse(decodeURIComponent(escape(atob('${{btoa(unescape(encodeURIComponent(JSON.stringify(it))))}}'))));
     {self._scripts(pre)}
-%3C/script%3E`)
-}}""", fIdx                                                                      # Table
+%3C/script%3E`); }}""", fIdx                                                     # Table

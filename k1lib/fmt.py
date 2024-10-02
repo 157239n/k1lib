@@ -132,16 +132,29 @@ Example::
     return generic(flops, computationRates)                                      # compRate
 k1lib.settings.cli.kjs.jsF[compRate] = _jsF_generic(computationRates)            # compRate
 times = {i:f"{p}s" for i, p in metricPrefixes.items() if i <= 0}                 # compRate
-def time(seconds=0):                                                             # time
+def time(seconds=0, metric=True):                                                # time
     """Formats small times.
 Example::
 
-    fmt.time(50) # returns "50.0 s"
-    fmt.time(4000) # returns "4000.0 s"
-    fmt.time(0.02) # returns "20.0 ms"
-    fmt.time(1e-5) # returns "10.0 us"
+    fmt.time(50)          # returns "50.0 s"
+    fmt.time(0.02)        # returns "20.0 ms"
+    fmt.time(1e-5)        # returns "10.0 us"
+    fmt.time(4000)        # returns "4000.0 s"
+    fmt.time(4000, False) # returns "1h 6m 40s". Units include years, months, days, hours, minutes, seconds
 """                                                                              # time
-    return generic(seconds, times)                                               # time
+    if metric or seconds < 60: return generic(seconds, times)                    # time
+    years = int(seconds / 31_536_000); seconds %= 31_536_000                     # time
+    months = int(seconds / (86400*30)); seconds %= 86400*30                      # time
+    days = int(seconds / 86400); seconds %= 86400                                # time
+    hours = int(seconds / 3600); seconds %= 3600                                 # time
+    minutes = int(seconds / 60); seconds %= 60; s = ""                           # time
+    s += f"{years} years " if years else ""                                      # time
+    s += f"{months} months " if months else ""                                   # time
+    s += f"{days} days " if days else ""                                         # time
+    s += f"{hours}h " if hours else ""                                           # time
+    s += f"{minutes}m " if minutes else ""                                       # time
+    s += f"{int(seconds)}s" if int(seconds) else ""                              # time
+    return s                                                                     # time
 k1lib.settings.cli.kjs.jsF[time] = _jsF_generic(times)                           # time
 items = {0: "", 1: "k", 2: "M", 3: "B", 4: "T"}                                  # time
 def item(n=0):                                                                   # item

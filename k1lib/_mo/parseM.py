@@ -7,20 +7,20 @@ import k1lib.cli as cli
 __all__ = ["parse"]
 mainNumsDict = {"meth": 1, "eth": 2, "prop": 3, "but": 4, "pent": 5, "hex": 6, "hept": 7, "oct": 8, "non": 9, "dec": 10, "undec": 11, "dodec": 12, "tridec": 13, "tetradec": 14, "pentadec": 15, "hexadec": 16, "heptadec": 17, "octadec": 18, "nonadec": 19}
 bondsDict = {"ane": 1, "ene": 2, "yne": 3}
-cis_trans = "(?P<cis_trans>[, \-]?((cis)|(trans))$)"
+cis_trans = "(?P<cis_trans>[, \\-]?((cis)|(trans))$)"
 def join(a): return "(" + "|".join(f"({p})" for p in a) + ")"                    # join
 pres1 = ["n-", "o-", "p-"]                                                       # join
 pres2 = ["mono", "di", "tri", "tetra", "penta", "hexa"]                          # join
 pres3 = ["iso", "cyclo", "sec-", "tert-"]                                        # join
-pres = f"{join(pres1)}?[\-]?{join(pres2)}?[\-]?{join(pres3)}?"                   # join
-main_pre = f"(?P<main_pre>(((cis-)|(trans-))?[0-9,\-])*{pres})"                  # join
+pres = f"{join(pres1)}?[\\-]?{join(pres2)}?[\\-]?{join(pres3)}?"                 # join
+main_pre = f"(?P<main_pre>(((cis-)|(trans-))?[0-9,\\-])*{pres})"                 # join
 #main_pre = "(?P<main_pre>(n-)?(cyclo))"                                         # join
 mids = list(mainNumsDict.keys()) + ["benz", "naphthal", "pyridine", "xylenol", "ether", "amine"] # join
 main_mid = "(?P<main_mid>" + "|".join(f"({m})" for m in mids) + ")"              # join
 sufs = list(bondsDict.keys()) + ["anol", "ate", "adiene", "aldehyde", "anone"]   # join
 main_suf = f"(?P<main_suf>{join(sufs)})"                                         # join
 main = f"(?P<main>{main_pre}?{main_mid}{main_suf}?{cis_trans}?)$"; mainC = re.compile(f"^{main}") # join
-branch_pre = f"(?P<branch_pre>(((cis-)|(trans-))?[0-9,\-])*{pres})"              # join
+branch_pre = f"(?P<branch_pre>(((cis-)|(trans-))?[0-9,\\-])*{pres})"             # join
 bMids = mids + ["fluoro", "chloro", "bromo", "iodo", "nitro", "phenyl", "perfluoro"] # join
 branch_mid = "(?P<branch_mid>" + join(bMids) + ")"                               # join
 branch_suf = "(?P<branch_suf>yl)"                                                # join

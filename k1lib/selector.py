@@ -28,7 +28,7 @@ language, and outputs nice lines. Example::
 :param defaultProp: default property, if statement doesn't have one"""           # preprocess
     # filtering unwanted characters and quirky spaces                            # preprocess
     lines = [e for l in selectors.split("\n") for e in l.split(";")]             # preprocess
-    selectors = [re.sub("(^\s+)|(\s+$)", "", re.sub("\s\s+", " ", line)).replace(" >", ">").replace("> ", ">").replace(" :", ":").replace(": ", ":").replace(" ,", ",").replace(", ", ",").replace(";", "\n").replace(" \n", "\n").replace("\n ", "\n") for line in lines if line != ""] # preprocess
+    selectors = [re.sub("(^\\s+)|(\\s+$)", "", re.sub("\\s\\s+", " ", line)).replace(" >", ">").replace("> ", ">").replace(" :", ":").replace(": ", ":").replace(" ,", ",").replace(", ", ",").replace(";", "\n").replace(" \n", "\n").replace("\n ", "\n") for line in lines if line != ""] # preprocess
     # adding "*" to all selectors with no props specified                        # preprocess
     selectors = [selector if ":" in selector else f"{selector}:{defaultProp}" for selector in selectors] # preprocess
     # expanding comma-delimited selectors                                        # preprocess
