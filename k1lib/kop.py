@@ -72,7 +72,7 @@ class RandomPoints(Drawable): # displays random points                          
     def __copy__(self): return RandomPoints(np.copy(self.data))                  # RandomPoints
 class Drawables(Drawable): # a container to just draw everything out             # Drawables
     def __init__(self, drawables:"List[Drawable]", config=None):                 # Drawables
-        """A container with multiple :class:`Drawable`s, to draw out everything possible within a single coordinate frame""" # Drawables
+        """A container with multiple :class:`Drawable` s, to draw out everything possible within a single coordinate frame""" # Drawables
         self.drawables = drawables; self.config = config or {}                   # Drawables
     def __copy__(self): return Drawables([copy.copy(d) for d in self.drawables]) # Drawables
     def bounds(self): return self.drawables | cli.op().bounds().all() | cli.T() | cli.toMin() + cli.toMin() + cli.toMax() + cli.toMax() | cli.deref() # Drawables
@@ -119,8 +119,8 @@ operations are fast
 
 The #transforms is a little complicated:
 - Original ray is 0, then each time a glass/mirror surface does something interesting,
-  the outgoing ray is incremented by 1. If it doesn't touch the optic element, then
-  it keeps the same number as before
+the outgoing ray is incremented by 1. If it doesn't touch the optic element, then
+it keeps the same number as before
 
 :param prevRays: a reference to the previous Rays object, in order to limit the length of all previous rays!
 :param ogSurface: the surface that generates this Rays"""                        # Rays
@@ -141,7 +141,7 @@ The #transforms is a little complicated:
     @staticmethod                                                                # Rays
     def parallelToBounds(x=0, y=0, bounds=None, N=10, color=700, power=1, coverage=0.9, angleOffset=0): # Rays
         """Creates parallel rays starting from a particular point to the center of some bounds.
-The bounds should have the format (xmin, ymin, xmax, ymax). :class:`Surface`s, :class:`OpticElement`s
+The bounds should have the format (xmin, ymin, xmax, ymax). :class:`Surface`s, :class:`OpticElement` s
 all have the .bounds() method, so you can use them
 
 See also: :meth:`parallel`

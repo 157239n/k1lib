@@ -40,10 +40,12 @@ of the notebook. The root directory will always be that of the k1lib library.
                 answer.append("".join(source[1:]))
             with open(f"{stub}/{nb}.py", 'w+') as f: f.write("\n".join(answer))
     else: exportAll()
-            
+
+    print("installing...")
     install()
-    if upload or dist: uploadF()
-    if dist: distributedInstall()
+    print("installed")
+    if upload or dist: print("uploading..."); uploadF(); print("uploaded")
+    if dist: print("dist installing..."); distributedInstall(); print("dist installed")
 
 def uploadF(): # installs in the local pypi server
     None | cmd("cd ~/k1lib && rm -rf ~/pypi/k1lib && mkdir -p ~/pypi/k1lib && rm -rf dist && python -m build && mv dist/* ~/pypi/k1lib/") | ignore()

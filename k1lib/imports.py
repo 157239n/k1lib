@@ -17,7 +17,7 @@ if settings.startup.import_optionals:
         plt.rcParams['figure.dpi'] = 100; plt.rcParams["animation.html"] = "jshtml"
     except: pass
     import dill as pickle, multiprocessing as mp, concurrent.futures as futures, threading
-    import math, os, time, sys, random, logging, traceback, re, typing, glob, warnings, asyncio, ast, itertools, pprint, copy, urllib
+    import math, os, time, sys, random, logging, traceback, re, typing, glob, warnings, asyncio, ast, itertools, pprint, copy, urllib, struct
     import dill, json, inspect, xml, base64, io, html
     import functools; from functools import partial, lru_cache
     import contextlib; from contextlib import contextmanager
@@ -32,7 +32,8 @@ from math import e, pi; inf = float("inf"); nan = float("nan"); # this section i
 h = 6.62607015e-34; hbar = h/(2*pi); Na = 6.0221408e23; kb = 1.380649e-23
 c = 299_792_458; qe = 1.60217663e-19; me = 9.1093837e-31; mn = 1.67262192e-27
 e0 = 8.85418782e-12; Dal = u = 1.6605390666e-27; R = 8.3145; sb = 5.670374e-8
-secondsInYear = 31_556_926; pm = "±"; g = 9.80665
+secondsInYear = 31_556_926; pm = "±"; g = 9.80665; f32 = "f32"; f64 = "f64"
+u8 = "u8"; u16 = "u16"; u32 = "u32"; u64 = "u64"; i8 = "i8"; i16 = "i16"; i32 = "i32"; i64 = "i64"
 if settings.startup.or_patch.numpy: cli.init.patchNumpy()
 if settings.startup.or_patch.dict: cli.init.patchDict()
 if settings.startup.import_optionals:

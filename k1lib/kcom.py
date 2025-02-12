@@ -161,7 +161,6 @@ manner. I've found myself needing this way more often than expected.
         None | cli.cmd(f"rm -rf {shlex.quote(tmpDir)}") | cli.deref(); self._exec1(f"rm -rf {shlex.quote(tmpDir)}"); return [out, err, *files] # Host
     def execPy(self, c:str, fns=None, rmFn=False, pyExec=None):                  # Host
         """Executes some python code.
-Examples::
 
 If .fns is not specified, then will return (List[bytes], List[bytes]) containing (stdout, stderr).
 

@@ -9,7 +9,7 @@ automatically with::
 import k1lib, math, re; from k1lib import cli
 from typing import Dict, Iterator, Tuple
 pygments = k1lib.dep.pygments; bs4 = k1lib.dep.bs4
-__all__ = ["generic", "metricPrefixes", "size", "fromSize", "scale", "fromScale", "dollar", "sizeOf",
+__all__ = ["generic", "metricPrefixes", "mass", "size", "fromSize", "scale", "fromScale", "dollar", "sizeOf",
            "comp", "compRate", "time", "item", "throughput", "txt",
            "js", "py", "html", "sql", "cpp", "java", "php", "ruby",
            "h", "pre", "row", "col", "colors", "rmAnsi"]
@@ -36,7 +36,17 @@ def _jsF_generic(units):                                                        
     }}
 }}""", fIdx                                                                      # _jsF_generic
     return inner                                                                 # _jsF_generic
-sizes = {i: f"{p}B" for i, p in metricPrefixes.items() if i >= 0}; #sizes[0] = "bytes" # _jsF_generic
+masses = {i-1: f"{p}g" for i, p in metricPrefixes.items()}; #sizes[0] = "bytes"  # _jsF_generic
+def mass(_mass=0):                                                               # mass
+    """Formats mass. This is a little different from others, and assume that
+"kg" is the base mass, instead of "g", to be inline with mass definitions. Example::
+
+    mass(3) # returns '3.0 kg'
+    mass(0.3) # returns '300.0 g'
+    mass(3e3) # returns '3.0 Mg'
+"""                                                                              # mass
+    return generic(_mass, masses)                                                # mass
+sizes = {i: f"{p}B" for i, p in metricPrefixes.items() if i >= 0}; #sizes[0] = "bytes" # mass
 def size(_bytes=0):                                                              # size
     """Formats disk size.
 Example::

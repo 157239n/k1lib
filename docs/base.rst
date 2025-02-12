@@ -19,6 +19,7 @@ Classes
 - :class:`k1lib.Range`
 - :class:`k1lib.Domain`
 - :class:`k1lib.AutoIncrement`
+- :class:`k1lib.ConfinedAutoIncrement`
 - :class:`k1lib.Wrapper`
 - :class:`k1lib.Every`
 - :class:`k1lib.RunOnce`
@@ -27,6 +28,16 @@ Classes
 - :class:`k1lib.Absorber`
 - :class:`k1lib.Settings`
 - :class:`k1lib.UValue`
+- :class:`k1lib.ConstantPad`
+- :class:`k1lib.AutoUpdateValue`
+- :class:`k1lib.Aggregate`
+- :class:`k1lib.Perlin`
+
+- :class:`k1lib.cron`
+- :class:`k1lib.cache`
+- :class:`k1lib.preload`
+- :class:`k1lib.TimeSeries`
+- :class:`k1lib.speed`
 
 .. autoclass:: k1lib.Learner
    :members:
@@ -52,6 +63,12 @@ Classes
    :show-inheritance:
 
 .. autoclass:: k1lib.AutoIncrement
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :special-members: __call__
+
+.. autoclass:: k1lib.ConfinedAutoIncrement
    :members:
    :undoc-members:
    :show-inheritance:
@@ -94,6 +111,51 @@ Classes
    :show-inheritance:
 
 .. autoclass:: k1lib.UValue
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. autoclass:: k1lib.ConstantPad
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. autoclass:: k1lib.AutoUpdateValue
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. autoclass:: k1lib.Aggregate
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. autoclass:: k1lib.Perlin
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. autoclass:: k1lib.cron
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. autoclass:: k1lib.cache
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. autoclass:: k1lib.preload
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. autoclass:: k1lib.TimeSeries
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. autoclass:: k1lib.speed
    :members:
    :undoc-members:
    :show-inheritance:
@@ -159,7 +221,6 @@ Functions
 
 .. autofunction:: k1lib.isNumeric
 .. autofunction:: k1lib.patch
-.. autofunction:: k1lib.cron
 .. autofunction:: k1lib.wraps
 .. autofunction:: k1lib.squeeze
 .. autofunction:: k1lib.raiseEx
@@ -179,6 +240,15 @@ Functions
 .. autofunction:: k1lib.perlin3d
 .. autofunction:: k1lib.graph
 .. autofunction:: k1lib.digraph
+
+.. autofunction:: k1lib.tempObj
+.. autofunction:: k1lib.aes_encrypt
+.. autofunction:: k1lib.aes_decrypt
+.. autofunction:: k1lib.aes_encrypt_json
+.. autofunction:: k1lib.aes_decrypt_json
+.. autofunction:: k1lib.modbusCrc
+.. autofunction:: k1lib.parseTimeStr
+.. autofunction:: k1lib.compileCExt
 
 Higher order functions
 ----------------------

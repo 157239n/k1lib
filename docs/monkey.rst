@@ -46,12 +46,12 @@ Module :mod:`torch`
 Class :class:`graphviz.Digraph`
 -------------------------------------
 
-.. automethod:: graphviz.dot.Digraph.__call__
+.. automethod:: graphviz.Digraph.__call__
 
 Class :class:`graphviz.Graph`
 -------------------------------------
 
-.. automethod:: graphviz.dot.Graph.__call__
+.. automethod:: graphviz.Graph.__call__
 
 Class :class:`mpl_toolkits.mplot3d.axes3d.Axes3D`
 --------------------------------------------------
@@ -68,6 +68,7 @@ Module :mod:`matplotlib.pyplot`
 .. automethod:: matplotlib.pyplot.k3d
 .. automethod:: matplotlib.pyplot.animate
 .. automethod:: matplotlib.pyplot.getFig
+.. automethod:: matplotlib.pyplot.dplot
 
 Module :mod:`ray`
 --------------------------------------------------

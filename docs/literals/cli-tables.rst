@@ -5,63 +5,65 @@
 +--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
 | :class:`~conv.toTensor`        | :class:`~structural.T`                   | :class:`~utils.shape`         | :class:`~filt.filter_`        | :class:`~modifier.aS`            |
 +--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
-| :class:`~conv.toRange`         | :class:`~structural.reshape`             | :class:`~utils.item`          | :class:`~filt.inSet`          | :class:`~modifier.iterDelay`     |
+| :class:`~conv.toRange`         | :class:`~structural.reshape`             | :class:`~utils.resize`        | :class:`~filt.inSet`          | :class:`~modifier.iterDelay`     |
 +--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
-| :class:`~conv.toList`          | :class:`~structural.insert`              | :class:`~utils.rItem`         | :class:`~filt.contains`       | :class:`~modifier.apply`         |
+| :class:`~conv.toList`          | :class:`~structural.insert`              | :class:`~utils.item`          | :class:`~filt.contains`       | :class:`~modifier.apply`         |
 +--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
-| :class:`~conv.toSum`           | :class:`~structural.splitW`              | :class:`~utils.iden`          | :class:`~filt.empty`          | :class:`~modifier.applyMp`       |
+| :class:`~conv.toSum`           | :class:`~structural.splitW`              | :class:`~utils.rItem`         | :class:`~filt.empty`          | :class:`~modifier.applyMp`       |
 +--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
-| :class:`~conv.toProd`          | :class:`~structural.splitC`              | :class:`~utils.join`          | :meth:`~filt.isNumeric`       | :class:`~modifier.parallel`      |
+| :class:`~conv.toProd`          | :class:`~structural.splitC`              | :class:`~utils.iden`          | :meth:`~filt.isNumeric`       | :class:`~modifier.parallel`      |
 +--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
-| :class:`~conv.toAvg`           | :class:`~structural.joinStreams`         | :class:`~utils.wrapList`      | :meth:`~filt.instanceOf`      | :class:`~modifier.applyCl`       |
+| :class:`~conv.toAvg`           | :class:`~structural.joinStreams`         | :class:`~utils.join`          | :meth:`~filt.instanceOf`      | :class:`~modifier.applyCl`       |
 +--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
-| :class:`~conv.toMean`          | :class:`~structural.joinSt`              | :class:`~utils.equals`        | :class:`~filt.head`           | :class:`~modifier.applyTh`       |
+| :class:`~conv.toMean`          | :class:`~structural.joinSt`              | :class:`~utils.wrapList`      | :class:`~filt.head`           | :class:`~modifier.applyTh`       |
 +--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
-| :class:`~conv.toStd`           | :class:`~structural.joinStreamsRandom`   | :class:`~utils.reverse`       | :class:`~filt.tail`           | :class:`~modifier.applySerial`   |
+| :class:`~conv.toStd`           | :class:`~structural.joinStreamsRandom`   | :class:`~utils.equals`        | :class:`~filt.tail`           | :class:`~modifier.applySerial`   |
 +--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
-| :class:`~conv.toMedian`        | :class:`~structural.activeSamples`       | :class:`~utils.ignore`        | :class:`~filt.cut`            | :class:`~modifier.sort`          |
+| :class:`~conv.toMedian`        | :class:`~structural.activeSamples`       | :class:`~utils.reverse`       | :class:`~filt.cut`            | :class:`~modifier.sort`          |
 +--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
-| :class:`~conv.toMax`           | :meth:`~structural.table`                | :class:`~utils.rateLimit`     | :class:`~filt.rows`           | :class:`~modifier.sortF`         |
+| :class:`~conv.toMax`           | :meth:`~structural.table`                | :class:`~utils.ignore`        | :class:`~filt.rows`           | :class:`~modifier.sortF`         |
 +--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
-| :class:`~conv.toMin`           | :class:`~structural.batched`             | :class:`~utils.timeLimit`     | :class:`~filt.intersection`   | :class:`~modifier.consume`       |
+| :class:`~conv.toMin`           | :class:`~structural.batched`             | :class:`~utils.rateLimit`     | :class:`~filt.intersection`   | :class:`~modifier.consume`       |
 +--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
-| :class:`~conv.toArgmin`        | :class:`~structural.batchedTrigger`      | :meth:`~utils.tab`            | :class:`~filt.union`          | :class:`~modifier.randomize`     |
+| :class:`~conv.toArgmin`        | :class:`~structural.batchedTrigger`      | :class:`~utils.timeLimit`     | :class:`~filt.union`          | :class:`~modifier.randomize`     |
 +--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
-| :class:`~conv.toArgmax`        | :class:`~structural.window`              | :meth:`~utils.indent`         | :class:`~filt.unique`         | :class:`~modifier.stagger`       |
+| :class:`~conv.toArgmax`        | :class:`~structural.window`              | :meth:`~utils.tab`            | :class:`~filt.unique`         | :class:`~modifier.stagger`       |
 +--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
-| :class:`~conv.toImg`           | :class:`~structural.groupBy`             | :class:`~utils.clipboard`     | :class:`~filt.breakIf`        | :class:`~modifier.op`            |
+| :class:`~conv.toImg`           | :class:`~structural.groupBy`             | :meth:`~utils.indent`         | :class:`~filt.breakIf`        | :class:`~modifier.op`            |
 +--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
-| :class:`~conv.toRgb`           | :class:`~structural.ungroup`             | :class:`~utils.deref`         | :class:`~filt.mask`           | :class:`~modifier.integrate`     |
+| :class:`~conv.toRgb`           | :class:`~structural.ungroup`             | :class:`~utils.clipboard`     | :class:`~filt.mask`           | :class:`~modifier.integrate`     |
 +--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
-| :class:`~conv.toRgba`          | :class:`~structural.insertColumn`        | :class:`~utils.bindec`        | :class:`~filt.tryout`         | :class:`~modifier.roll`          |
+| :class:`~conv.toRgba`          | :class:`~structural.insertColumn`        | :class:`~utils.deref`         | :class:`~filt.tryout`         | :class:`~modifier.roll`          |
 +--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
-| :class:`~conv.toGray`          | :class:`~structural.insertIdColumn`      | :class:`~utils.smooth`        | :meth:`~filt.resume`          | :class:`~modifier.clamp`         |
+| :class:`~conv.toGray`          | :class:`~structural.insertIdColumn`      | :class:`~utils.bindec`        | :meth:`~filt.resume`          | :class:`~modifier.clamp`         |
 +--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
-| :class:`~conv.toDict`          | :class:`~structural.insId`               | :meth:`~utils.disassemble`    | :class:`~filt.trigger`        |                                  |
+| :class:`~conv.toDict`          | :class:`~structural.insId`               | :class:`~utils.smooth`        | :class:`~filt.trigger`        |                                  |
 +--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
-| :class:`~conv.toFloat`         | :meth:`~structural.unsqueeze`            | :meth:`~utils.tree`           | :class:`~filt.filtStd`        |                                  |
+| :class:`~conv.toFloat`         | :meth:`~structural.unsqueeze`            | :meth:`~utils.disassemble`    | :class:`~filt.filtStd`        |                                  |
 +--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
-| :class:`~conv.toInt`           | :class:`~structural.count`               | :class:`~utils.lookup`        |                               |                                  |
+| :class:`~conv.toInt`           | :class:`~structural.count`               | :meth:`~utils.tree`           |                               |                                  |
 +--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
-| :class:`~conv.toBytes`         | :class:`~structural.hist`                | :class:`~utils.lookupRange`   |                               |                                  |
+| :class:`~conv.toRoman`         | :class:`~structural.hist`                | :class:`~utils.lookup`        |                               |                                  |
 +--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
-| :class:`~conv.toDataUri`       | :class:`~structural.permute`             | :class:`~utils.getitems`      |                               |                                  |
+| :class:`~conv.toBytes`         | :class:`~structural.permute`             | :class:`~utils.lookupRange`   |                               |                                  |
 +--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
-| :class:`~conv.toAnchor`        | :class:`~structural.AA_`                 | :class:`~utils.backup`        |                               |                                  |
+| :class:`~conv.toDataUri`       | :class:`~structural.AA_`                 | :class:`~utils.getitems`      |                               |                                  |
 +--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
-| :class:`~conv.toHtml`          | :class:`~structural.peek`                | :class:`~utils.sketch`        |                               |                                  |
+| :class:`~conv.toAnchor`        | :class:`~structural.peek`                | :class:`~utils.backup`        |                               |                                  |
 +--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
-| :meth:`~conv.toAscii`          | :class:`~structural.peekF`               | :class:`~utils.syncStepper`   |                               |                                  |
+| :class:`~conv.toHtml`          | :class:`~structural.peekF`               | :class:`~utils.sketch`        |                               |                                  |
 +--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
-| :meth:`~conv.toHash`           | :class:`~structural.repeat`              | :class:`~utils.zeroes`        |                               |                                  |
+| :meth:`~conv.toAscii`          | :class:`~structural.repeat`              | :class:`~utils.syncStepper`   |                               |                                  |
 +--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
-| :class:`~conv.toCsv`           | :meth:`~structural.repeatF`              | :class:`~utils.normalize`     |                               |                                  |
+| :meth:`~conv.toHash`           | :meth:`~structural.repeatF`              | :class:`~utils.zeroes`        |                               |                                  |
 +--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
-| :class:`~conv.toYaml`          | :class:`~structural.repeatFrom`          | :class:`~utils.branch`        |                               |                                  |
+| :class:`~conv.toCsv`           | :class:`~structural.repeatFrom`          | :class:`~utils.normalize`     |                               |                                  |
 +--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
-| :class:`~conv.Audio`           | :class:`~structural.oneHot`              |                               |                               |                                  |
+| :class:`~conv.toYaml`          | :class:`~structural.oneHot`              | :class:`~utils.branch`        |                               |                                  |
 +--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
-| :class:`~conv.toAudio`         | :class:`~structural.latch`               |                               |                               |                                  |
+| :class:`~conv.Audio`           | :class:`~structural.latch`               |                               |                               |                                  |
++--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
+| :class:`~conv.toAudio`         |                                          |                               |                               |                                  |
 +--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
 | :class:`~conv.toUnix`          |                                          |                               |                               |                                  |
 +--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
@@ -86,6 +88,12 @@
 | :class:`~conv.idxsToNdArray`   |                                          |                               |                               |                                  |
 +--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
 | :class:`~conv.toFileType`      |                                          |                               |                               |                                  |
++--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
+| :class:`~conv.toQr`            |                                          |                               |                               |                                  |
++--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
+| :class:`~conv.toExcel`         |                                          |                               |                               |                                  |
++--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
+| :class:`~conv.toMdTable`       |                                          |                               |                               |                                  |
 +--------------------------------+------------------------------------------+-------------------------------+-------------------------------+----------------------------------+
 
 +----------------------------------------+----------------------------+------------------------------+----------------------------+---------------------------+

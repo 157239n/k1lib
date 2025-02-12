@@ -332,6 +332,13 @@ arguments out. Just for convenience really. Example::
         else:                                                                    # apply
             cols = [col] if isinstance(col, int) else col                        # apply
             return "".join([f".apply(({var}) => {fn}, {c})" for c in cols]), header # apply
+    def _pyF(self, expr, **kw):                                                  # apply
+        if self.column is not None: return None, None, NotImplemented, None      # apply
+        vD = {}; kwS = ""; varAuto = init._pyFAuto; rowN = varAuto(); inverted = "" # apply
+        if self.inverted: inverted = "*"; self = self.preInvApply                # apply
+        for k,v in self.kwargs: varN = varAuto(); vD[varN] = v; kwS += f", {k}={varN}" # apply
+        funcN = varAuto(); vD[funcN] = self._fC                                  # apply
+        return "", "", f"({funcN}({inverted}{rowN}{kwS}) for {rowN} in {expr})", vD # apply
 cloudpickle = k1lib.dep("cloudpickle", url="https://github.com/cloudpipe/cloudpickle") # apply
 def executeFunc(common, line, usingDill):                                        # executeFunc
     import time                                                                  # executeFunc
@@ -550,9 +557,13 @@ s.add("sudoTimeout", 300, "seconds before deleting the stored password for sudo 
 s.add("cpuLimit", None, "if specified (int), will not schedule more jobs if the current number of assigned cpus exceeds this") # applyMp
 _password = k1lib.Wrapper(None); _cpuUsed = k1lib.Wrapper(0)                     # applyMp
 def removePw():                                                                  # removePw
+    """Thread that deletes stored password for applyCl sudo commands"""          # removePw
     while True: time.sleep(settings.applyCl.sudoTimeout); _password.value = None # removePw
-t = threading.Thread(target=removePw, daemon=True).start()                       # removePw
-_nodeIdsCache = k1lib.Wrapper([])                                                # removePw
+_removePwStarted = [False]                                                       # removePw
+def _start_removePwThread():                                                     # _start_removePwThread
+    if _removePwStarted[0]: return                                               # _start_removePwThread
+    _removePwStarted[0] = True; t = threading.Thread(target=removePw, daemon=True).start() # _start_removePwThread
+_nodeIdsCache = k1lib.Wrapper([])                                                # _start_removePwThread
 def specificNode(f, nodeId:str, num_gpus=0): # modify a function so that it will only run on a specific node only # specificNode
     if num_gpus > 0:                                                             # specificNode
         #return f.options(num_gpus=num_gpus, scheduling_strategy="SPREAD")       # specificNode
@@ -974,8 +985,8 @@ fall back to :meth:`applyCl.aS`
 :param kwargs: keyword arguments to pass to :class:`applyCl`"""                  # applyCl
         global _password; import getpass                                         # applyCl
         if sudo:                                                                 # applyCl
-            if _password() is None:                                              # applyCl
-                print("Enter password:"); _password.value = getpass.getpass(prompt="") # applyCl
+            _start_RemovePwThread()                                              # applyCl
+            if _password() is None: print("Enter password:"); _password.value = getpass.getpass(prompt="") # applyCl
             return   nodeIds | applyCl.aS(lambda: _password() | cli.cmd(f"sudo -S {s}") | cli.deref(), **kwargs) | cli.deref() # applyCl
         else: return nodeIds | applyCl.aS(lambda: None        | cli.cmd(s)              | cli.deref(), **kwargs) | cli.deref() # applyCl
     @staticmethod                                                                # applyCl
@@ -1621,14 +1632,10 @@ Example::
     This is how it works::
 
         a = np.array([1, 5, 9, 2, 6, 3, 7, 4, 8])
-        # returns np.array([1, 5, 9, 2, 6, 3, 7, 4, 8])
-        a | sort(None, unsort=True)
-        # returns np.array([1, 2, 3, 4, 5, 6, 7, 8, 9]), normal sort
-        a | sort(None)
-        # returns np.array([-3.5,  0.5,  4.5, -2.5,  1.5, -1.5,  2.5, -0.5,  3.5]), sorts, do transformation, then unsort
-        a | (sort(None, unsort=True) | aS(lambda x: x - x[-1]/2))
-        # returns np.array([12.25,  0.25, 20.25,  6.25,  2.25,  2.25,  6.25,  0.25, 12.25])
-        a | (sort(None, unsort=True) | aS(lambda x: (x - x[-1]/2)**2))
+        a | sort(None, unsort=True)                                    # returns np.array([1, 5, 9, 2, 6, 3, 7, 4, 8])
+        a | sort(None)                                                 # returns np.array([1, 2, 3, 4, 5, 6, 7, 8, 9]), normal sort
+        a | (sort(None, unsort=True) | aS(lambda x: x - x[-1]/2))      # returns np.array([-3.5,  0.5,  4.5, -2.5,  1.5, -1.5,  2.5, -0.5,  3.5]), sorts, do transformation, then unsort
+        a | (sort(None, unsort=True) | aS(lambda x: (x - x[-1]/2)**2)) # returns np.array([12.25,  0.25, 20.25,  6.25,  2.25,  2.25,  6.25,  0.25, 12.25])
 
     How this works is that it will sort everything as usual, then it'll execute the captured
     transformation and then it will unsort everything. This is for scenarios when an operation

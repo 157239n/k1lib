@@ -441,6 +441,20 @@ This has an alias called ``plt.toFig()``
         except: return _oldShow(*args, **kwargs)                                 # loglinspace
     @k1lib.patch(plt)                                                            # loglinspace
     def _k1_capturedImg(): return _recentImg[0]                                  # loglinspace
+    import matplotlib.dates as mdates                                            # loglinspace
+    @k1lib.patch(plt)                                                            # loglinspace
+    def dplot(xs, ys, zone=0, nice=True, *args, **kwargs):                       # loglinspace
+        """Plots line plot, similar to ``plt.plot``, but with x axis as unix
+timestamp.
+
+:param xs: list of unix timestamps
+:param ys: data you want to plot
+:param zone: time zone. If you're UTC+4, then zone = 4
+:param nice: if True, makes x axis labels tilted at 45 deg, and add a grid
+:param args: passed along to ``plt.plot()``, along with kwargs"""                # loglinspace
+        import datetime; plt.plot([datetime.datetime.fromtimestamp(x+zone*3600) for x in xs], ys, *args, **kwargs) # loglinspace
+        plt.gca().xaxis.set_major_formatter(mdates.DateFormatter("%d/%m %H:%M:%S")) # loglinspace
+        if nice: plt.xticks(rotation=45); plt.grid(True)                         # loglinspace
 except: pass                                                                     # loglinspace
 try:                                                                             # loglinspace
     @k1lib.patch(Axes3D)                                                         # loglinspace

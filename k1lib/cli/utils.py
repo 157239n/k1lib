@@ -150,6 +150,7 @@ Example::
     def _jsF(self, meta):                                                        # item
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto(); _slice = "".join(["[0]"]*self.amt) # item
         return f"{fIdx} = ({dataIdx}) => {dataIdx}{_slice}", fIdx                # item
+    def _pyF(self, expr, **kw): return "", "", f"{expr}[0]", {}                  # item
 class rItem(BaseCli):                                                            # rItem
     def __init__(self, idx:int):                                                 # rItem
         """Combines ``rows(idx) | item()``, as this is a pretty common pattern.
@@ -168,6 +169,7 @@ Example::
     def _jsF(self, meta):                                                        # rItem
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # rItem
         return f"{fIdx} = ({dataIdx}) => {dataIdx}[{cli.kjs.v(self.idx)}]", fIdx # rItem
+    def _pyF(self, expr, **kw): return "", "", f"{expr}[{self.idx}]", {}         # rItem
 class iden(BaseCli):                                                             # iden
     def __init__(self):                                                          # iden
         """Yields whatever the input is. Useful for multiple streams.
@@ -182,6 +184,7 @@ Example::
     def _jsF(self, meta):                                                        # iden
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # iden
         return f"{fIdx} = ({dataIdx}) => {dataIdx}", fIdx                        # iden
+    def _pyF(self, expr, **kw): return "", "", expr, {}                          # iden
 class join(BaseCli):                                                             # join
     def __init__(self, delim:str=None):                                          # join
         r"""Merges all strings into 1, with `delim` in the middle. Basically
@@ -191,11 +194,9 @@ class join(BaseCli):                                                            
     [2, "a"] | join("\n")"""                                                     # join
         super().__init__(); self.delim = patchDefaultDelim(delim)                # join
     def _typehint(self, inp): return str                                         # join
-    def __ror__(self, it:Iterator[str]):                                         # join
-        return self.delim.join(init.dfGuard(it) | cli.apply(str))                # join
-    def _jsF(self, meta):                                                        # join
-        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # join
-        return f"{fIdx} = ({dataIdx}) => {dataIdx}.join({json.dumps(self.delim)})", fIdx # join
+    def __ror__(self, it:Iterator[str]): return self.delim.join(init.dfGuard(it) | cli.apply(str)) # join
+    def _jsF(self, meta): fIdx = init._jsFAuto(); dataIdx = init._jsDAuto(); return f"{fIdx} = ({dataIdx}) => {dataIdx}.join({json.dumps(self.delim)})", fIdx # join
+    def _pyF(self, expr, **kw): delimN = init._pyFAuto(); xN = init._pyFAuto(); return "", "", f"{delimN}.join([str({xN}) for {xN} in {expr}])", {delimN: self.delim} # join
 class wrapList(BaseCli):                                                         # wrapList
     def __init__(self):                                                          # wrapList
         """Wraps inputs inside a list. There's a more advanced cli tool
@@ -209,9 +210,8 @@ built from this, which is :meth:`~k1lib.cli.structural.unsqueeze`. Example::
     def __ror__(self, it) -> List[Any]:                                          # wrapList
         if isinstance(it, settings.arrayTypes): return it[None]                  # wrapList
         return [it]                                                              # wrapList
-    def _jsF(self, meta):                                                        # wrapList
-        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # wrapList
-        return f"{fIdx} = ({dataIdx}) => [{dataIdx}]", fIdx                      # wrapList
+    def _jsF(self, meta): fIdx = init._jsFAuto(); dataIdx = init._jsDAuto(); return f"{fIdx} = ({dataIdx}) => [{dataIdx}]", fIdx # wrapList
+    def _pyF(self, expr, **kw): return "", "", f"[{expr}]", {}                   # wrapList
 class _EarlyExp(Exception): pass                                                 # _EarlyExp
 class equals:                                                                    # equals
     def __init__(self):                                                          # equals
@@ -242,9 +242,8 @@ Example::
         if isinstance(it, settings.arrayTypes): return it[::-1]                  # reverse
         if hasPandas and isinstance(it, pd.core.arraylike.OpsMixin): return it[::-1] # reverse
         return reversed(list(it))                                                # reverse
-    def _jsF(self, meta):                                                        # reverse
-        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # reverse
-        return f"{fIdx} = ({dataIdx}) => [...{dataIdx}].reverse()", fIdx         # reverse
+    def _jsF(self, meta): fIdx = init._jsFAuto(); dataIdx = init._jsDAuto(); return f"{fIdx} = ({dataIdx}) => [...{dataIdx}].reverse()", fIdx # reverse
+    def _pyF(self, expr, **kw): return "", "", f"list(reversed({expr}))", {}     # reverse
 class ignore(BaseCli):                                                           # ignore
     def __init__(self):                                                          # ignore
         r"""Just loops through everything, ignoring the output.
@@ -261,9 +260,8 @@ Example::
         if isinstance(it, settings.arrayTypes): return                           # ignore
         if hasPandas and isinstance(it, pd.core.arraylike.OpsMixin): return      # ignore
         for _ in it: pass                                                        # ignore
-    def _jsF(self, meta):                                                        # ignore
-        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # ignore
-        return f"{fIdx} = ({dataIdx}) => {dataIdx}", fIdx                        # ignore
+    def _jsF(self, meta): fIdx = init._jsFAuto(); dataIdx = init._jsDAuto(); return f"{fIdx} = ({dataIdx}) => {dataIdx}", fIdx # ignore
+    def _pyF(self, expr, **kw): return "", "", f"[None for x in {expr}] and None", {} # ignore
 class rateLimit(BaseCli):                                                        # rateLimit
     def __init__(self, f, delay=0.1):                                            # rateLimit
         """Limits the execution flow rate upon a condition.
@@ -335,13 +333,19 @@ passed. Example::
         for e in init.dfGuard(it):                                               # timeLimit
             yield e                                                              # timeLimit
             if _time() > endTime: break                                          # timeLimit
-def tab(pad:str=" "*4):                                                          # tab
-    """Indents incoming string iterator.
+class tab(BaseCli):                                                              # tab
+    def __init__(self, pad:str=" "*4):                                           # tab
+        """Indents incoming string iterator.
 Example::
 
     # prints out indented 0 to 9
     range(10) | tab() | headOut()"""                                             # tab
-    return cli.apply(lambda x: f"{pad}{x}")                                      # tab
+        self.pad = pad                                                           # tab
+    def __ror__(self, it):                                                       # tab
+        pad = self.pad                                                           # tab
+        for x in it: yield f"{pad}{x}"                                           # tab
+    def _pyF(self, expr, **kw):                                                  # tab
+        return "", "", f"('{self.pad}' + str(x) for x in {expr})", {}            # tab
 indent = tab                                                                     # tab
 class clipboard(BaseCli):                                                        # clipboard
     def __init__(self):                                                          # clipboard
@@ -752,6 +756,13 @@ within the given dictionary. There are 3 modes total:
         if self.mode not in ("input", "rm", "fill"): raise Exception(f"lookup()._jsF() only supports modes 'input', 'rm' and 'fill'. Either specify a mode, or a default fill value") # lookup
         fIdx = init._jsFAuto(); dictIdx = f"{init._jsDAuto()}_{round(time.time())}"; dataIdx = init._jsDAuto() # lookup
         return f"//k1_moveOutStart\n{dictIdx} = {json.dumps(self.d)}; //k1_moveOutEnd\n{fIdx} = ({dataIdx}) => {dataIdx}.lookup({dictIdx}, {cli.kjs.v(self.col)}, {cli.kjs.v(self.fill)}, `{self.mode}`)", fIdx # lookup
+    def _pyF(self, expr, **kw):                                                  # lookup
+        if self.col is not None: return None, None, NotImplemented, None         # lookup
+        mode = self.mode; dN = init._pyFAuto(); xN = init._pyFAuto(); vD = {dN: self.d} # lookup
+        if mode == "error": return "", "", f"({dN}[{xN}] for {xN} in {expr})", vD # lookup
+        if mode == "input": return "", "", f"({dN}.get({xN}, {xN}) for {xN} in {expr})", vD # lookup
+        if mode == "rm": return "", "", f"({dN}[{xN}] for {xN} in {expr} if {xN} in {dN})", vD # lookup
+        if mode == "fill": fillN = init._pyFAuto(); vD[fillN] = self.fill; return "", "", f"({dN}.get({xN}, {fillN}) for {xN} in {expr})", vD # lookup
 _sorted = sorted                                                                 # lookup
 class lookupRange(BaseCli):                                                      # lookupRange
     def __init__(self, ranges, col:int=None, sorted=True, fill=None, mode="error"): # lookupRange

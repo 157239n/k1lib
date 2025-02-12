@@ -91,8 +91,8 @@ Each element in the array is represented by a 5-tuple: ``(name, children, ends h
 - name: name of this element
 - children: a list of elements with similar structure to this element
 - ends here?: whether there is a row in the flat table that exists for this
-  particular element. Most has it, like "a/b/2" and "a/b/3", but some don't,
-  like "a/c", so "ends here?" of "c" is 0.
+particular element. Most has it, like "a/b/2" and "a/b/3", but some don't,
+like "a/c", so "ends here?" of "c" is 0.
 - depth: depth of this element inside the tree
 - value: value associated with this element, explained more below
 

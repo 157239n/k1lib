@@ -1,5 +1,6 @@
 from pkg_resources import get_distribution as _get_distribution
-__version__ = _get_distribution("k1lib").version
+try: __version__ = _get_distribution("k1lib").version
+except: pass
 
 from ._hidden.hiddenFile import hiddenF
 from ._basics import *

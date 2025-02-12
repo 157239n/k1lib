@@ -2,14 +2,28 @@
 Changelogs
 ==========
 
-`1.7 </1.7>`_ - Mar 8th, 2024
+`1.8 </1.8>`_ - Jan 27th, 2025
 -------------------------------
 
 .. currentmodule:: k1lib.cli
 
 Cli:
 
-- Added :class:`~utils.toFileType`, :class:`~utils.toQr`, :class:`~utils.toExcel`, :class:`~utils.toMdTable`
+- Added :class:`~kjs.toPyFunc`, for compiling clis to really optimized python
+
+Generic:
+
+- Added :class:`~k1lib.Struct`, to define structs, serialize and deserialize
+  them to bytes, on both Python and JS side
+
+`1.7 </1.7>`_ - Jan 25th, 2025
+-------------------------------
+
+.. currentmodule:: k1lib.cli
+
+Cli:
+
+- Added :class:`~conv.toFileType`, :class:`~conv.toQr`, :class:`~conv.toExcel`, :class:`~conv.toMdTable`
 
 :class:`~lsext.sql` modifications:
 
@@ -19,8 +33,13 @@ Cli:
 
 Generic:
 
-- Added :meth:`~k1lib.aes_encrypt` and :meth:`~k1lib.aes_decrypt`
-- Added :meth:`k1lib.viz.Clipboard`, :meth:`k1lib.viz.Download`, :meth:`k1lib.viz.Popup`, :meth:`k1lib.viz.qrScanner`
+- Added :meth:`~k1lib.aes_encrypt`, :meth:`~k1lib.aes_decrypt`, :meth:`~k1lib.cache`, :meth:`~k1lib.modbusCrc` and :meth:`~k1lib.parseTimeStr`
+- Added :meth:`k1lib.viz.Clipboard`, :meth:`k1lib.viz.Download`, :meth:`k1lib.viz.Popup`, :meth:`k1lib.viz.qrScanner`, :meth:`k1lib.viz.daisyUI`
+- Added :class:`~k1lib.AutoUpdateValue`, :class:`~k1lib.Aggregate`, :meth:`~k1lib.tempObj`, :class:`~k1lib.ConfinedAutoIncrement`, :class:`~k1lib.Perlin`
+- Added delay mode to :meth:`~k1lib.cron`
+- Added :meth:`~k1lib.preload` as an advanced version of :meth:`~k1lib.cache`
+- Added :class:`~k1lib.TimeSeries`, :class:`~k1lib.speed` for random speed/throughput benchmarks
+- Added :meth:`~k1lib.compileCExt`, to quickly build pybind11 Python C extensions and load it to the current process seemlessly
 
 `1.6 </1.6>`_ - Mar 8th, 2024
 -------------------------------

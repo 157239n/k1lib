@@ -128,6 +128,11 @@ access to a column, so this is how you can do it."""                            
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # transpose
         if self.d1 != 0 or self.d2 != 1: raise Exception(f"transpose._jsF() doesn't allow complex transpose across many dimensions yet") # transpose
         return f"{fIdx} = ({dataIdx}) => {dataIdx}.transpose({cli.kjs.v(self.fill)})", fIdx # transpose
+    def _pyF(self, expr, **kw):                                                  # transpose
+        if self.d1 == 0 and self.d2 == 1:                                        # transpose
+            if self.fill is None: return "", "", f"zip(*{expr})", {}             # transpose
+            else: fillN = init._pyFAuto(); return "import itertools", "", f"itertools.zip_longest(*{expr}, fillvalue={fillN})", {fillN: self.fill} # transpose
+        return None, None, NotImplemented, None                                  # transpose
 #tOpt.clearPasses()                                                              # transpose
 def oTranspose1(cs, ts, metadata): # `transpose() | transpose().all()` to `transpose() | apply(aS(torch.stack) | transpose())` # oTranspose1
     tr, ap = cs; t = ts[0]                                                       # oTranspose1
@@ -187,7 +192,7 @@ Example::
     [2, 6, 8] | insert([3, 1]) | deref()
 
 :param element: the element to insert"""                                         # insert
-        super().__init__(); self.element = element; self.begin = begin; self.expand = False # insert
+        super().__init__(); self.element = element; self.begin = begin           # insert
     def _all_array_opt(self, it, level):                                         # insert
         element = self.element                                                   # insert
         if (it | cli.shape())[level+1:] != (element | cli.shape()): return NotImplemented # insert
@@ -222,6 +227,10 @@ Example::
     def _jsF(self, meta):                                                        # insert
         fIdx = init._jsFAuto(); elemIdx = init._jsDAuto(); dataIdx = init._jsDAuto() # insert
         return f"{elemIdx} = {json.dumps(self.element)}; {fIdx} = ({dataIdx}) => {dataIdx}.insert({elemIdx}, {cli.kjs.v(self.begin)})", fIdx # insert
+    def _pyF(self, expr, **kw):                                                  # insert
+        elemN = init._pyFAuto(); vD = {elemN: self.element}                      # insert
+        if self.begin: return "", "", f"[{elemN}, *{expr}]", vD                  # insert
+        else: return "", "", f"[*{expr}, {elemN}]", vD                           # insert
 class splitW(BaseCli):                                                           # splitW
     def __init__(self, *weights:List[float]):                                    # splitW
         """Splits elements into multiple weighted lists. If no weights are provided,
@@ -550,6 +559,15 @@ See also: :class:`window`, :class:`batchedTrigger`
     def _jsF(self, meta):                                                        # batched
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # batched
         return f"{fIdx} = ({dataIdx}) => {dataIdx}.batched({cli.kjs.v(self.bs)}, {cli.kjs.v(self.includeLast)})", fIdx # batched
+    def _pyF(self, expr, **kw):                                                  # batched
+        if self.incl: return None, None, NotImplemented, None                    # batched
+        funcN = init._pyFAuto()                                                  # batched
+        if not self.includeLast: return "", f"""def {funcN}(data): n = len(data); return [data[{self.bs}*i:{self.bs}*(i+1)] for i in range(n//{self.bs})]""", f"{funcN}({expr})", {} # batched
+        return "", f"""
+def {funcN}(data):
+    n = len(data)
+    if n % {self.bs} > 0: return [*(data[{self.bs}*i:{self.bs}*(i+1)] for i in range(n//{self.bs})), data[{self.bs}*(n//{self.bs}):]]
+    else: return [data[{self.bs}*i:{self.bs}*(i+1)] for i in range(n//{self.bs})]""", f"{funcN}({expr})", {} # batched
 class batchedTrigger(BaseCli): # batched the data using a trigger column         # batchedTrigger
     def __init__(self, col:int=None, value:Any=None, delta:float=None, adj:bool=True): # value is to only yield segments that have the specified value # batchedTrigger
         """Like :class:`batched`, will batch rows/elements up but based on
@@ -746,6 +764,10 @@ See also: :class:`~batched`
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # window
         if self.padBool: raise Exception("window._jsF() doesn't support custom pad value yet") # window
         return f"{fIdx} = ({dataIdx}) => {dataIdx}.window({cli.kjs.v(self.n)})", fIdx # window
+    def _pyF(self, expr, **kw):                                                  # window
+        funcN = init._pyFAuto()                                                  # window
+        if self.padBool: padN = init._pyFAuto(); return "", f"""def {funcN}(data): return [*(data[i:i+{self.n}] for i in range(len(data)-{self.n}+1)), *[{padN}]*({self.n}-1)]""", f"{funcN}({expr})", {padN: self.pad} # window
+        else: return "", f"""def {funcN}(data): return [data[i:i+{self.n}] for i in range(len(data)-{self.n}+1)]""", f"{funcN}({expr})", {} # window
 class groupBy(BaseCli):                                                          # groupBy
     def __init__(self, column:int, separate:bool=False, removeCol:bool=None):    # groupBy
         """Groups table by some column.

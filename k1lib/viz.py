@@ -16,9 +16,30 @@ except:
     nn = k1lib.Object().withAutoDeclare(lambda: type("RandomClass", (object, ), {})); hasTorch = False
 try: import PIL; hasPIL = True
 except: hasPIL = False
-__all__ = ["SliceablePlot", "plotSegments", "Carousel", "Toggle", "ToggleImage",
+__all__ = ["daisyUI", "SliceablePlot", "plotSegments", "Carousel", "Toggle", "ToggleImage",
            "Scroll", "confusionMatrix", "FAnim", "mask", "PDF", "Html", "onload",
            "Clipboard", "Download", "qrScanner", "Popup", "Table"]
+_daisyJs = """
+async function dynamicLoad(selector, endpoint, rawHtml=null) { // loads a remote endpoint containing html and put it to the selected element. If .rawHtml is available, then don't send any request, and just use that html directly
+    const elem = document.querySelector(selector); elem.innerHTML = rawHtml ? rawHtml : (await (await fetch(endpoint)).text());
+    await new Promise(r => setTimeout(r, 100)); let currentScript = "";
+    try { for (const script of elem.getElementsByTagName("script")) { currentScript = script.innerHTML; eval(script.innerHTML); }
+    } catch (e) { console.log(`Error encountered: `, e, e.stack, currentScript); }
+}"""; _daisyHtml = f"""
+<head>
+    <meta charset="UTF-8"><title>DHCP low level server</title><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://static.aigu.vn/daisyui.css" rel="stylesheet" type="text/css" />
+    <style>
+        h1 {{ font-size: 2.25rem !important; line-height: 2.5rem !important; }}
+        h2 {{ font-size: 1.5rem !important; line-height: 2rem !important; margin: 10px 0px !important; }}
+        h3 {{ font-size: 1.125rem !important; line-height: 1.75rem !important; margin: 6px 0px !important; }}
+        textarea {{ border: 1px solid; padding: 8px 12px !important; border-radius: 10px !important; }}
+        body {{ padding: 12px; }}
+    </style><script>{_daisyJs}</script>
+</head>"""
+def daisyUI():                                                                   # daisyUI
+    """Grabs a nice subset of DaisyUI, just enough for a dynamic site that looks good enough""" # daisyUI
+    return _daisyHtml                                                            # daisyUI
 class _PlotDecorator:                                                            # _PlotDecorator
     """The idea with decorators is that you can do something like this::
 
@@ -418,6 +439,15 @@ k1lib.cli.init.addAtomic(Toggle)                                                
 def ToggleImage():                                                               # ToggleImage
     """This function is sort of legacy. It's just ``img | toHtml() | viz.Toggle()`` really""" # ToggleImage
     return cli.toHtml() | Toggle()                                               # ToggleImage
+class Html(str):                                                                 # Html
+    """A string that will display rich html to a notebook.
+Example::
+
+    s = "Just a <b>regular</b> string"
+    h = viz.Html(s) # this is an instance of viz.Html, but it's also still a string, as viz.Html subclasses str!
+    h               # running this in a notebook cell will display out the html
+"""                                                                              # Html
+    def _repr_html_(self): return self                                           # Html
 class Scroll(cli.BaseCli):                                                       # Scroll
     def __init__(self, height=300):                                              # Scroll
         """Creates a new preview html component. If content
@@ -505,15 +535,6 @@ can reference those pdf files.
     def __ror__(self, pdf): self.pdf = pdf; return self                          # PDF
     def _repr_html_(self): return '<iframe src={0} width={1[0]} height={1[1]}></iframe>'.format(self.pdf, self.size) # PDF
     def _repr_latex_(self): return r'\includegraphics[width=1.0\textwidth]{{{0}}}'.format(self.pdf) # PDF
-class Html(str):                                                                 # Html
-    """A string that will display rich html to a notebook.
-Example::
-
-    s = "Just a <b>regular</b> string"
-    h = viz.Html(s) # this is an instance of viz.Html, but it's also still a string, as viz.Html subclasses str!
-    h               # running this in a notebook cell will display out the html
-"""                                                                              # Html
-    def _repr_html_(self): return self                                           # Html
 class onload(cli.BaseCli):                                                       # onload
     def __init__(self):                                                          # onload
         """Returns html code that will run the captured clis when that html is loaded.
@@ -685,16 +706,17 @@ class Table(cli.BaseCli):                                                       
     def __init__(self, headers:"list[str]"=None,                                 # Table
                  onclickFName:str=None, ondeleteFName:str=None, oneditFName:str=None, onclickHeaderFName:str=None, # Table
                  colOpts:"list[list[str]]"=None, sortF:str=None,                 # Table
-                 selectable=False, selectCallback:str=None, height=None, objName:str=None): # Table
+                 selectable=False, selectCallback:str=None, height=None, objName:str=None, colsToHide:list[int]=None, # Table
+                 perPage:int=None, numRows=None):                                # Table
         """Returns some nice Html displaying a table.
 Example::
 
     res = enumerate("abcdef") | viz.Table(onclickFName="onclickF", ondeleteFName="deleteF")
-    viz.Html(f\"\"\"<script>
+    f\"\"\"<script>
         function onclickF(row, i, e) {{ console.log("onclickF: ", row, i, e); }}
         function deleteF(row, i, e) {{ console.log("deleteF: ", row, i, e); }}
     </script>
-    {res}\"\"\") # creates html string and displays it in the notebook cell
+    {res}\"\"\" | toHtml() # creates html string and displays it in the notebook cell
 
 Normally, if you want to display a plain old table, you can do ``sometable | display()``,
 which is the same as ``sometable | head() | pretty() | stdout()``, but that only gives you
@@ -709,18 +731,41 @@ typed in everything, that function will be called, and if successful, will updat
 table right away.
 
 There're these available options for each column ("colOpts"):
-- ["pad", 10]: padding on all 4 sides, defaulted to 10 if not specified
-- "json": if specified, will assume the row element to be a json and make it look nice
-- ["jsonWidth", 400]: max width of json fields
-- ["jsonHeight", 300]: max height of json fields
-- "clipboard": if specified, will copy the contents of the cell to clipboard when user clicks on it
+
+* ["pad", 10]: padding on all 4 sides, defaulted to 10 if not specified
+* "json": if specified, will assume the row element to be a json and make it look nice
+* ["jsonWidth", 400]: max width of json fields
+* ["jsonHeight", 300]: max height of json fields
+* "clipboard": if specified, will copy the contents of the cell to clipboard when user clicks on it
 
 Say you have 3 columns, and you want:
-- Column 1: json with max width of 500px, copies its contents to clipboard onclick
-- Column 2: nothing special
-- Column 3: copies its contents to clipboard onclick
+
+* Column 1: json with max width of 500px, copies its contents to clipboard onclick
+* Column 2: nothing special
+* Column 3: copies its contents to clipboard onclick
 
 Then "colOpts" should be [["json", ["jsonWidth", 500], "clipboard"], [], ["clipboard"]]
+
+With tables that have complex features, there's also a hidden "{pre}_obj" JS object that has a
+bunch of useful functions, as well as callbacks that allows you to do interactive things::
+
+    ui1 = enumerate("abcdef") | viz.Table(objName="something")
+    f\"\"\"
+        {ui1}
+        <script>
+            setTimeout(() => something.update([[1, 2], [3, 4], [5, 6]]), 1000); // updates the table's contents after 1 second
+            setTimeout(() => console.log(something.data), 3000); // prints the table's data after 3 seconds
+        </script>
+    \"\"\" | toHtml()
+
+Pagination {pre}_obj values:
+
+* async page_select(pageNum:int): selects a specific page, 0-indexed
+* async page_next(): goes to next page
+* async page_prev(): goes to previous page
+* async page_onselect(pageNum): function that should return list[list[str|int]] for the specific
+  page it's on. The returned result will be used to render the table. Don't have to override
+  this by default, it will just slice up the incoming data to return the correct page
 
 :param headers: a list of column names
 :param onclickFName:       global function that will be called whenever the user clicks on a specific item
@@ -731,18 +776,21 @@ Then "colOpts" should be [["json", ["jsonWidth", 500], "clipboard"], [], ["clipb
 :param sortF: takes in [table (list[list[str | number]]), col (int)] and returns the sorted table. Can put :data:`True` in for the default sorter
 :param selectable: if True, make the row bold when user clicks on it, else don't do that
 :param selectCallback: function name to inject into global namespace so as to trigger
-    internal selection. Does not cascade to onclickFName"""                      # Table
+:param height: if specified, limits the table height to this many pixels, and add a vertical scrolling bar
+:param objName: name of the JS object that contains functions to interact with the table
+:param colsToHide: list of column indexes to hide internal selection. Does not cascade to onclickFName
+:param perPage: if specified, splits the incoming data into multiple pages, and allow users to navigate around those pages
+:param numRows: in pagination mode, this variable will be used to display the initial total number of pages. Purely aestheetic, no function""" # Table
         self.headers = headers; self.onclickFName = onclickFName; self.ondeleteFName = ondeleteFName; self.onclickHeaderFName = onclickHeaderFName # Table
         self.oneditFName = oneditFName; self.colOpts = colOpts; self.sortF = sortF; self.selectable = selectable; self.selectCallback = selectCallback # Table
-        self.height = height; self.objName = objName                             # Table
-    def _scripts(self, pre): # common scripts section between __ror__() and _jsF() # Table
+        self.height = height; self.objName = objName; self.colsToHide = colsToHide or []; self.perPage = perPage; self.numRows = numRows # Table
+    def _scripts(self, pre): # common scripts section between __ror__() and _jsF(), include functions exposed to the global js runtime # Table
         height = f"""document.querySelector("#{pre}_tableWrap").scrollTop = e.getBoundingClientRect().top - document.querySelector("#{pre}_table").getBoundingClientRect().top - 80;""" if self.height else ""; selectCallback = f"""
     window.{self.selectCallback} = (predicate) => {{ // scans entire existing table for rows that satify the predicate function. Kinda deprecated function, use {pre}_obj.selectId() instead!
         data = {pre}_obj.data;
         for (let i = 0; i < data.length; i++) document.querySelector("#{pre}_row_" + i).style.backgroundColor = "";
         for (let i = 0; i < data.length; i++) if (predicate(data[i])) {{
-            e = document.querySelector("#{pre}_table").querySelector("#{pre}_row_" + i);
-            {height}
+            e = document.querySelector("#{pre}_table").querySelector("#{pre}_row_" + i);{height}
             e.style.backgroundColor = "#dddddd"; {pre}_obj.selectedRowId = i; {pre}_obj.selectedRow = data[i]; break
         }}
     }}""" if self.selectCallback else ""; ondeleteFName = self.ondeleteFName; pre_delete = f"""
@@ -750,13 +798,11 @@ Then "colOpts" should be [["json", ["jsonWidth", 500], "clipboard"], [], ["clipb
         if (e) e.stopPropagation();
         try {{ // if the function don't raise any error, then actually delete the element, else just alert the user that the operation failed
             if ({ondeleteFName}.constructor.name === "AsyncFunction") res = await {ondeleteFName}(row, i, e);
-            else res = {ondeleteFName}(row, i, e);
-            if (res === "dont_delete") return;
-            document.querySelector("#{pre}_row_" + i).remove();
-            {pre}_obj.data[i] = null;
+            else res = {ondeleteFName}(row, i, e); if (res === "dont_delete") return;
+            document.querySelector("#{pre}_row_" + i).remove(); {pre}_obj.data[i] = null;
         }} catch (e) {{ if (e.message !== "\ue000nopropagate") window.alertCallback(e); }}
-    }}""" if self.ondeleteFName else ""; oneditFName = self.oneditFName; pre_edit = f"""
-    {pre}_edit = async (row, rowi, e) => {{
+    }}""" if ondeleteFName else ""; oneditFName = self.oneditFName; pre_edit = f"""
+    {pre}_edit = async (row, rowi, e) => {{ // swaps out table contents with input boxes
         if (e) e.stopPropagation(); nodes = Array.from(document.querySelectorAll("#{pre}_row_" + rowi + " > .k1TableElement"));
         for (let i = 0; i < nodes.length; i++) {{
             nodes[i].innerHTML = "<input type='text' class='input input-bordered' />";
@@ -766,7 +812,7 @@ Then "colOpts" should be [["json", ["jsonWidth", 500], "clipboard"], [], ["clipb
         document.querySelector("#{pre}_row_" + rowi + ">.editIcon").innerHTML = "<span style='cursor: pointer' onclick='{pre}_finishedEdit({pre}_obj.data[" + rowi + "], " + rowi + ", event)'></span>"
         document.querySelector("#{pre}_row_" + rowi + ">.editIcon>span").innerHTML = atob('{base64.b64encode(icons['check'].encode()).decode()}')
     }}
-    {pre}_finishedEdit = async (row, rowi, e) => {{
+    {pre}_finishedEdit = async (row, rowi, e) => {{ // finished editing parts of the table
         if (e) e.stopPropagation(); console.log("finishedEdit:", row, rowi, e);
         nodes  = Array.from(document.querySelectorAll("#{pre}_row_" + rowi + ">.k1TableElement"))
         inputs = Array.from(document.querySelectorAll("#{pre}_row_" + rowi + ">.k1TableElement>input"));
@@ -774,12 +820,11 @@ Then "colOpts" should be [["json", ["jsonWidth", 500], "clipboard"], [], ["clipb
         try {{ // if the function don't raise any error, then actually registers the element, else just alert the user that the operation failed
             if ({oneditFName}.constructor.name === "AsyncFunction") res = await {oneditFName}(row, values, rowi, e);
             else res = {oneditFName}(row, values, rowi, e);
-            for (let i = 0; i < nodes.length; i++) {{ nodes[i].innerHTML = values[i]; }}
-            {pre}_obj.data[rowi] = values;
+            for (let i = 0; i < nodes.length; i++) {{ nodes[i].innerHTML = values[i]; }}; {pre}_obj.data[rowi] = values;
             document.querySelector("#{pre}_row_" + rowi + ">.editIcon").innerHTML = "<span style='cursor: pointer' onclick='{pre}_edit({pre}_obj.data[" + rowi + "], " + rowi + ", event)'></span>";
             document.querySelector("#{pre}_row_" + rowi + ">.editIcon>span").innerHTML = atob('{base64.b64encode(icons['edit'].encode()).decode()}');
         }} catch (e) {{ if (e.message !== "\ue000nopropagate") window.alertCallback(e); }}
-    }}""" if self.oneditFName else ""; pre_clip = f"""
+    }}""" if oneditFName else ""; pre_clip = f"""
     {pre}_clip = async (e, rowi, elemi) => {{
         const value = {pre}_obj.data[rowi][elemi]; {pre}_copyToClipboard((typeof(value) === "string") ? value : JSON.stringify(value), rowi, elemi);
         const icon = document.querySelector("#{pre}_copy_icon_" + rowi + "_" + elemi); icon.innerHTML = atob('{base64.b64encode(icons['check'].encode()).decode()}');
@@ -812,14 +857,37 @@ e.target = headerE; {onclickHeader};"""                                         
             }} catch (e) {{ if (e.message !== "\ue000nopropagate") window.alertCallback(e); }}
         }}
     }}""" if onclickFName or onclickHeader or self.selectable or self.sortF else ""; return f"""if (!window.alertCallback) window.alertCallback = alert; {selectCallback}{pre_delete}{pre_edit}{pre_clip}{pre_select}""" # Table
-    def __ror__(self, it) -> Html:                                               # Table
-        headers = self.headers; onclickFName = self.onclickFName; onclickHeaderFName = self.onclickHeaderFName; ondeleteFName = self.ondeleteFName; oneditFName = self.oneditFName; selectable = self.selectable; colOpts = self.colOpts # Table
-        it = it | cli.deref(2); pre = cli.init._jsDAuto(); N = len(it);          # Table
+    def _paginationHtml(self, pre): return f"""
+<style>
+    .{pre}_pageGray {{ text-decoration: none; padding: 8px 12px; background: #dbdbdb; color: #878787; border-radius: 4px; transition: background 0.3s; }}
+    .{pre}_pageHover {{ cursor: pointer; user-select: none; }} .{pre}_pageHover:hover {{ background: #878787; color: #f0f0f0; }}
+</style>
+<div style="display: flex; align-items: center; justify-content: center;">
+    <div class="{pre}_pagination" style="display: flex; flex-direction: row; align-items: center; list-style-type: none; padding: 0; margin: 0;">
+        <div class="{pre}_pageGray {pre}_pageHover" style="margin: 0 5px" onclick="{pre}_obj.page_prev()">&laquo;</div>
+        <div id="{pre}_pageNum1" class="{pre}_pageGray" style="margin: 0 5px; background: #878787; color: #f0f0f0; cursor: default">1</div>
+        <div style="margin: 0 5px">of</div>
+        <div id="{pre}_pageLen1" class="{pre}_pageGray" style="margin: 0 5px; background: #cccccc; color: #4a4a4a; cursor: default">?</div>
+        <div class="{pre}_pageGray {pre}_pageHover" style="margin: 0 5px" onclick="{pre}_obj.page_next()">&raquo;</div>
+    </div>
+    <div style="margin-left: 10px; display: flex; flex-direction: row; align-items: center;">
+        <div style="margin: 0 8px">Page </div>
+        <select id="{pre}_pageSelect" onchange="onDropdownChange(this)" style="padding: 5px; border-radius: 4px; border: 1px solid #cccccc; cursor: pointer"></select>
+        <div id="{pre}_pageLen2" style="margin: 0 8px"> of ?</div>
+    </div>
+</div>""" if self.perPage else ""                                                # Table
+    def _paginationJs(self, pre): return f"""(async () => {{
+        document.querySelector("#{pre}_pageSelect").onchange = async (e) => {{ {pre}_obj.page_select(parseInt(document.querySelector("#{pre}_pageSelect").value)); }};
+}})();"""                                                                        # Table
+    def __ror__(self, it) -> Html: # so the render function is kinda duplicated. One runs directly in python, and the other runs in js, allowing the table contents to be updated in real time # Table
+        headers = self.headers; onclickFName = self.onclickFName; onclickHeaderFName = self.onclickHeaderFName; ondeleteFName = self.ondeleteFName; oneditFName = self.oneditFName; selectable = self.selectable; colOpts = self.colOpts; colsToHide = self.colsToHide # Table
+        it = it | cli.deref(2); pre = cli.init._jsUIAuto(); N = len(it);         # Table
         try: F = max([len(x) for x in it])                                       # Table
         except: F = len(self.headers) if self.headers else 1000                  # Table
         colOpts = [] if colOpts is None else list(colOpts)                       # Table
         for i in range(F-len(colOpts)): colOpts.append([])                       # Table
         def felem(i, e, rowi):                                                   # Table
+            if i in colsToHide: return ""                                        # Table
             idx = f"id='{pre}_elem_{rowi}_{i}' class='k1TableElement {pre}_elem'" # Table
             res = [opt[1] for opt in colOpts[i] if not isinstance(opt, str) and opt[0] == "pad"]; pad = res[0] if len(res) > 0 else 10; style = f"position: relative; padding: {pad}px" # Table
             copy = f"<div style='position: absolute; top: 0px; right: 0px'><span id='{pre}_copy_icon_{rowi}_{i}' style='cursor: pointer' onclick='{pre}_clip(event, {rowi}, {i})'>{icons['copy']}</span></div>" if "clipboard" in colOpts[i] and rowi >= 0 else "" # Table
@@ -834,22 +902,44 @@ e.target = headerE; {onclickHeader};"""                                         
             if ondeleteFName: row = ["<td></td>", *row] if i < 0 else [f"<td class='deleteIcon'><span style='cursor: pointer' onclick='{pre}_delete({pre}_obj.data[{i}], {i}, event)'>{icons['delete']}</span></td>", *row] # Table
             sticky = "style='position: sticky; top: 0px; background: white; z-index: 100'" if i < 0 else ""; sig = f"id='{pre}_row_{i}' class='{pre}_row' {sticky}" # Table
             sig = f"<tr {sig} onclick='{pre}_select({pre}_obj.data[{i}], {i}, event)'>" if onclickFName or onclickHeaderFName or selectable or self.sortF else f"<tr {sig} >"; return sig + "".join(row) + "</tr>" # Table
-        contents = "".join([frow(i, row) for i,row in ([(-1, headers), *enumerate(it)] if headers else enumerate(it))]); # Table
+        page1 = it[0:self.perPage] if self.perPage else it                       # Table
+        contents = "".join([frow(i, row) for i,row in ([(-1, headers), *enumerate(page1)] if headers else enumerate(page1))]); # Table
         height = [f"<div id='{pre}_tableWrap' style='max-height:{self.height}px;overflow-y:auto'>", "</div>"] if self.height else ["", ""] # Table
-        scriptS = f"""<script>{self._js_genFuncs(pre)};{pre}_obj.data = {json.dumps(it)};{self._scripts(pre)}</script>""" if self._dynamism("script") or self._dynamism("func") else "" # Table
-        return Html(f"""{height[0]}<table id='{pre}_table'>{contents}</table>{height[1]}{scriptS}""") # Table
+        pageS = f"{self._paginationJs(pre)}; {pre}_obj.page_setup({self.numRows or len(it)});" if self.perPage else "" # Table
+        scriptS = f"""<script>{self._js_genFuncs(pre)};{pre}_obj.data = {json.dumps(it)};{self._scripts(pre)};{pageS}</script>""" if self._dynamism("script") or self._dynamism("func") else "" # Table
+        return Html(f"""{height[0]}<table id='{pre}_table'>{contents}</table>{height[1]}{self._paginationHtml(pre)}{scriptS}""") # Table
     def _dynamism(self, mode="script"): # whether I need to (loosely) include self._scripts() or self._js_genFuncs() or not # Table
         if mode == "script": return self.onclickHeaderFName or self.onclickFName or self.oneditFName or self.ondeleteFName or self.selectable or self._colOpts_hasClip() # Table
-        elif mode == "func": return self.selectCallback or self.objName or self.sortF # Table
+        elif mode == "func": return self.selectCallback or self.objName or self.sortF or self.perPage # Table
         else: raise Exception("Don't have that mode")                            # Table
     def _js_genFuncs(self, pre, gens=False):                                     # Table
-        """:param gens: whether you *would* like to include gen JS functions or not""" # Table
-        objNameAssign = f"window.{self.objName} = {pre}_obj;" if self.objName else ""; funcDyn = self._dynamism("func"); funcS = f"""
+        """You might be asking what the hell is up with this. All of the complexity you see around
+is the result of this having to do lots of stuff at the same time. There's the pure python mode, and
+there's the JS transpiled version. There's also the requirement of it generating tables that are the
+shortest that it can be.
+
+If the user wants a vanilla table, no interactivity, then it should not include any js at all, as
+some applications have tons of tables everywhere, like a carousel containing 40 tables and so on.
+Including js would really slow rendering down, and that's absolutely terrible.
+
+But if the user wants interactivity, then it will inject in only enough js so that the table will
+function normally, and not more, to again reduce global namespace pollution and js interpretation
+time. So there are several layers of complexity that this class can generate:
+- Layer 1: vanilla table, no JS at all
+- Layer 2: table with basic functionalities, like onclick, ondelete, onedit, onclip (dynamism "script")
+- Layer 3: table with advanved functionalities, like:
+  - Silently updating table contents
+  - Programmatically selects a specific row and scroll to that row
+  - Has js-accessible table data ({pre}_obj object)
+  - Sorts each column
+
+:param gens: whether you *would* like to include JS table-generation functions or not""" # Table
+        objNameAssign = f"if (window.{self.objName} != undefined) {{ {pre}_obj.page_onselect = window.{self.objName}.page_onselect; }} else window.{self.objName} = {pre}_obj;" if self.objName else ""; funcDyn = self._dynamism("func"); funcS = f"""
     renderRaw: () => {{ document.querySelector("#{pre}_table").innerHTML = ({json.dumps(self.headers)} ? [[-1, {json.dumps(self.headers)}], ...{pre}_obj.data.map((x,i) => [i,x])] : {pre}_obj.data.map((x,i) => [i,x])).map(([i, row]) => {pre}_frow(i, row)).join(""); }},
     _diff: (oldData, newData) => {{ // returns true if there's a diff
         if (oldData.length !== newData.length) return true;
         for (let i = 0; i < oldData.length; i++) {{
-            if (oldData[i].length !== newData[i].length) return true;
+            if (oldData[i] === null || oldData[i] === undefined || oldData[i].length !== newData[i].length) return true;
             for (let j = 0; j < oldData[0].length; j++) if (oldData[i][j] !== newData[i][j]) return true;
         }} return false;
     }},
@@ -862,9 +952,9 @@ e.target = headerE; {onclickHeader};"""                                         
     selectId: (idx, visual=false) => {{ // select specific row that has first element equal to idx
         const res = {pre}_obj.data.map((row, i) => [i, row]).filter(([i, row]) => row[0] == idx);
         if (res.length > 0) {pre}_obj.select(res[0][0], visual);
-    }}""" if funcDyn else ""; genS = f"""{pre}_colOpts = {json.dumps(self._niceColOpts())};
+    }},""" if funcDyn else ""; genS = f"""{pre}_colOpts = {json.dumps(self._niceColOpts())};
 {pre}_felem = (i, e, rowi) => {{
-    colOpt = {pre}_colOpts[i] || [];
+    let colsToHide = {json.dumps(self.colsToHide or [])}; if (colsToHide.includes(i)) return ""; colOpt = {pre}_colOpts[i] || [];
     idx = `id='{pre}_elem_${{rowi}}_${{i}}' class='k1TableElement {pre}_elem'`
     res = colOpt.filter((x) => typeof(x) !== "string").filter((x) => x[0] == "pad").map((x) => x[1]); pad = res.length > 0 ? res[0] : 10; style = `position: relative; padding: ${{pad}}px`
     copy = (colOpt.includes("clipboard") && rowi >= 0) ? `<div style='position: absolute; top: 0px; right: 0px'><span id='{pre}_copy_icon_${{rowi}}_${{i}}' style='cursor: pointer' onclick='{pre}_clip(event, ${{rowi}}, ${{i}})'>{icons['copy']}</span></div>` : ""
@@ -883,21 +973,40 @@ e.target = headerE; {onclickHeader};"""                                         
     let onclickS = ({json.dumps(self.onclickFName or self.onclickHeaderFName or self.onclickFName or self.sortF)}) ? `onclick='{pre}_select({pre}_obj.data[${{i}}], ${{i}}, event)'` : "";
     return `<tr id='{pre}_row_${{i}}' class='{pre}_row' ${{sticky}} ${{onclickS}}>` + row.join("") + "</tr>";
 }};""" if funcDyn or gens else ""                                                # Table
-        return f"""{pre}_obj = {{ selectedRowId: -1, selectedRow: null, data: [], {funcS} }}; {objNameAssign}; {genS}""" # Table
+        perPage = self.perPage; pageS = f"""perPage: {json.dumps(perPage)}, pageData: [], pageNum: 0, numPages: 0,
+page_onselect: async (pageNum) => {{ return {pre}_obj.data.slice({perPage}*pageNum, {perPage}*(pageNum+1)); }},
+page_updateData: async () => {{ {pre}_obj.pageData = await {pre}_obj.page_onselect({pre}_obj.pageNum); }},
+page_setup: (nrows) => {{
+    let npages = Math.ceil(nrows/{self.perPage}); {pre}_obj.numPages = npages;
+    let s = ""; for (let i = 0; i < npages; i++) s += `<option value="${{i}}" ${{i == 0 ? 'selected' : ''}}>${{i+1}}</option>`; document.querySelector("#{pre}_pageSelect").innerHTML = s;
+    document.querySelector("#{pre}_pageLen1").innerHTML = `${{npages}}`; document.querySelector("#{pre}_pageLen2").innerHTML = ` of ${{npages}}`;
+}},
+page_select: async (pageNum) => {{
+    {pre}_obj.pageNum = pageNum; let npages = {pre}_obj.numPages;
+    let s = ""; for (let i = 0; i < npages; i++) s += `<option value="${{i}}" ${{i == pageNum ? 'selected' : ''}}>${{i+1}}</option>`; document.querySelector("#{pre}_pageSelect").innerHTML = s;
+    document.querySelector("#{pre}_pageNum1").innerHTML = pageNum+1; {pre}_obj.renderRaw(); {pre}_obj.page_onselect(pageNum);
+}},
+page_prev: async () => {{ await {pre}_obj.page_select(Math.max(0, {pre}_obj.pageNum - 1)); }},
+page_next: async () => {{ await {pre}_obj.page_select(Math.min({pre}_obj.numPages-1, {pre}_obj.pageNum + 1)); }},
+renderRaw: async () => {{ await {pre}_obj.page_updateData(); document.querySelector("#{pre}_table").innerHTML = ({json.dumps(self.headers)} ? [[-1, {json.dumps(self.headers)}], ...{pre}_obj.pageData.map((x,i) => [i,x])] : {pre}_obj.pageData.map((x,i) => [i,x])).map(([i, row]) => {pre}_frow(i, row)).join(""); }},""" if perPage else "" # Table
+        return f"""{pre}_obj = {{ selectedRowId: -1, selectedRow: null, data: [], {funcS}{pageS} }}; {objNameAssign}; {genS}""" # Table
     def _niceColOpts(self): return [] if self.colOpts is None else list(self.colOpts) # Table
     def _colOpts_hasClip(self): return self._niceColOpts() | cli.filt(lambda x: "clipboard" in x) | cli.shape(0) # Table
     def _jsF(self, meta):                                                        # Table
-        fIdx = cli.init._jsFAuto(); dataIdx = cli.init._jsDAuto(); pre = cli.init._jsDAuto(); # Table
-        height = f"height: {self.height}px;" if self.height else ""              # Table
+        fIdx = cli.init._jsFAuto(); dataIdx = cli.init._jsDAuto(); pre = cli.init._jsUIAuto(); # Table
+        height = f"max-height: {self.height}px;" if self.height else ""          # Table
         # header, fn, _async = k1lib.kast.asyncGuard(self.capturedSerial._jsF(meta)) # Table
-        headers = self.headers; height = [f"<div id='{pre}_tableWrap' style='height:{self.height}px;overflow-y:auto'>", "</div>"] if self.height else ["", ""]; return f"""
+        headers = self.headers; height = [f"<div id='{pre}_tableWrap' style='{height}overflow-y:auto'>", "</div>"] if self.height else ["", ""] # Table
+        pageS  = f"""const page1 = it.slice(0, {self.perPage});""" if self.perPage else f"""const page1 = it;""" # Table
+        pageJS = f"""{self._paginationJs(pre)}; (async () => {{ {pre}_obj.page_setup({self.numRows if self.numRows else '${it.length}'}); }})()""" if self.perPage else "" # Table
+        return f"""
 {self._js_genFuncs(pre, True)}
 {fIdx} = (it) => {{
     const N = it.length; const F = (N > 0) ? (it.map(x => x.length).toMax()) : ({json.dumps(headers)} ? {json.dumps(headers)}.length : 1000);
-    for (const i of [...Array(F-{pre}_colOpts.length).keys()]) {pre}_colOpts.push([]);
-    contents = ({json.dumps(headers)} ? [[-1, {json.dumps(headers)}], ...it.map((x,i) => [i,x])] : it.map((x,i) => [i,x])).map(([i, row]) => {pre}_frow(i, row)).join(""); return unescape(`
-{height[0]}<table id="{pre}_table">${{contents}}</table>{height[1]}
+    for (const i of [...Array(F-{pre}_colOpts.length).keys()]) {pre}_colOpts.push([]); {pageS}
+    contents = ({json.dumps(headers)} ? [[-1, {json.dumps(headers)}], ...page1.map((x,i) => [i,x])] : page1.map((x,i) => [i,x])).map(([i, row]) => {pre}_frow(i, row)).join(""); return unescape(`
+{height[0]}<table id="{pre}_table">${{contents}}</table>{height[1]}{self._paginationHtml(pre)}
 %3Cscript%3E
     {pre}_obj.data = JSON.parse(decodeURIComponent(escape(atob('${{btoa(unescape(encodeURIComponent(JSON.stringify(it))))}}'))));
-    {self._scripts(pre)}
+    {self._scripts(pre)};{pageJS}
 %3C/script%3E`); }}""", fIdx                                                     # Table

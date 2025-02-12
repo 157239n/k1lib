@@ -50,7 +50,7 @@ def statsCpu(nodeIds):                                                          
     return [cpu, cpuF]                                                           # statsCpu
 @lru_cache                                                                       # statsCpu
 def statsNodeId(): return applyCl.nodeIds()                                      # statsNodeId
-_statsS1 = statsNodeId() | apply(wrapList() | insert(0, False)) | toDict()       # statsNodeId
+# _statsS1 = statsNodeId() | apply(wrapList() | insert(0, False)) | toDict()     # statsNodeId
 def stats(inter, nodeIds): # inter for cached data                               # stats
     sizeF = normalize(inter["sizes"].items()) # size fraction. List[nodeId, size fraction] # stats
     return *statsCpu(nodeIds), sizeF                                             # stats

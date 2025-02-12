@@ -29,15 +29,18 @@ def bThread(): # runs a thread that takes in requests to create new browsers, th
             if len(_browserQueue) == 0: await asyncio.sleep(0.01)                # bThread
             else: idx, _ = _browserQueue.popleft(); _browserAnsD[idx] = Browser() # bThread
     loop.run_until_complete(inner())                                             # bThread
-threading.Thread(target=bThread, daemon=True).start()                            # bThread
-k1lib.settings.add("zircon", k1lib.Settings()                                    # bThread
-                   .add("http_server", "https://zircon.mlexps.com")              # bThread
-                   .add("ws_server", "wss://ws.zircon.mlexps.com"),              # bThread
-    "from k1lib.zircon module");                                                 # bThread
-from urllib.parse import urlparse                                                # bThread
+_bThread_started = [False]                                                       # bThread
+def _start_bThread():                                                            # _start_bThread
+    if _bThread_started[0]: return                                               # _start_bThread
+    _bThread_started[0] = True; threading.Thread(target=bThread, daemon=True).start() # _start_bThread
+k1lib.settings.add("zircon", k1lib.Settings()                                    # _start_bThread
+                   .add("http_server", "https://zircon.mlexps.com")              # _start_bThread
+                   .add("ws_server", "wss://ws.zircon.mlexps.com"),              # _start_bThread
+    "from k1lib.zircon module");                                                 # _start_bThread
+from urllib.parse import urlparse                                                # _start_bThread
 def newBrowser() -> "Browser":                                                   # newBrowser
     """Creates a new browser"""                                                  # newBrowser
-    websockets.version # here to warn users if websockets is not installed       # newBrowser
+    websockets.version; _start_bThread() # here to warn users if websockets is not installed # newBrowser
     idx = _browserAutoIdx(); _browserQueue.append([idx, 0])                      # newBrowser
     while idx not in _browserAnsD: time.sleep(0.01)                              # newBrowser
     ans = _browserAnsD[idx]; del _browserAnsD[idx]; return ans                   # newBrowser
@@ -239,7 +242,7 @@ There're more selectors:
 - minWidth: grab parent that's at least this wide
 - minHeight: same with minWidth
 - deltaY: if positive, grab parent that has y' > y + deltaY (y is the current element's y). If
-    negative, grab parent that has y' < y + deltaY
+negative, grab parent that has y' < y + deltaY
 - deltaX: same with deltaY
 
 These together with :meth:`childrenC` should help you to navigate around locally.

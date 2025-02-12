@@ -2,29 +2,76 @@
 """
 This is for support for transpilation of clis to JS
 """
-__all__ = ["JsFunc", "toJsFunc", "executeScriptTags"]
+__all__ = ["toPyFunc", "JsFunc", "toJsFunc", "executeScriptTags"]
 from k1lib.cli.init import BaseCli, fastF; import k1lib.cli.init as init
 import k1lib.cli as cli; import k1lib, time, json, base64, math, re
-settings = k1lib.settings.cli
-settings.add("kjs", k1lib.Settings(), "cli.kjs settings")
-kjsSett = settings.kjs
-kjsSett.add("jsF",   {}, "All ._jsF() (cli to JS) transpile functions, looks like Dict[type -> _jsF(meta, **kwargs) transpile func]")
-kjsSett.add("jsonF", {}, "All ._jsonF() JSON-serialization functions, looks like Dict[type -> _jsonF(obj) func]. See utils.deref.json() docs")
-kjsSett.add("pyF",   {}, "(future feature) All ._pyF()   (cli to Python) transpile functions, looks like Dict[type -> _pyF  (meta, **kwargs) transpile func]")
-kjsSett.add("cppF",  {}, "(future feature) All ._cppF()  (cli to C++)    transpile functions, looks like Dict[type -> _cppF (meta, **kwargs) transpile func]")
-kjsSett.add("javaF", {}, "(future feature) All ._javaF() (cli to Java)   transpile functions, looks like Dict[type -> _javaF(meta, **kwargs) transpile func]")
-kjsSett.add("sqlF",  {}, "(future feature) All ._sqlF()  (cli to SQL)    transpile functions, looks like Dict[type -> _sqlF (meta, **kwargs) transpile func]")
-kjsSett.jsF[str] = lambda meta: (f"", "String")
-kjsSett.jsF[int] = lambda meta: (f"", "parseInt")
-kjsSett.jsF[float] = lambda meta: (f"", "parseFloat")
-kjsSett.jsF[set] = lambda meta: (f"", "new Set")
-kjsSett.jsF[list] = lambda meta: (f"", "Array.from")
-kjsSett.jsF[tuple] = lambda meta: (f"", "Array.from")
-kjsSett.jsF[abs] = lambda meta: (f"", "Math.abs")
-kjsSett.jsF[json.loads] = lambda meta: (f"", "JSON.parse")
-kjsSett.jsF[json.dumps] = lambda meta: (f"", "JSON.stringify")
-kjsSett.jsF[base64.b64decode] = lambda meta: (f"", "atob")
-kjsSett.jsF[base64.b64encode] = lambda meta: (f"", "btoa")
+class toPyFunc(BaseCli): # weird putting it in kjs.py, but dont want to create a whole new submodule just for this cli # toPyFunc
+    def __init__(self, verbose=False):                                           # toPyFunc
+        """Makes pure python functions faster.
+Example::
+
+    scale = 100000; data = [range(10*scale), range(10*scale, 20*scale)] | deref()
+    data |               T() | ~apply(lambda x,y: x+y) | toSum()  # runs in 660 ms ± 88.8 ms
+    data | (toPyFunc() | T() | ~apply(lambda x,y: x+y) | toSum()) # runs in 219 ms ± 75.2 ms
+
+What this does is that it gets rid of the overhead when using clis. Normal clis are
+sort of smart, as in, it does different things depending on the input data. If it
+detects that there is a way to run faster, it will. For example, lots of clis will
+use numpy's builtin C functions if the input is a numpy ndarray. Other times, it
+tries to rewrite your code so that something like ``T().all(3)`` (transposing at
+3 layers deep) will restructure your input data in such a way that it runs O(1)
+number of numpy C functions. Anyway, it does lots of things to squeeze out as much
+performance as possible, and that causes a lot of overhead to build up. If it turns
+out that it can't optimize things at all, and just have to run it the old-fashioned
+way, then it will actually run slower than a 'dumb' implementation. So, this function
+is a way to make the operations 'dumb', and to get rid of all the overhead. So when
+you use it like the above example, it will generate and compile python code that
+looks more or less like this::
+
+    sum(x+y for x,y in zip(*data))
+
+Note that as this is turning the code dumb, that means that sometimes, the cli
+expects an explicit list, and not iterators, so you have to accomodate those tiny
+differences for those sweet performance gains.
+
+:param verbose: if True, prints out the generated python function"""             # toPyFunc
+        super().__init__(capture=True)                                           # toPyFunc
+        self._compiledFunc = None; self.verbose = verbose                        # toPyFunc
+    def _compile(self):                                                          # toPyFunc
+        if self._compiledFunc is None:                                           # toPyFunc
+            imports = ""; header = ""; varsD = {}; varAuto = init._pyFAuto; expr = ogExpr = varAuto() # toPyFunc
+            for _cli in self.capturedClis:                                       # toPyFunc
+                if hasattr(_cli, "_pyF"):                                        # toPyFunc
+                    _im, _h, _e, _vD = _cli._pyF(expr)                           # toPyFunc
+                    if _e is not NotImplemented: imports = f"{imports}\n{_im}"; header = f"{header}\n{_h}"; expr = _e; varsD.update(_vD); continue # toPyFunc
+                varN = varAuto(); varsD[varN] = _cli; expr = f"{varN}({expr})"   # toPyFunc
+            ns = {**varsD}; mainFunc = varAuto(); imports = "\n".join(set([x for x in imports.split("\n") if x])) # toPyFunc
+            header = "\n".join([y for y in [x.rstrip() for x in header.split("\n")] if y]) # toPyFunc
+            self.program = f"{imports}\n{header}\ndef {mainFunc}({ogExpr}):return {expr}" # toPyFunc
+            if self.verbose: print(f"compiled program:\n{self.program}")         # toPyFunc
+            exec(self.program, ns); self._compiledFunc = ns[mainFunc]            # toPyFunc
+        return self._compiledFunc                                                # toPyFunc
+    def __ror__(self, x): return self._compile()(x)                              # toPyFunc
+settings = k1lib.settings.cli                                                    # toPyFunc
+settings.add("kjs", k1lib.Settings(), "cli.kjs settings")                        # toPyFunc
+kjsSett = settings.kjs                                                           # toPyFunc
+kjsSett.add("jsF",   {}, "All ._jsF() (cli to JS) transpile functions, looks like Dict[type -> _jsF(meta, **kwargs) transpile func]") # toPyFunc
+kjsSett.add("jsonF", {}, "All ._jsonF() JSON-serialization functions, looks like Dict[type -> _jsonF(obj) func]. See utils.deref.json() docs") # toPyFunc
+kjsSett.add("pyF",   {}, "(future feature) All ._pyF()   (cli to Python) transpile functions, looks like Dict[type -> _pyF  (meta, **kwargs) transpile func]") # toPyFunc
+kjsSett.add("cppF",  {}, "(future feature) All ._cppF()  (cli to C++)    transpile functions, looks like Dict[type -> _cppF (meta, **kwargs) transpile func]") # toPyFunc
+kjsSett.add("javaF", {}, "(future feature) All ._javaF() (cli to Java)   transpile functions, looks like Dict[type -> _javaF(meta, **kwargs) transpile func]") # toPyFunc
+kjsSett.add("sqlF",  {}, "(future feature) All ._sqlF()  (cli to SQL)    transpile functions, looks like Dict[type -> _sqlF (meta, **kwargs) transpile func]") # toPyFunc
+kjsSett.jsF[str] = lambda meta: (f"", "String")                                  # toPyFunc
+kjsSett.jsF[int] = lambda meta: (f"", "parseInt")                                # toPyFunc
+kjsSett.jsF[float] = lambda meta: (f"", "parseFloat")                            # toPyFunc
+kjsSett.jsF[set] = lambda meta: (f"", "new Set")                                 # toPyFunc
+kjsSett.jsF[list] = lambda meta: (f"", "Array.from")                             # toPyFunc
+kjsSett.jsF[tuple] = lambda meta: (f"", "Array.from")                            # toPyFunc
+kjsSett.jsF[abs] = lambda meta: (f"", "Math.abs")                                # toPyFunc
+kjsSett.jsF[json.loads] = lambda meta: (f"", "JSON.parse")                       # toPyFunc
+kjsSett.jsF[json.dumps] = lambda meta: (f"", "JSON.stringify")                   # toPyFunc
+kjsSett.jsF[base64.b64decode] = lambda meta: (f"", "atob")                       # toPyFunc
+kjsSett.jsF[base64.b64encode] = lambda meta: (f"", "btoa")                       # toPyFunc
 def _jst_round(meta, ndigits=None):                                              # _jst_round
     if ndigits is None: return "", f"Math.round"                                 # _jst_round
     else:                                                                        # _jst_round
@@ -172,7 +219,7 @@ for (const scriptElem of containerDiv.querySelectorAll('script')) eval(scriptEle
             try {{
                 {pre}_error.innerHTML = ""; {pre}_loadingDiv.innerHTML = "(loading...)"; const val = await {self.jsFunc.fIdx}({values});
                 if (!handle.cancel) {{ {pre}_loadingDiv.innerHTML = "&nbsp;"; {pre}_resultDiv.innerHTML = {res}; {postprocess} }}
-            }} catch (e) {{ if (!handle.cancel) {pre}_error.innerHTML = e.stack; console.log(e.stack); }} runningCoreHandle[0] = null;
+            }} catch (e) {{ if (!handle.cancel) {pre}_error.innerHTML = e.stack; console.log('{self.jsFunc.fIdx}', e, e.stack); }} runningCoreHandle[0] = null;
         }}; let {pre}_reload_timeout = null;
         const {pre}_reload = async (e) => {{
             {preview}; if ({debounce} <= 0) return {pre}_reload_core();
@@ -241,7 +288,7 @@ build functionalities in JS. Example::
     jsf.interface("json")
 
 So a little more background on how this works. With clis, it can "capture" other
-clis to the right of it if it desires. So, ``toJsFunc`` will capture the 2 ``head``s
+clis to the right of it if it desires. So, ``toJsFunc`` will capture the 2 heads
 and transpile them to js. So Python data never really gets passed through those later
 heads. Read more about this at :class:`~k1lib.cli.init.BaseCli` and on the main
 cli page at https://k1lib.com/latest/cli/index.html

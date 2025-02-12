@@ -4,9 +4,9 @@ k1lib.viz module
 
 .. automodule:: k1lib.viz
 
+   .. autofunction:: daisyUI
    .. autoclass:: SliceablePlot
       :members: decorate
-
    .. autofunction:: plotSegments
 
    .. autoclass:: Carousel
@@ -29,6 +29,14 @@ k1lib.viz module
    .. autoclass:: Html
       :members:
    .. autoclass:: onload
+      :members:
+   .. autoclass:: Clipboard
+      :members:
+   .. autoclass:: Download
+      :members:
+   .. autoclass:: qrScanner
+      :members:
+   .. autoclass:: Popup
       :members:
    .. autoclass:: Table
       :members:

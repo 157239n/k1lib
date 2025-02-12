@@ -71,8 +71,10 @@ Table._name = "Table"                                                           
 class Row(list):                                                                 # Row
     """Not really used currently. Just here for potential future feature"""      # Row
     pass                                                                         # Row
-_jsFAuto = k1lib.AutoIncrement(prefix=f"_jsF_{random.randint(100, 999)}_{round(time.time())}_") # Row
-_jsDAuto = k1lib.AutoIncrement(prefix=f"_jsD_{random.randint(100, 999)}_{round(time.time())}_") # Row
+_jsFAuto  = k1lib.AutoIncrement(prefix=f"_jsF_{random.randint(100, 999)}_{round(time.time())}_") # Row
+_jsDAuto  = k1lib.AutoIncrement(prefix=f"_jsD_{random.randint(100, 999)}_{round(time.time())}_") # Row
+_pyFAuto  = k1lib.AutoIncrement(prefix=f"_pyF_")                                 # Row
+_jsUIAuto = k1lib.AutoIncrement(prefix=f"_jsUI_") # a shorter version, to avoid sending over a lot of html, as variable names do add up quite a lot # Row
 class ArrayOptException(Exception): pass                                         # ArrayOptException
 class BaseCli:                                                                   # BaseCli
     """A base class for all the cli stuff. You can definitely create new cli tools that
@@ -252,9 +254,9 @@ I can think more clearly about this, I might move this mechanism back to LLVM.""
     def _jsF(self, meta):                                                        # BaseCli
         """JS transpiler default function. See "JS transpiler" section in the docs""" # BaseCli
         return NotImplemented                                                    # BaseCli
-    def _pyF(self, meta):                                                        # BaseCli
-        """Cli to Python transpiler default function."""                         # BaseCli
-        return NotImplemented                                                    # BaseCli
+    # def _pyF(self, meta):                                                      # BaseCli
+    #     """Cli to Python transpiler default function."""                       # BaseCli
+    #     return NotImplemented                                                  # BaseCli
     def _cppF(self, meta):                                                       # BaseCli
         """C++ transpiler default function"""                                    # BaseCli
         return NotImplemented                                                    # BaseCli

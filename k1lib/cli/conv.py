@@ -21,7 +21,7 @@ __all__ = ["toNdArray", "toTensor", "toRange", "toList",
 import re, k1lib, math, os, numpy as np, io, json, base64, unicodedata, inspect, time, functools
 from k1lib.cli.init import BaseCli, T, yieldT; import k1lib.cli as cli, k1lib.cli.init as init
 from k1lib.cli.typehint import *; mpl = k1lib.dep.mpl; plt = k1lib.dep.plt; yaml = k1lib.dep.yaml; pd = k1lib.dep.pd; cm = k1lib.dep.cm; cv2 = k1lib.dep.cv2
-from collections import deque, defaultdict; from typing import Iterator, Any, List, Set, Tuple, Dict, Callable, Union
+from collections import deque, defaultdict, OrderedDict; from typing import Iterator, Any, List, Set, Tuple, Dict, Callable, Union
 settings = k1lib.settings.cli; imgkit = k1lib.dep("imgkit", url="https://github.com/csquared/IMGKit")
 try: import PIL; import PIL.Image; hasPIL = True
 except: hasPIL = False
@@ -103,9 +103,8 @@ avoid breaking old projects."""                                                 
         if isinstance(inp, tCollection): return inp                              # toList
         return tList(tAny())                                                     # toList
     def __ror__(self, it:Iterator[Any]) -> List[Any]: return list(init.dfGuard(it)) # toList
-    def _jsF(self, meta):                                                        # toList
-        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # toList
-        return f"{fIdx} = ({dataIdx}) => {dataIdx}", fIdx                        # toList
+    def _jsF(self, meta): fIdx = init._jsFAuto(); dataIdx = init._jsDAuto(); return f"{fIdx} = ({dataIdx}) => {dataIdx}", fIdx # toList
+    def _pyF(self, expr, **kw): return "", "", f"list({expr})", {}               # toList
 def _toRange(it):                                                                # _toRange
     for i, _ in enumerate(it): yield i                                           # _toRange
 class toRange(BaseCli):                                                          # toRange
@@ -123,6 +122,7 @@ Example::
     def _jsF(self, meta):                                                        # toRange
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # toRange
         return f"{fIdx} = ({dataIdx}) => {dataIdx}.toRange()", fIdx              # toRange
+    def _pyF(self, expr, **kw): i = init._pyFAuto(); e = init._pyFAuto(); return "", "", f"({i} for {i},{e} in enumerate({expr}))", {} # toRange
 tOpt.addPass(lambda cs, ts, _: [cs[0]], [toRange, toRange])                      # toRange
 settings.add("arrayTypes", (torch.Tensor, np.ndarray) if hasTorch else (np.ndarray,), "default array types used to accelerate clis") # toRange
 def genericTypeHint(inp):                                                        # genericTypeHint
@@ -147,9 +147,8 @@ Example::
     def __ror__(self, it:Iterator[float]):                                       # toSum
         if isinstance(it, settings.arrayTypes) or (hasPandas and isinstance(it, pd.Series)): return it.sum() # toSum
         return sum(init.dfGuard(it))                                             # toSum
-    def _jsF(self, meta):                                                        # toSum
-        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # toSum
-        return f"{fIdx} = ({dataIdx}) => {dataIdx}.toSum()", fIdx                # toSum
+    def _jsF(self, meta): fIdx = init._jsFAuto(); dataIdx = init._jsDAuto(); return f"{fIdx} = ({dataIdx}) => {dataIdx}.toSum()", fIdx # toSum
+    def _pyF(self, expr): return "", "", f"sum({expr})", {}                      # toSum
 class toProd(BaseCli):                                                           # toProd
     blurb="Calculates the product of a list of numbers"                          # toProd
     def __init__(self):                                                          # toProd
@@ -170,9 +169,8 @@ Example::
     def __ror__(self, it):                                                       # toProd
         if isinstance(it, settings.arrayTypes) or (hasPandas and isinstance(it, pd.Series)): return it.prod() # toProd
         else: return math.prod(init.dfGuard(it))                                 # toProd
-    def _jsF(self, meta):                                                        # toProd
-        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # toProd
-        return f"{fIdx} = ({dataIdx}) => {dataIdx}.toProd()", fIdx               # toProd
+    def _jsF(self, meta): fIdx = init._jsFAuto(); dataIdx = init._jsDAuto(); return f"{fIdx} = ({dataIdx}) => {dataIdx}.toProd()", fIdx # toProd
+    def _pyF(self, expr, **kw): return "import math", "", f"math.prod({expr})", {} # toProd
 class toAvg(BaseCli):                                                            # toAvg
     blurb="Calculates the average of a list of numbers"                          # toAvg
     def __init__(self):                                                          # toAvg
@@ -204,6 +202,11 @@ Example::
     def _jsF(self, meta):                                                        # toAvg
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # toAvg
         return f"{fIdx} = ({dataIdx}) => {dataIdx}.toAvg()", fIdx                # toAvg
+    def _pyF(self, expr, **kw): funcN = init._pyFAuto(); return "", f"""
+def {funcN}(x):
+    n = len(x)
+    if n == 0: return float("nan")
+    return sum(x)/n""", f"{funcN}({expr})", {}                                   # toAvg
 if hasTorch:                                                                     # toAvg
     torchVer = int(torch.__version__.split(".")[0])                              # toAvg
     if torchVer >= 2:                                                            # toAvg
@@ -274,28 +277,32 @@ Example::
         if hasTorch and isinstance(it, torch.Tensor): return torch.median(it) if q == 50 else torch.tensor(np.percentile(it.cpu().numpy(), q), dtype=it.dtype, device=it.device) # toMedian
         try: return np.percentile(it, q)                                         # toMedian
         except: return np.percentile(it | cli.deref(), q)                        # toMedian
+    def _pyF(self, expr, **kw):                                                  # toMedian
+        funcN = init._pyFAuto()                                                  # toMedian
+        return "", f"def {funcN}(x): return sorted(x)[{self.percentile}*len(x)//100]", f"{funcN}({expr})", {} # toMedian
 class toMax(BaseCli):                                                            # toMax
     blurb="Calculates the max value of a list of numbers"                        # toMax
-    def __init__(self):                                                          # toMax
+    def __init__(self, default=None):                                            # toMax
         """Calculates the max of a bunch of numbers. Can pipe in :class:`torch.Tensor` or :class:`numpy.ndarray`.
 Example::
 
     [2, 5, 6, 1, 2]          | toMax()                 # returns 6
     np.random.randn(2, 3, 4) | toMax().all() | shape() # returns (2,)
 """                                                                              # toMax
-        super().__init__()                                                       # toMax
+        super().__init__(); self.default = default                               # toMax
     def _all_array_opt(self, it, level):                                         # toMax
-        if isinstance(it, np.ndarray): return np.max(it, tuple(range(level, len(it.shape)))) # toMax
+        if isinstance(it, np.ndarray): return np.max(it, tuple(range(level, len(it.shape)))); self.default = default # toMax
         elif hasTorch and isinstance(it, torch.Tensor):                          # toMax
             for i in range(level, len(it.shape)): it = torch.max(it, level)[0]   # toMax
             return it                                                            # toMax
         return NotImplemented                                                    # toMax
     def __ror__(self, it:Iterator[float]) -> float:                              # toMax
         if isinstance(it, settings.arrayTypes) or (hasPandas and isinstance(it, pd.Series)): return it.max() # toMax
-        return max(it)                                                           # toMax
-    def _jsF(self, meta):                                                        # toMax
-        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # toMax
-        return f"{fIdx} = ({dataIdx}) => {dataIdx}.toMax()", fIdx                # toMax
+        if self.default is None: return max(it)                                  # toMax
+        try: return max(it)                                                      # toMax
+        except ValueError: return self.default                                   # toMax
+    def _jsF(self, meta): fIdx = init._jsFAuto(); dataIdx = init._jsDAuto(); return f"{fIdx} = ({dataIdx}) => {dataIdx}.toMax()", fIdx # toMax
+    def _pyF(self, expr, **kw): return "", "", f"max({expr})", {}                # toMax
 class toMin(BaseCli):                                                            # toMin
     blurb="Calculates the min value of a list of numbers"                        # toMin
     def __init__(self):                                                          # toMin
@@ -315,9 +322,8 @@ Example::
     def __ror__(self, it:Iterator[float]) -> float:                              # toMin
         if isinstance(it, settings.arrayTypes) or (hasPandas and isinstance(it, pd.Series)): return it.min() # toMin
         return min(it)                                                           # toMin
-    def _jsF(self, meta):                                                        # toMin
-        fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # toMin
-        return f"{fIdx} = ({dataIdx}) => {dataIdx}.toMin()", fIdx                # toMin
+    def _jsF(self, meta): fIdx = init._jsFAuto(); dataIdx = init._jsDAuto(); return f"{fIdx} = ({dataIdx}) => {dataIdx}.toMin()", fIdx # toMin
+    def _pyF(self, expr, **kw): return "", "", f"min({expr})", {}                # toMin
 class toArgmin(BaseCli):                                                         # toArgmin
     blurb="Grabs the min value's index"                                          # toArgmin
     def __init__(self):                                                          # toArgmin
@@ -421,7 +427,8 @@ You can also save a matplotlib figure by piping in a :class:`matplotlib.figure.F
             return self.PIL.Image.fromarray(path.astype("uint8"))                # toImg
         if isinstance(path, mpl.figure.Figure):                                  # toImg
             canvas = path.canvas; canvas.draw()                                  # toImg
-            img = self.PIL.Image.frombytes('RGB', canvas.get_width_height(), canvas.tostring_rgb()) # toImg
+            if hasattr(canvas, "tostring_rgb"): img = self.PIL.Image.frombytes('RGB', canvas.get_width_height(), canvas.tostring_rgb()) # toImg
+            else: img = PIL.Image.frombytes('RGBA', canvas.get_width_height(), canvas.buffer_rgba()) # toImg
             if self.closeFig: plt.close(path)                                    # toImg
             return img | cli.aS(cropToContentPIL)                                # toImg
         if hasGraphviz and isinstance(path, graphviz.Digraph):                   # toImg
@@ -512,7 +519,7 @@ Example::
         return self.PIL.ImageOps.grayscale(i)                                    # toGray
 class toDict(BaseCli):                                                           # toDict
     blurb="Converts 2 Iterators, 1 key, 1 value into a dictionary"               # toDict
-    def __init__(self, rows=True, f=None):                                       # toDict
+    def __init__(self, rows=True, defaultF=None):                                # toDict
         """Converts 2 Iterators, 1 key, 1 value into a dictionary.
 Example::
 
@@ -551,20 +558,31 @@ That returns::
 
 :param rows: if True, reads input in row by row, else reads
     in list of columns
-:param f: if specified, return a defaultdict that uses this function as its generator""" # toDict
+:param defaultF: if specified, return a defaultdict that uses this function as its generator""" # toDict
         self.rows = rows                                                         # toDict
-        if f is not None: self.f = lambda d: defaultdict(f, d)                   # toDict
+        if defaultF is not None: self.f = lambda d: defaultdict(defaultF, d)     # toDict
         else: self.f = lambda x: x                                               # toDict
     def __ror__(self, it) -> dict:                                               # toDict
         r = self.rows; f = self.f                                                # toDict
         if r:                                                                    # toDict
-            if isinstance(r, str): return it | cli.apply(cli.aS(lambda x: x.split(" ")) | cli.head(1).split() | cli.item() + cli.join(" ")) | toDict() # toDict
+            if isinstance(r, str): return it | cli.apply(cli.aS(lambda x: x.split(r)) | cli.head(1).split() | cli.item() + cli.join(r)) | toDict() # toDict
             return f({_k:_v for _k, _v in it})                                   # toDict
         return f({_k:_v for _k, _v in zip(*it)})                                 # toDict
     def _jsF(self, meta):                                                        # toDict
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto()                        # toDict
         if not self.rows: raise Exception("toDict._jsF() doesn't support .rows=False yet") # toDict
         return f"{fIdx} = ({dataIdx}) => {dataIdx}.toDict()", fIdx               # toDict
+    def _pyF(self, expr, **kw):                                                  # toDict
+        r = self.rows; kN = init._pyFAuto(); vN = init._pyFAuto()                # toDict
+        if r == False: return "", "", f"{{{kN}:{vN} for {kN},{vN} in zip(*{expr})}}", {} # toDict
+        if isinstance(r, str):                                                   # toDict
+            rN = init._pyFAuto(); funcN = init._pyFAuto(); delimN = init._pyFAuto() # toDict
+            return "", f"""
+def {funcN}(data):
+    delim = {delimN}; d = {{}}
+    for line in data: elems = line.split(delim); d[elems[0]] = delim.join(elems[1:])
+    return d""", f"{funcN}({expr})", {delimN: self.rows}                         # toDict
+        return "", "", f"{{{kN}:{vN} for {kN},{vN} in {expr}}}", {}              # toDict
 def _toop(toOp, c, force, defaultValue):                                         # _toop
     return cli.apply(toOp, c) | (cli.apply(lambda x: x or defaultValue, c) if force else cli.filt(cli.op() != None, c)) # _toop
 def _toFloat(e) -> Union[float, None]:                                           # _toFloat
@@ -694,7 +712,7 @@ Example::
     19 | toRoman() # returns "XIX"
 """                                                                              # toRoman
         pass                                                                     # toRoman
-    def __ror__(self, x): return _roman_num(x) | cli.join("")                    # toRoman
+    def __ror__(self, x): return "".join([str(x) for x in _roman_num(x)])        # toRoman
 class toBytes(BaseCli):                                                          # toBytes
     blurb="Converts several object types to bytes"                               # toBytes
     def __init__(self, dataType=None):                                           # toBytes
@@ -944,7 +962,7 @@ class toYaml(BaseCli):                                                          
 Example::
 
     "some_file.yaml"                   | toYaml()  # returns python object
-    cat("some_file.yaml") | join("\n") | toYaml(1) # returns python object
+    cat("some_file.yaml") | join("\\n") | toYaml(1) # returns python object
     {"some": "object", "arr": [1, 2]}  | toYaml()  # returns yaml string. Detected object coming in, instead of string, so will convert object into yaml string
 
 :param mode: None (default) for figure it out automatically,
@@ -1019,7 +1037,7 @@ class toUnix(BaseCli):                                                          
     blurb="Converts to unix timestamp"                                           # toUnix
     def __init__(self, tz:"str | dateutil.tz.tz.tzfile"=None, mode:int=0):       # toUnix
         """Tries anything piped in into a unix timestamp. If can't convert
-then return None or the current timestamp (depending on mode). Example::
+then return None or the current timestamp (depending on mode). Example:
 
 Local time zone independent::
 
