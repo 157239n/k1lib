@@ -4,11 +4,11 @@
 """
 from typing import Callable, Iterator, Tuple, Union, Dict, Any, List
 from k1lib import isNumeric; import k1lib, contextlib, warnings, random
-import random, math, sys, io, os, numpy as np, functools, time, traceback, threading, struct
+import random, math, sys, io, os, numpy as np, functools, time, traceback, threading, struct, json, pprint
 plt = k1lib.dep.plt
 try: import torch; hasTorch = True
 except: hasTorch = False
-__all__ = ["Object", "Range", "Domain", "AutoIncrement", "ConfinedAutoIncrement", "Wrapper", "Every",
+__all__ = ["Object", "Range", "Domain", "AutoIncrement", "Wrapper", "Every",
            "RunOnce", "MaxDepth", "MovingAvg", "Absorber",
            "Settings", "settings", "_settings", "UValue", "ConstantPad", "AutoUpdateValue", "Aggregate", "Perlin", "Struct"]
 class Object:                                                                    # Object
@@ -395,7 +395,7 @@ is :math:`(-\\inf, a)`, then starts at the specified integer"""                 
 - d1 & d2: intersects 2 domains"""                                               # Domain
 puas = [[ord(c) for c in cs] for cs in [["\ue000", "\uf8ff"], ["\U000f0000", "\U000ffffd"], ["\U00100000", "\U0010fffd"]]] # Domain
 class AutoIncrement:                                                             # AutoIncrement
-    def __init__(self, initialValue:int=-1, n:int=float("inf"), prefix:str=None): # AutoIncrement
+    def __init__(self, initialValue:int=-1, n:int=float("inf"), prefix:str=None, unique=False): # AutoIncrement
         """Creates a new AutoIncrement object. Every time the object is called
 it gets incremented by 1 automatically. Example::
 
@@ -413,9 +413,18 @@ it gets incremented by 1 automatically. Example::
     a() # returns "cluster_2"
     a() # returns "cluster_0"
 
+There's also the .unique param. Here's how it works::
+
+    a = AutoIncrement(n=4, unique=True);
+    [a(), a(), a()]         # returns [0, 1, 2]
+    a.remove(2); [a(), a()] # returns [3, 2]
+    a() # raises error, as there's no number left between 0 and 4
+
 :param n: if specified, then will wrap around to 0 when hit this number
-:param prefix: if specified, will yield strings with specified prefix"""         # AutoIncrement
-        self.value = initialValue; self.n = n; self.prefix = prefix              # AutoIncrement
+:param prefix: if specified, will yield strings with specified prefix
+:param unique: if True, and .n is specified, will throw an error if a number
+    is used that isn't freed with .remove() yet"""                               # AutoIncrement
+        self._value = initialValue; self.n = n; self.prefix = prefix; self.unique = unique; self.currentValues = [] # AutoIncrement
     @staticmethod                                                                # AutoIncrement
     def random() -> "AutoIncrement":                                             # AutoIncrement
         """Creates a new AutoIncrement object that has a random integer initial value""" # AutoIncrement
@@ -429,9 +438,17 @@ it gets incremented by 1 automatically. Example::
     def value(self, value): self._value = value                                  # AutoIncrement
     def __call__(self):                                                          # AutoIncrement
         """Increments internal counter, and return it."""                        # AutoIncrement
-        self._value += 1                                                         # AutoIncrement
-        if self._value >= self.n: self._value = 0                                # AutoIncrement
-        return self.value                                                        # AutoIncrement
+        if self.unique:                                                          # AutoIncrement
+            currentValues = self.currentValues; maxValue = self.n; i = self._value # AutoIncrement
+            if len(currentValues) == maxValue: raise Exception("Ran out of elements to yield") # AutoIncrement
+            while True:                                                          # AutoIncrement
+                i = (i+1) % maxValue                                             # AutoIncrement
+                if i not in currentValues: currentValues.append(i); self._value = i; return i # AutoIncrement
+        else:                                                                    # AutoIncrement
+            self._value += 1                                                     # AutoIncrement
+            if self._value >= self.n: self._value = 0                            # AutoIncrement
+            return self.value                                                    # AutoIncrement
+    def remove(self, k): self.currentValues.remove(k)                            # AutoIncrement
     @staticmethod                                                                # AutoIncrement
     def unicode_pua():                                                           # AutoIncrement
         """Returns a generator that generates unicode characters from within
@@ -442,32 +459,6 @@ unicode's private use area (PUA). Example::
 """                                                                              # AutoIncrement
         for pua in puas:                                                         # AutoIncrement
             for c in range(pua[0], pua[1]+1): yield chr(c)                       # AutoIncrement
-class ConfinedAutoIncrement:                                                     # ConfinedAutoIncrement
-    def __init__(self, maxValue=16):                                             # ConfinedAutoIncrement
-        """Similar to :class:`AutoIncrement`, but this time the yielded numbers
-become cyclical, and in [0, maxValue). The applications for this class is
-rather niche, as I need it only for a hardware project that require strict id
-generation::
-
-    a = ConfinedAutoIncrement(4)
-    a() # returns 1
-    a() # returns 2
-    a() # returns 3
-    a.remove(2)
-    a() # returns 0
-    a() # returns 2
-    a() # throws an error as it ran out of elements to yield
-
-:param maxValue: max value that can be yielded"""                                # ConfinedAutoIncrement
-        self.maxValue = maxValue; self.i = 0; self.currentValues = []            # ConfinedAutoIncrement
-    def __call__(self):                                                          # ConfinedAutoIncrement
-        currentValues = self.currentValues; maxValue = self.maxValue; i = self.i # ConfinedAutoIncrement
-        if len(currentValues) == maxValue: raise Exception("Ran out of elements to yield") # ConfinedAutoIncrement
-        while True:                                                              # ConfinedAutoIncrement
-            i = (i+1) % maxValue                                                 # ConfinedAutoIncrement
-            if i not in currentValues: currentValues.append(i); self.i = i; return i # ConfinedAutoIncrement
-    def remove(self, k): self.currentValues.remove(k)                            # ConfinedAutoIncrement
-    def __repr__(self): return f"<ConfinedAutoIncrement max={self.maxValue} len={len(self.currentValues)} >" # ConfinedAutoIncrement
 class Wrapper:                                                                   # Wrapper
     value:Any                                                                    # Wrapper
     """Internal value of this :class:`Wrapper`"""                                # Wrapper
@@ -1353,13 +1344,15 @@ came from sensor data. Example::
             if guide*(random.random()-0.5)+0.5 < r: v -= std*step                # Perlin
             else: v += std*step                                                  # Perlin
             self.v = v; yield v                                                  # Perlin
-_structTypes = ["u8", "u16", "u32", "u64", "i16", "i32", "i64", "f32", "f64", "c"] # u8:1 for bit field, c:32 for char array of 32 bytes # Perlin
-_structLen   = {"u8": 8,   "u16": 16,  "u32": 32,  "u64": 64,  "i8": 8,   "i16": 16,  "i32": 32,  "i64": 64,  "f32": 32,  "f64": 64, "c": 1} # Perlin
-_structTrans = {"u8": "B", "u16": "H", "u32": "I", "u64": "Q", "i8": "b", "i16": "h", "i32": "i", "i64": "q", "f32": "f", "f64": "d"} # Perlin
+_structTypes = ["u8", "u16", "u32", "u64", "i8", "i16", "i32", "i64", "f32", "f64", "c", "unix"] # u8:1 for bit field, c:32 for char array of 32 bytes # Perlin
+_structLen   = {"u8": 8,   "u16": 16,  "u32": 32,  "u64": 64,  "i8": 8,   "i16": 16,  "i32": 32,  "i64": 64,  "f32": 32,  "f64": 64, "c": 1, "unix": 64} # Perlin
+_structTrans = {"u8": "B", "u16": "H", "u32": "I", "u64": "Q", "i8": "b", "i16": "h", "i32": "i", "i64": "q", "f32": "f", "f64": "d", "unix": "Q"} # Perlin
+_structInts = ["u8", "u16", "u32", "u64", "i8", "i16", "i32", "i64", "unix"]     # Perlin
 _byteMask = {1: 0b00000001, 2: 0b00000011, 3: 0b00000111, 4: 0b00001111, 5: 0b00011111, 6: 0b00111111, 7: 0b01111111, 8: 0b11111111} # Perlin
+_structUIAuto = AutoIncrement(prefix="_s")                                       # Perlin
 class StructParseException(Exception): pass                                      # StructParseException
 class Struct:                                                                    # Struct
-    def __init__(self, structDef:dict):                                          # Struct
+    def __init__(self, structDef:dict, strict:bool=True):                        # Struct
         """Class to help with building structs in native python.
 Vanilla example::
 
@@ -1383,6 +1376,7 @@ without null character at the end! There are these data types:
 - Signed integers: i8, i16, i32, i64
 - Floating point: f32, f64
 - String: c
+- Unix time: unix
 
 This also supports bitfields, surprise! This was pretty hard to implement, but
 it's pretty glorious::
@@ -1392,31 +1386,55 @@ it's pretty glorious::
     s = k1.Struct({"a": "u8:1", "d": "u8:5", "b": "u8", "c": "u8:4"}).parse(b'\\x07\\x05\\x06')
     [s.a, s.b, s.c, s.d] # returns [1, 5, 6, 3]
 
-Finally, you can nest structs inside one another::
+You can also nest structs inside one another::
 
     sDef = {"a": "u8", "b": "u32", "c": "c:6", "d": {"a": "f32", "b": "f64"}}
     s = k1.Struct(sDef); s.d.a = 3.4; s.d.b = 0.1; s.c = "kirisame"
     raw = s | toBytes(); s = k1.Struct(sDef).parse(raw)
     [s.a, s.b, s.c, s.d.a, s.d.b] # returns [0, 0, b'kirisa', 3.4, 0.1]
 
-This mechanism is also available on JS side, see :meth:`_js`"""                  # Struct
-        self.structDef = structDef; self._s_vars = {}; groups = []; group = []; nbits = 0 # byte-aligned groups, number of bits in this group so far # Struct
+Finally, you can also have arrays::
+
+    sDef = {"a": ["u8", 5], "b": (["f32", 3], "some random desc, for html view")}; s = k1.Struct(sDef)
+    s.a[1] = 23; s.b[2] = 3.5; s._values() # returns {'a': [0, 23, 0, 0, 0], 'b': [0, 0, 3.5]}
+
+This mechanism is also available on JS side, see :meth:`_js`
+
+:param structDef: struct definition
+:param strict: whether to raise error when parsing bytes with lower length than the struct
+    or not. If does not raise error (strict=False), then remaining padded bytes are zero""" # Struct
+        self.structDef = structDef; self.strict = strict; self._s_vars = {}; groups = []; group = []; nbits = 0 # byte-aligned groups, number of bits in this group so far # Struct
         for name, _type in structDef.items():                                    # Struct
             desc = ""                                                            # Struct
-            if isinstance(_type, (str, tuple)): # typical regular types          # Struct
+            if isinstance(_type, (str, tuple, list)): # typical regular types    # Struct
                 if isinstance(_type, tuple): _type, desc = _type                 # Struct
-                res = _type.split(":"); typeRaw = res[0]; typeLen = int(res[1]) if len(res) > 1 else _structLen[typeRaw] # Struct
-                if typeRaw not in _structTypes: raise StructParseException(f"Don't recognize type '{typeRaw}', has to be one of '{_structTypes}'") # Struct
-                if typeRaw == "c":                                               # Struct
-                    if len(res) == 1: raise StructParseException(f"Character arrays/strings must have a length associated with it, like 'c:10', for char[10]") # Struct
-                    self.__dict__[name] = ""; self._s_vars[name] = [typeRaw, typeLen*8, desc] # Struct
-                    if nbits > 0: groups.append(group)                           # Struct
-                    groups.append([name]); group = []; nbits = 0                 # Struct
-                else:                                                            # Struct
-                    if typeLen % 8 > 0 and typeRaw != "u8": raise StructParseException("Only u8 type is allowed to have bit field values") # Struct
-                    self.__dict__[name] = 0; self._s_vars[name] = [typeRaw, typeLen, desc] # Struct
-                    if typeLen <= 8-nbits: group.append(name); nbits += typeLen  # Struct
-                    else: groups.append(group); group = [name]; nbits = typeLen  # Struct
+                if isinstance(_type, str): res = _type.split(":")                # Struct
+                elif isinstance(_type, list): res = _type                        # Struct
+                else: raise Exception(f"Does not know how to parse struct definition of type {type(_type)}") # Struct
+                typeRaw = res[0]; typeLen = int(res[1]) if len(res) > 1 else _structLen[typeRaw] # Struct
+                if isinstance(typeRaw, str):                                     # Struct
+                    if typeRaw not in _structTypes: raise StructParseException(f"Don't recognize type '{typeRaw}', has to be one of '{_structTypes}'") # Struct
+                    if typeRaw == "c": # char array, or string, makes an exception # Struct
+                        if isinstance(_type, list): raise StructParseException("Does not support arrays of char[]/string yet") # Struct
+                        if len(res) == 1: raise StructParseException(f"Character arrays/strings must have a length associated with it, like 'c:10', for char[10]") # Struct
+                        self.__dict__[name] = ""; self._s_vars[name] = [typeRaw, typeLen*8, desc] # Struct
+                        if nbits > 0: groups.append(group)                       # Struct
+                        groups.append([name]); group = []; nbits = 0             # Struct
+                    else: # other primitive types                                # Struct
+                        if isinstance(_type, list): # [type]                     # Struct
+                            self.__dict__[name] = [0]*typeLen; self._s_vars[name] = [[typeRaw, typeLen], typeLen*_structLen[typeRaw], desc] # Struct
+                            if group: groups.append(group)                       # Struct
+                            groups.append([name]); group = []; nbits = 0         # Struct
+                        else: # u8, u16, or u8:1                                 # Struct
+                            if typeLen % 8 > 0 and typeRaw != "u8": raise StructParseException("Only u8 type is allowed to have bit field values") # Struct
+                            self.__dict__[name] = 0; self._s_vars[name] = [typeRaw, typeLen, desc] # Struct
+                            if typeLen <= 8-nbits: group.append(name); nbits += typeLen # Struct
+                            else: groups.append(group); group = [name]; nbits = typeLen # Struct
+                else: # struct[]                                                 # Struct
+                    f = lambda: Struct(typeRaw); self.__dict__[name] = [f() for i in range(typeLen)] # Struct
+                    self._s_vars[name] = [[typeRaw, typeLen], len(self.__dict__[name][0])*typeLen*8, desc] # Struct
+                    if group: groups.append(group)                               # Struct
+                    groups.append([name]); group = []                            # Struct
             elif isinstance(_type, dict): # nested structs, expects a dict       # Struct
                 self.__dict__[name] = Struct(_type); self._s_vars[name] = [_type, len(self.__dict__[name])*8, desc] # Struct
                 if group: groups.append(group)                                   # Struct
@@ -1429,9 +1447,19 @@ This mechanism is also available on JS side, see :meth:`_js`"""                 
             if bitField: byteOffset += 1                                         # Struct
             else: assert len(group) == 1; byteOffset += _vars[group[0]][1] // 8  # Struct
         self._s_groups = a_groups; self._s_len = len(self._toBytes())            # Struct
-    def _s_valuesD(self): return {name: self.__dict__[name] for name in self._s_vars.keys()} # Struct
-    def __str__(self): v = {x:str(y) if isinstance(y, Struct) else y for x,y in self._s_valuesD().items()}; return f"<Struct len={len(self)} values={v}>" # Struct
-    def __repr__(self): v = {x:str(y) if isinstance(y, Struct) else y for x,y in self._s_valuesD().items()}; return f"<Struct len={len(self)} values={v}>\n  Raw: {self._s_vars}\n  Byte groups: {[g for bF,offset,g in self._s_groups]}" # Struct
+    def _s_valuesD(self): return {name: self.__dict__[name] for name in self._s_vars.keys()} # simple key - value, not in a super nice format tho # Struct
+    def _values(self):                                                           # Struct
+        ans = {}                                                                 # Struct
+        for name, [typeRaw, typeLen, desc] in self._s_vars.items():              # Struct
+            if isinstance(typeRaw, str): ans[name] = self.__dict__[name]         # Struct
+            elif isinstance(typeRaw, list):                                      # Struct
+                typeRaw, arrLen = typeRaw                                        # Struct
+                if isinstance(typeRaw, str): ans[name] = self.__dict__[name]     # Struct
+                else: ans[name] = [x._values() for x in self.__dict__[name]]     # Struct
+            else: ans[name] = self.__dict__[name]._values()                      # Struct
+        return ans                                                               # Struct
+    def __repr__(self):                                                          # Struct
+        v = {x:str(y) if isinstance(y, Struct) else y for x,y in self._s_valuesD().items()}; return f"<Struct len={len(self)} def={self.structDef}>\n{pprint.pformat(self._values())}" # Struct
     def __len__(self): return self._s_len                                        # Struct
     def _toBytes(self):                                                          # Struct
         _vars = self._s_vars; values = self._s_valuesD(); ans = b""              # Struct
@@ -1447,11 +1475,16 @@ This mechanism is also available on JS side, see :meth:`_js`"""                 
                     if isinstance(v, str): v = v.encode()                        # Struct
                     if not isinstance(v, bytes): raise StructParseException(f"Variable '{name}' should be a string, but it's of type {type(v)} instead") # Struct
                     ans += (v + b"\0"*(typeLen//8-len(v)))[:typeLen//8]          # Struct
-                elif isinstance(typeRaw, str): ans += struct.pack(_structTrans[typeRaw], values[name]) # Struct
-                else: ans += values[name]._toBytes()                             # Struct
+                elif isinstance(typeRaw, str):                                   # Struct
+                    if typeRaw in _structInts: values[name] = int(values[name])  # Struct
+                    ans += struct.pack(_structTrans[typeRaw], values[name])      # Struct
+                elif isinstance(typeRaw, dict): ans += values[name]._toBytes()   # Struct
+                elif isinstance(typeRaw, list): typeRaw, arrLen = typeRaw; ans += b"".join([x._toBytes() for x in values[name]]) if isinstance(typeRaw, dict) else struct.pack(_structTrans[typeRaw]*arrLen, *values[name]) # Struct
         return ans                                                               # Struct
     def parse(self, data:bytes):                                                 # Struct
-        if len(self) != len(data): raise StructParseException("Length of input data does not match struct's length") # Struct
+        if self.strict:                                                          # Struct
+            if len(self) != len(data): raise StructParseException("Length of input data does not match struct's length") # Struct
+        elif len(self) > len(data): data = data + b"\x00" * (len(self) - len(data)) # Struct
         _vars = self._s_vars; groupBounds = [*[x[1] for x in self._s_groups], len(self)] # Struct
         for i, [bitField, byteOffset, group] in enumerate(self._s_groups):       # Struct
             localData = data[groupBounds[i]:groupBounds[i+1]]                    # Struct
@@ -1462,10 +1495,13 @@ This mechanism is also available on JS side, see :meth:`_js`"""                 
                 name = group[0]; typeRaw, typeLen, desc = _vars[name]            # Struct
                 if typeRaw == "c": self.__dict__[name] = localData               # Struct
                 elif isinstance(typeRaw, str): self.__dict__[name] = struct.unpack(_structTrans[typeRaw], localData)[0] # Struct
-                else: self.__dict__[name].parse(localData)                       # Struct
+                elif isinstance(typeRaw, dict): self.__dict__[name].parse(localData) # Struct
+                elif isinstance(typeRaw, list):                                  # Struct
+                    typeRaw, arrLen = typeRaw; eachLen = len(localData)//arrLen  # Struct
+                    self.__dict__[name] = [v.parse(localData[i*eachLen:(i+1)*eachLen]) for i,v in enumerate(self.__dict__[name])] if isinstance(typeRaw, dict) else list(struct.unpack(_structTrans[typeRaw]*arrLen, localData)) # Struct
         return self                                                              # Struct
     @staticmethod                                                                # Struct
-    def _js():                                                                   # Struct
+    def _js(opt=True):                                                           # Struct
         """JS source code to be able to build structs on the client side.
 Example::
 
@@ -1479,64 +1515,84 @@ Example::
     s._d.d // returns "konpaku", trailing null characters have been eliminated
 
 The above code is entirely in JS btw. See usage of this from Python to JS at :meth:`_toHtml`""" # Struct
+        # don't expect the code above to be readable. It's optimized so as to fit in the least amount of space possible. The structure is pretty much identical to the python source code, so read over that instead # Struct
+        if opt: return "".join(x.strip() for x in Struct._js(False).split("\n")) # Struct
         return """
-_structTypes = ["u8", "u16", "u32", "u64", "i16", "i32", "i64", "f32", "f64", "c"] // u8:1 for bit field, c:32 for char array of 32 bytes
-_structLen   = {"u8": 8,   "u16": 16,  "u32": 32,  "u64": 64,  "i8": 8,   "i16": 16,  "i32": 32,  "i64": 64,  "f32": 32,  "f64": 64, "c": 1}
-_structTrans = {"u8": "B", "u16": "H", "u32": "I", "u64": "Q", "i8": "b", "i16": "h", "i32": "i", "i64": "q", "f32": "f", "f64": "d"}
-_byteMask = {1:1,2:3,3:7,4:15,5:31,6:63,7:127,8:255}
+_structTypes=["u8","u16","u32","u64","i8","i16","i32","i64","f32","f64","c","unix"];
+_structLen={"u8":8,"u16":16,"u32":32,"u64":64,"i8":8,"i16":16,"i32":32,"i64":64,"f32":32,"f64":64,"c":1,"unix":64};
+_structTrans={"u8":"B","u16":"H","u32":"I","u64":"Q","i8":"b","i16":"h","i32":"i","i64":"q","f32":"f","f64":"d","unix":"Q"};
+_byteMask={1:1,2:3,3:7,4:15,5:31,6:63,7:127,8:255};
 function u8Eq(a,b){if(a.length!==b.length)return false;return a.every((v,i)=>v===b[i]);}
-function Struct(structDef){ // pretty much copy-pasted from python, and changed a few things around to make it compatible with js
-    let self={structDef,"_s_vars":{},"_d":{},"__len__":()=>self._s_len};self._toBytes=()=>Struct_toBytes(self);self.parse=(data)=>Struct_parse(self,data);
-    let groups=[];let group=[];let nbits=0; // byte-aligned groups, number of bits in this group so far
-    for (let [name, _type] of Object.entries(structDef)) { let desc = "";
-        if (typeof _type === "string") { // typical regular types
-            let res = _type.split(":"); let typeRaw = res[0]; let typeLen = res.length > 1 ? parseInt(res[1]) : _structLen[typeRaw];
-            if (!_structTypes.includes(typeRaw)) throw new Error(`Don't recognize type '${typeRaw}', has to be one of '${_structTypes}'`);
-            if (typeRaw === "c") { if (res.length == 1) throw new Error(`Character arrays/strings must have a length associated with it, like 'c:10', for char[10]`);
-                self._d[name] = ""; self._s_vars[name] = [typeRaw, typeLen*8, desc]; if (nbits > 0) groups.push(group); groups.push([name]); group = []; nbits = 0;
-            } else { if (typeLen % 8 > 0 && typeRaw != "u8") throw new Error("Only u8 type is allowed to have bit field values");
-                self._d[name] = 0; self._s_vars[name] = [typeRaw, typeLen, desc]; if (typeLen <= 8-nbits) { group.push(name); nbits += typeLen; } else { groups.push(group); group = [name]; nbits = typeLen; } }
-        } else { self._d[name] = Struct(_type); self._s_vars[name] = [_type, self._d[name].__len__()*8, desc]
-            if (group.length > 0) groups.push(group); groups.push([name]); group = []; } // nested structs, expects a dict
-    }; groups.push(group); let _vars = self._s_vars; let a_groups = []; let byteOffset = 0
-    for (let group of groups) { if (group.length == 0) continue; let bitField = false; for (let name of group) if (_vars[name][1] < 8) bitField = true;
-        a_groups.push([bitField, byteOffset, group]); if (bitField) byteOffset += 1; else byteOffset += Math.floor(_vars[group[0]][1] / 8);
-    }; self._s_valuesD = () => { let d = {}; for (let name in self._s_vars) d[name] = self._d[name]; return d; }
-    self._s_len = byteOffset; self._s_groups = a_groups; return self; }
-function Struct_toBytes(struct) {
-    let self = struct; let buffer = new ArrayBuffer(self.__len__()); let offset = 0; let ans = new DataView(buffer); let _vars = self._s_vars; let values = self._s_valuesD();
-    for (let [bitField, byteOffset, group] of self._s_groups) {
-        if (bitField) { let value = 0; let nbit = 0; for (let name of group) { let [typeRaw, typeLen, desc] = _vars[name]; value += (values[name] & _byteMask[typeLen]) << nbit; nbit += typeLen; }
-            offset += struct_pack(ans, offset, "B", value);
-        } else { let name = group[0]; let [typeRaw, typeLen, desc] = _vars[name]
-            if (typeRaw === "c") { let encoded = (new TextEncoder()).encode(values[name]); let upper = Math.min(encoded.length, typeLen/8);
-                for (let i = 0; i < upper; i++) ans.setUint8(offset + i, encoded[i]); for (let i = upper; i < typeLen/8; i++) ans.setUint8(offset + i, 0); offset += typeLen/8;
-            } else if (typeof typeRaw === "string") { offset += struct_pack(ans, offset, _structTrans[typeRaw], values[name])
-            } else { let sLen = values[name].__len__(); let sView = new DataView(values[name]._toBytes().buffer);
-                for (let i = 0; i < sLen; i++) ans.setUint8(offset + i, sView.getUint8(i)); offset += sLen; }
-        } }; return new Uint8Array(buffer); }
-function Struct_parse(struct, data) {
-    let self = struct; if (self.__len__() != data.length) throw new Error(`Length of input data (${data.length}) does not match struct's length (${self.__len__()})`);
-    let _vars = self._s_vars; let groupBounds = [...self._s_groups.map((x) => x[1]), self.__len__()];
-    for (let i = 0; i < self._s_groups.length; i++) {
-        let [bitField, byteOffset, group] = self._s_groups[i]; let localData = data.subarray(groupBounds[i], groupBounds[i+1]);
-        if (bitField) { let d = localData[0];
-            for (let name of group) { let [typeRaw, typeLen, desc] = _vars[name]; self._d[name]=d & _byteMask[typeLen]; d = d >> typeLen; }
-        } else { let name = group[0]; let [typeRaw, typeLen, desc] = _vars[name];
-            if (typeRaw === "c") try { self._d[name] = new TextDecoder().decode(localData).replaceAll("\x00", ""); } catch (e) { self._d[name] = localData; }
-            else if (typeof typeRaw === "string") self._d[name] = struct_unpack(localData, 0, _structTrans[typeRaw]);
-            else self._d[name].parse(localData); }
-    }; return self; }
-function struct_pack(vw,o,format,v){switch(format){// kinda emulates python's struct.pack
+function Struct(structDef){
+    let self={structDef,"_s_vars":{},"_d":{},"__len__":()=>self._s_len};self._toBytes=()=>Struct_toBytes(self);self.parse=(data)=>Struct_parse(self,data);self._values=()=>Struct_values(self);
+    let groups=[];let group=[];let nbits=0;
+    for(let[name,_type]of Object.entries(structDef)){let desc="";
+        if(typeof(_type)==="string"||Array.isArray(_type)){
+            let res=Array.isArray(_type)?_type:_type.split(":");let typeRaw=res[0];let typeLen=res.length>1?parseInt(res[1]):_structLen[typeRaw];
+            if(typeof(typeRaw)==="string"){
+                if(!_structTypes.includes(typeRaw))throw new Error(`Don't recognize type '${typeRaw}', has to be one of '${_structTypes}'`);
+                if(typeRaw==="c"){if(res.length==1)throw new Error(`Character arrays/strings must have a length associated with it, like 'c:10', for char[10]`);
+                    self._d[name]="";self._s_vars[name]=[typeRaw,typeLen*8,desc];if(nbits>0)groups.push(group);groups.push([name]);group=[];nbits=0;
+                }else{
+                    if(Array.isArray(_type)){
+                        self._d[name]=[...Array(typeLen).keys()].map(x=>0);self._s_vars[name]=[[typeRaw,typeLen],typeLen*_structLen[typeRaw],desc];
+                        if(group.length>0)groups.push(group);groups.push([name]);group=[];nbits=0;
+                    }else{
+                        if(typeLen%8>0&&typeRaw!="u8")throw new Error("Only u8 type is allowed to have bit field values");
+                        self._d[name]=0;self._s_vars[name]=[typeRaw,typeLen,desc];if(typeLen<=8-nbits){group.push(name);nbits+=typeLen;}else{groups.push(group);group=[name];nbits=typeLen;}}}
+            }else{
+                let f=()=>Struct(typeRaw);self._d[name]=[...Array(typeLen).keys()].map(x=>f());
+                self._s_vars[name]=[[typeRaw,typeLen],self._d[name][0].__len__()*typeLen*8,desc];
+                if(group.length>0)groups.push(group);groups.push([name]);group=[];}
+        }else{
+            self._d[name]=Struct(_type);self._s_vars[name]=[_type,self._d[name].__len__()*8,desc];
+            if(group.length>0)groups.push(group);groups.push([name]);group=[];}
+    };groups.push(group);let _vars=self._s_vars;let a_groups=[];let byteOffset=0;
+    for(let group of groups){if(group.length==0)continue;let bitField=false;for(let name of group)if(_vars[name][1]<8)bitField=true;
+        a_groups.push([bitField,byteOffset,group]);if(bitField)byteOffset+=1;else byteOffset+=Math.floor(_vars[group[0]][1]/8);};
+    self._s_valuesD=()=>{let d={};for(let name in self._s_vars)d[name]=self._d[name];return d;};self._s_len=byteOffset;self._s_groups=a_groups;return self;}
+function Struct_toBytes(struct){
+    let self=struct;let buffer=new ArrayBuffer(self.__len__());let offset=0;let ans=new DataView(buffer);let _vars=self._s_vars;let values=self._s_valuesD();
+    for(let[bitField,byteOffset,group]of self._s_groups){
+        if(bitField){let value=0;let nbit=0;for(let name of group){let[typeRaw,typeLen,desc]=_vars[name];value+=(values[name]&_byteMask[typeLen])<<nbit;nbit+=typeLen;}offset+=struct_pack(ans,offset,"B",value);}
+        else{let name=group[0];let[typeRaw,typeLen,desc]=_vars[name];
+            if(typeRaw==="c"){let encoded=(new TextEncoder()).encode(values[name]);let upper=Math.min(encoded.length,typeLen/8);
+                for(let i=0;i<upper;i++)ans.setUint8(offset+i,encoded[i]);for(let i=upper;i<typeLen/8;i++)ans.setUint8(offset+i,0);offset+=typeLen/8;}
+            else if(typeof typeRaw==="string")offset+=struct_pack(ans,offset,_structTrans[typeRaw],values[name]);
+            else if(Array.isArray(typeRaw)){
+                if(typeof(values[name])==="string")values[name]=JSON.parse(values[name]);
+                let arrLen;[typeRaw,arrLen]=typeRaw;if(typeof typeRaw==="string")for(let i=0;i<arrLen;i++)offset+=struct_pack(ans,offset,_structTrans[typeRaw],values[name][i]);
+                else{let sLen=values[name][0].__len__();for(let i=0;i<arrLen;i++){let sView=new DataView(values[name][i]._toBytes().buffer);for(let j=0;j<sLen;j++)ans.setUint8(offset+j,sView.getUint8(j));offset+=sLen;}}
+            }else{let sLen=values[name].__len__();let sView=new DataView(values[name]._toBytes().buffer);for(let i=0;i<sLen;i++)ans.setUint8(offset+i,sView.getUint8(i));offset+=sLen;}
+        }};return new Uint8Array(buffer);}
+function Struct_parse(struct,data){
+    let self=struct;if(self.__len__()!=data.length)throw new Error(`Length of input data (${data.length}) does not match struct's length (${self.__len__()})`);
+    let _vars=self._s_vars;let groupBounds=[...self._s_groups.map((x)=>x[1]),self.__len__()];
+    for(let i=0;i<self._s_groups.length;i++){
+        let[bitField,byteOffset,group]=self._s_groups[i];let localData=data.subarray(groupBounds[i],groupBounds[i+1]);let localDataLen=groupBounds[i+1]-groupBounds[i];
+        if(bitField){let d=localData[0];for(let name of group){let[typeRaw,typeLen,desc]=_vars[name];self._d[name]=d&_byteMask[typeLen];d=d>>typeLen;}}
+        else{let name=group[0];let[typeRaw,typeLen,desc]=_vars[name];
+            if(typeRaw==="c")try{self._d[name]=new TextDecoder().decode(localData).replaceAll("\\x00","");}catch(e){self._d[name]=localData;}
+            else if(typeof typeRaw==="string")self._d[name]=struct_unpack(localData,0,_structTrans[typeRaw]);
+            else if(Array.isArray(typeRaw)){
+                let arrLen;[typeRaw,arrLen]=typeRaw;let eachLen=Math.floor(localDataLen/arrLen);
+                if(typeof typeRaw==="string")self._d[name]=[...Array(arrLen).keys()].map(i=>struct_unpack(localData,i*eachLen,_structTrans[typeRaw]));
+                else self._d[name]=[...Array(arrLen).keys()].map(i=>self._d[name][i].parse(localData.subarray(i*eachLen,(i+1)*eachLen)));
+            }else self._d[name].parse(localData);}};return self;}
+function Struct_values(self){let ans={};for(let[name,[typeRaw,typeLen,desc]]of Object.entries(self._s_vars)){if(typeof typeRaw==="string")ans[name]=self._d[name];else if(Array.isArray(typeRaw)){if(typeof(typeRaw[0])==="string"){let v=self._d[name];ans[name]=(typeof v==="string")?JSON.parse(v):v;}else ans[name]=self._d[name].map(x=>x._values());}else ans[name]=self._d[name]._values();}return ans;}
+function struct_pack(vw,o,format,v){switch(format){
 case'b':vw.setInt8(o,v);return 1;case'B':vw.setUint8(o,v);return 1;case'h':vw.setInt16(o,v,true);return 2;case'H':vw.setUint16(o,v,true);return 2;
 case'i':vw.setInt32(o,v,true);return 4;case'I':vw.setUint32(o,v,true);return 4;case'q':vw.setBigInt64(o,BigInt(v),true);return 8;case'Q':vw.setBigUint64(o,BigInt(v),true);return 8;
 case'f':vw.setFloat32(o,v,true);return 4;case'd':vw.setFloat64(o,v,true);return 8;default:throw new Error(`Unknown format character: ${format[i]}`);};}
 function struct_unpack(v,o,format){v=new DataView(v.buffer,v.byteOffset,v.byteLength);switch(format){
 case'b':return v.getInt8(o);case'B':return v.getUint8(o);case'h':return v.getInt16(o,true);case'H':return v.getUint16(o,true);
 case'i':return v.getInt32(o,true);case'I':return v.getUint32(o,true);case'q':return Number(v.getBigInt64(o,true));case'Q':return Number(v.getBigUint64(o,true));
-case'f':return v.getFloat32(o,true);case'd':return v.getFloat64(o,true);default:throw new Error(`Unknown format character: ${format}`);};}""" # Struct
+case'f':return v.getFloat32(o,true);case'd':return v.getFloat64(o,true);default:throw new Error(`Unknown format character: ${format}`);};}
+function unix2Iso(unix){const date=new Date(unix*1000);return`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}T${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}:${String(date.getSeconds()).padStart(2,'0')}`;}function iso2Unix(s){return Math.floor((new Date(s)).getTime()/1000);}""" # Struct
     @staticmethod                                                                # Struct
-    def _styles(): return """<style>._s_row{display:flex;flex-direction: row;align-items:center;margin-bottom:8px;}._s_row>div:first-child{width:120px;}._s_row>input{width:150px;margin:0px 12px;}</style>""" # Struct
+    def _styles(): return """<style>._s_row{display:flex;flex-direction:row;align-items:center;margin-bottom:8px;}._s_row>div:first-child{width:120px;}._s_row>input{width:150px;margin:0px 12px;}</style>""" # Struct
+    @staticmethod                                                                # Struct
+    def _html(): return f"{Struct._styles()}<script>{Struct._js()}</script>" # convenience method to include both # Struct
     @staticmethod # just put here cause I've spent time making the unit tests and lazy to store them at another place! # Struct
     def _jsTest(): return """
 let s, ans, def; let assert = (x) => console.assert(x);
@@ -1552,17 +1608,19 @@ s = Struct(def); s._d.a = 1; s._d.d = 3; s._d.b = 5; s._d.c = 6; s._d.e = 4; ass
 s = Struct(def).parse(ans); assert(s._d.a == 1); assert(s._d.d == 3); assert(s._d.b == 5); assert(s._d.c == 6); assert(s._d.e == 4);
 def = {"a": "u8", "b": "u32", "c": "c:6", "d": {"a": "f32", "b": "f64"}}; ans = new Uint8Array([0, 0, 0, 0, 0, 107, 105, 114, 105, 115, 97, 154, 153, 89, 64, 154, 153, 153, 153, 153, 153, 185, 63]);
 s = Struct(def); s._d.d._d.a = "3.4"; s._d.d._d.b = 0.1; s._d.c = "kirisame"; assert(u8Eq(s._toBytes(), ans));
-s = Struct(def).parse(ans); assertClose(s._d.d._d.a, 3.4); assertClose(s._d.d._d.b, 0.1); assert(s._d.c == "kirisa");""" # Struct
-    def _toHtml(self, pre=None): # grabs interface to modify                     # Struct
+s = Struct(def).parse(ans); assertClose(s._d.d._d.a, 3.4); assertClose(s._d.d._d.b, 0.1); assert(s._d.c == "kirisa");
+def = {"a": "u8", "b": "u32", "c": "c:6", "d": "c:10", "e": {"a": "f64", "b": "f32"}, "f": [{"a": "u16", "b": "c:3"}, 2], "g": ["f32", 4]};ans=new Uint8Array([3,89,1,0,0,107,105,114,105,115,97,107,111,110,112,97,107,117,49,0,0,0,0,0,0,0,0,18,64,154,153,217,64,0,0,0,0,0,4,0,0,0,0,0,0,96,64,0,0,0,0,0,0,0,0,0,0,0,0])
+s = Struct(def); s._d.e._d.a = 4.5; s._d.e._d.b = 6.8; s._d.a = 3; s._d.b = 345; s._d.c = "kirisame";s._d.d = "konpaku1"; s._d.f[1]._d.a = 4; s._d.g[0] = 3.5;
+assert(u8Eq(s._toBytes(), ans));assert(s.__len__()==59);x = Struct(def).parse(s._toBytes());assert(u8Eq(x._toBytes(), ans));""" # Struct
+    def _toHtml(self, pre=None, opt=True): # grabs interface to modify           # Struct
         """Creates a really nice html interface to change the struct's fields,
 and provides callback functions to send the bytes to other places. Example::
 
     s = k1.Struct({"a": "u8", "b": "u32", "c": "c:6", "d": "c:10", "e": {"a": "f64", "b": "f32"}})
     s.e.a = 4.5; s.e.b = 6.8; s.a = 3; s.b = 345; s.c = "kirisame"; s.d = "konpaku"
-    htm = s._toHtml("pre1"); header = f"{k1.Struct._styles()}<script>{k1.Struct._js()}</script>"
-    (header + htm) | toHtml() # first time using the html, have to include k1.Struct._js(), and optionally include k1.Struct._styles() to make things prettier
+    htm = s._toHtml("pre1"); (k1.Struct._html() + htm) | toHtml() # first time using the html, have to include k1.Struct._html()
 
-    htm | toHtml() # after using it the first time, subsequent times don't have to include k1.Struct._js() or k1.Struct._styles()
+    htm | toHtml() # after using it the first time, subsequent times don't have to include k1.Struct._html() (includes k1.Struct._js() and k1.Struct._styles())
 
 The returned html contains input text boxes, as well as nice field annotations. Whenever you change any value
 in the structs, you can grab the modified bytes on the JS side like this::
@@ -1571,17 +1629,40 @@ in the structs, you can grab the modified bytes on the JS side like this::
     pre1_obj.update(raw)         // loads the struct and apply changes to the UI
 
 This should allow you to easily send this to a server and have it deconstruct everything""" # Struct
-        def _structNoDesc(s): return {k:(v[0] if isinstance(v, tuple) else (_structNoDesc(v) if isinstance(v, dict) else v)) for k,v in s.items()} # Struct
-        h = ""; pre = pre or k1lib.cli.init._jsUIAuto(); values = self._s_valuesD(); nestedPres = {} # name -> pre # Struct
+        if opt: return "".join(x.strip() for x in self._toHtml(pre, False).split("\n")) # Struct
+        def _structNoDesc(s):                                                    # Struct
+            ans = {}                                                             # Struct
+            for k,v in s.items():                                                # Struct
+                if isinstance(v, tuple): v = v[0]                                # Struct
+                if isinstance(v, list) and isinstance(v[0], dict): v = [_structNoDesc(v[0]), v[1]] # Struct
+                elif isinstance(v, dict): v = _structNoDesc(v)                   # Struct
+                ans[k] = v                                                       # Struct
+            return ans                                                           # Struct
+        h = ""; j = ""; pre = pre or _structUIAuto(); values = self._s_valuesD(); nestedPres = {} # name -> pre # Struct
         for name, [typeRaw, typeLen, desc] in self._s_vars.items(): # what's up with the code smell in the generated html? Well, this generated html is intended to be served on an embedded environment, so has to be as small as possible! # Struct
-            if isinstance(typeRaw, dict): _pre = k1lib.cli.init._jsUIAuto(); nestedPres[name] = _pre; h += f"<div style='margin-bottom:8px'>struct '{name}':</div><div style='margin-left:24px'>{values[name]._toHtml(_pre)}</div>" # Struct
-            elif typeRaw[0] in "uifc": _type = "number" if typeRaw[0] in "uif" else "text"; h += f"<div class='_s_row'><div>{name}, {typeRaw}:{typeLen//8 if typeRaw == 'c' else typeLen}</div><input id='{pre}_{name}'class='{pre}_inps'type='{_type}'name='{name}'value='{values[name]}'/><div>{desc or '(no desc)'}</div></div>\n" # Struct
+            arrLen = 0                                                           # Struct
+            if isinstance(typeRaw, list): typeRaw, arrLen = typeRaw              # Struct
+            if isinstance(typeRaw, dict):                                        # Struct
+                if arrLen == 0: _pre = _structUIAuto(); nestedPres[name] = _pre; h += f"<div style='margin-bottom:8px'>struct '{name}':</div><div style='margin-left:24px'>{values[name]._toHtml(_pre)}</div>" # Struct
+                else: # [struct] here                                            # Struct
+                    nestedPres[name] = []                                        # Struct
+                    for i in range(arrLen):                                      # Struct
+                        _pre = _structUIAuto(); nestedPres[name].append(_pre)    # Struct
+                        h += f"<div style='margin-bottom:8px'>struct '{name}'[{i}]:</div><div style='margin-left:24px'>{values[name][i]._toHtml(_pre)}</div>" # Struct
+            elif typeRaw == "unix":                                              # Struct
+                arrMod = f"[{arrLen}]" if arrLen > 0 else ""; descMod = f"<div>{desc}</div>" if desc else ""; j += f"dS('#{pre}_{name}').value=unix2Iso({values[name]});" # Struct
+                h += f"<div class='_s_row'><div>{name}{arrMod}, {typeRaw}:{typeLen//8 if typeRaw == 'c' else typeLen}</div><input id='{pre}_{name}'class='{pre}_inps'type='datetime-local'name='{name}'value=''/>{descMod}</div>\n" # Struct
+            elif typeRaw[0] in "uifc":                                           # Struct
+                _type = "number" if typeRaw[0] in "uif" and arrLen == 0 else "text"; arrMod = f"[{arrLen}]" if arrLen > 0 else ""; descMod = f"<div>{desc}</div>" if desc else "" # Struct
+                h += f"<div class='_s_row'><div>{name}{arrMod}, {typeRaw}:{typeLen//8 if typeRaw == 'c' else typeLen}</div><input id='{pre}_{name}'class='{pre}_inps'type='{_type}'name='{name}'value='{values[name]}'/>{descMod}</div>\n" # Struct
             else: raise Exception(f"Don't support type {typeRaw}")               # Struct
-        nO = ",".join([f"{name}: {_pre}_obj" for name, _pre in nestedPres.items()]) # nested objs # Struct
-        return f"""{h}<script>window.{pre}_obj={{struct:Struct({_structNoDesc(self.structDef)}),nOs:{{{nO}}}}};(async()=>{{let o={pre}_obj;let dqA=(x)=>document.querySelectorAll(x);dqA(".{pre}_inps").forEach(x=>x.classList.add("input","input-bordered"));
-o._re=()=>{{for(let n of Object.keys(o.nOs)){{o.nOs[n].struct=o.struct._d[n];o.nOs[n]._re();}}}};o._re();
-o._cD=()=>{{return Object.fromEntries(Array.from(dqA(".{pre}_inps")).map((x)=>[x.name,x.value]));}};{'collateD' and ''}
-o._uS=()=>{{for(let[n,_o]of Object.entries(o.nOs))_o._uS();{'update structs from real values' and ''}let d=o._cD();for(let[n,v]of Object.entries(d))o.struct._d[n]=v;}};
-o.collate=()=>{{o._uS();return o.struct._toBytes();}};
-o._ui=()=>{{for(let [n,a]of Object.entries(o.struct._s_vars)) if(typeof(a[0])==="string"){{ document.querySelector(`#{pre}_${{n}}`).value=o.struct._d[n]; document.querySelector(`#{pre}_${{n}}`).value=document.querySelector(`#{pre}_${{n}}`).value.replaceAll("\\x00", ""); }}else o.nOs[n]._ui();}};{'updateUI' and ''}
-o.update=(b)=>{{o.struct.parse(b);o._ui();}};o.update(new Uint8Array([{','.join([str(x) for x in self._toBytes()])}]));}})();</script>""" # Struct
+        nO = ",".join([f"{name}: {_pre}_obj" if isinstance(_pre, str) else f"{name}: [" + ",".join([f"{x}_obj" for x in _pre]) + "]" for name, _pre in nestedPres.items()]) # nested objs # Struct
+        return f"""{h}<script>window.{pre}_obj={{st:Struct({json.dumps(_structNoDesc(self.structDef), separators=(",", ":"))}),nOs:{{{nO}}}}};(async()=>{{let o={pre}_obj;let dqA=(x)=>document.querySelectorAll(x);dqA(".{pre}_inps").forEach(x=>x.classList.add("input","input-bordered"));let dS=(x)=>document.querySelector(x);let iA=Array.isArray;let oE=Object.entries;
+o._re=()=>{{for(let n of Object.keys(o.nOs))if(iA(o.nOs[n])){{for(let i=0;i<o.nOs[n].length;i++){{o.nOs[n][i].st=o.st._d[n][i];o.nOs[n][i]._re();}}}}else{{o.nOs[n].st=o.st._d[n];o.nOs[n]._re();}}}};o._re();
+o._cD=()=>{{return Object.fromEntries(Array.from(dqA(".{pre}_inps")).map((x)=>[x.name,x.type=="datetime-local"?iso2Unix(x.value):x.value]));}};{'collateD' and ''}
+o._uS=()=>{{for(let[n,_o]of oE(o.nOs)){{if(iA(_o))_o.forEach(x=>x._uS());else _o._uS();}}{'update structs from real values' and ''}let d=o._cD();for(let[n,v]of oE(d))o.st._d[n]=v;}};
+o.collate=()=>{{o._uS();return o.st._toBytes();}};o._ui=()=>{{for(let[n,a]of oE(o.st._s_vars))
+    if(typeof(a[0])==="string"){{let _i=`#{pre}_${{n}}`;dS(_i).value=dS(_i).type=="datetime-local"?unix2Iso(o.st._d[n]):o.st._d[n];dS(_i).value=dS(_i).value.replaceAll("\\x00","");
+    }}else if(iA(a[0])&&typeof(a[0][0])==="string")dS(`#{pre}_${{n}}`).value=JSON.stringify(o.st._d[n]);
+    else{{if(iA(a[0]))o.nOs[n].forEach(x=>x._ui());else o.nOs[n]._ui();}}}};{'updateUI' and ''}
+o.update=(b)=>{{o.st.parse(b);o._ui();}};o.update(new Uint8Array([{','.join([str(x) for x in self._toBytes()])}]));setTimeout(()=>{{{j}}},100);}})();</script>""" # Struct

@@ -235,7 +235,8 @@ You can get all TimeSeries via :meth:`allData`.
     def getDIdx(self, idx:int=0, timeStr:str="1 day", limit:int=10000) -> int:   # TimeSeries
         """Grabs all available dIdx of a particular idx in the past 1 day.
 Internally, this scans for all raw data points and grab the largest length"""    # TimeSeries
-        return max(len(values) for t, values in self.getRaw(*k1.parseTimeStr(timeStr), idx=idx, limit=limit)) # TimeSeries
+        x = [len(values) for t, values in self.getRaw(*k1.parseTimeStr(timeStr), idx=idx, limit=limit)] # TimeSeries
+        return max(x) if len(x) > 0 else 0                                       # TimeSeries
     def append(self, *values): sig = "f"*len(values); self._raw.append([_time(), 0, values, struct.pack(sig, *values)]); return values # TimeSeries
     def appendIdx(self, idx, *values): sig = "f"*len(values); self._raw.append([_time(), idx, values, struct.pack(sig, *values)]); return values # TimeSeries
     def getLatest(self, idx:int=0) -> "float, list[float]":                      # TimeSeries
@@ -277,7 +278,7 @@ Internally, this scans for all raw data points and grab the largest length"""   
     def getRawTf(self, startTime:int=None, stopTime:int=None, idx:int=0, limit:int=1000_000): # TimeSeries
         """Grabs transformed data of this time series. Returns something like ``[[1737213223.4139452, (3, 4, 5)], ...]`` """ # TimeSeries
         if not self.storeRaw: raise Exception(".storeRaw is False, so all raw data has been deleted") # TimeSeries
-        res = self.getRaw(startTime, stopTime, idx, limit); maxVars = max(len(x[1]) for x in res); tfFs = [self.getTf(idx, i)[4] for i in range(maxVars)] # TimeSeries
+        res = self.getRaw(startTime, stopTime, idx, limit); maxVars = max(len(x[1]) for x in res) if len(res) else 0; tfFs = [self.getTf(idx, i)[4] for i in range(maxVars)] # TimeSeries
         for t, values in res: yield t, [f(x) for x,f in zip(values, tfFs)]       # TimeSeries
     def getRate(self, startTime:int=None, stopTime:int=None, limit:int=10000):   # TimeSeries
         """Grabs data ingest rate of this time series. Returns something like ``[(1737213313.0752494, 10.066128035852211), ...]``""" # TimeSeries
