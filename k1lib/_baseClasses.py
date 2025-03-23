@@ -1344,10 +1344,10 @@ came from sensor data. Example::
             if guide*(random.random()-0.5)+0.5 < r: v -= std*step                # Perlin
             else: v += std*step                                                  # Perlin
             self.v = v; yield v                                                  # Perlin
-_structTypes = ["u8", "u16", "u32", "u64", "i8", "i16", "i32", "i64", "f32", "f64", "c", "unix"] # u8:1 for bit field, c:32 for char array of 32 bytes # Perlin
-_structLen   = {"u8": 8,   "u16": 16,  "u32": 32,  "u64": 64,  "i8": 8,   "i16": 16,  "i32": 32,  "i64": 64,  "f32": 32,  "f64": 64, "c": 1, "unix": 64} # Perlin
-_structTrans = {"u8": "B", "u16": "H", "u32": "I", "u64": "Q", "i8": "b", "i16": "h", "i32": "i", "i64": "q", "f32": "f", "f64": "d", "unix": "Q"} # Perlin
-_structInts = ["u8", "u16", "u32", "u64", "i8", "i16", "i32", "i64", "unix"]     # Perlin
+_structTypes = ["u8", "u16", "u32", "u64", "i8", "i16", "i32", "i64", "f32", "f64", "c", "unix", "unix4", "time", "time2", "time60"] # u8:1 for bit field, c:32 for char array of 32 bytes # Perlin
+_structLen   = {"u8": 8,   "u16": 16,  "u32": 32,  "u64": 64,  "i8": 8,   "i16": 16,  "i32": 32,  "i64": 64,  "f32": 32,  "f64": 64, "c": 1, "unix": 64, "unix4": 32, "time": 32, "time2": 16, "time60": 16} # Perlin
+_structTrans = {"u8": "B", "u16": "H", "u32": "I", "u64": "Q", "i8": "b", "i16": "h", "i32": "i", "i64": "q", "f32": "f", "f64": "d", "unix": "Q", "unix4": "I", "time": "I", "time2": "H", "time60": "H"} # Perlin
+_structInts = ["u8", "u16", "u32", "u64", "i8", "i16", "i32", "i64", "unix", "unix4", "time", "time2", "time60"] # Perlin
 _byteMask = {1: 0b00000001, 2: 0b00000011, 3: 0b00000111, 4: 0b00001111, 5: 0b00011111, 6: 0b00111111, 7: 0b01111111, 8: 0b11111111} # Perlin
 _structUIAuto = AutoIncrement(prefix="_s")                                       # Perlin
 class StructParseException(Exception): pass                                      # StructParseException
@@ -1376,7 +1376,12 @@ without null character at the end! There are these data types:
 - Signed integers: i8, i16, i32, i64
 - Floating point: f32, f64
 - String: c
-- Unix time: unix
+- Time:
+  - unix:  u64, unix timestamp, number of seconds from 1970. Shows html input of type "datetime-local"
+  - unix4: u32, unix timestamp/4, to fit into 32 bits and avoid 2038 problem. It gets delayed till the year 2242, which is pretty safe
+  - time:  u32, seconds from midnight. Shows html input of type "time"
+  - time2: u16, seconds from midnight/2, to fit into 16 bits
+  - time60: u16, minutes from midnight
 
 This also supports bitfields, surprise! This was pretty hard to implement, but
 it's pretty glorious::
@@ -1406,6 +1411,7 @@ This mechanism is also available on JS side, see :meth:`_js`
         self.structDef = structDef; self.strict = strict; self._s_vars = {}; groups = []; group = []; nbits = 0 # byte-aligned groups, number of bits in this group so far # Struct
         for name, _type in structDef.items():                                    # Struct
             desc = ""                                                            # Struct
+            if isinstance(_type, tuple): _type, desc = _type                     # Struct
             if isinstance(_type, (str, tuple, list)): # typical regular types    # Struct
                 if isinstance(_type, tuple): _type, desc = _type                 # Struct
                 if isinstance(_type, str): res = _type.split(":")                # Struct
@@ -1518,9 +1524,9 @@ The above code is entirely in JS btw. See usage of this from Python to JS at :me
         # don't expect the code above to be readable. It's optimized so as to fit in the least amount of space possible. The structure is pretty much identical to the python source code, so read over that instead # Struct
         if opt: return "".join(x.strip() for x in Struct._js(False).split("\n")) # Struct
         return """
-_structTypes=["u8","u16","u32","u64","i8","i16","i32","i64","f32","f64","c","unix"];
-_structLen={"u8":8,"u16":16,"u32":32,"u64":64,"i8":8,"i16":16,"i32":32,"i64":64,"f32":32,"f64":64,"c":1,"unix":64};
-_structTrans={"u8":"B","u16":"H","u32":"I","u64":"Q","i8":"b","i16":"h","i32":"i","i64":"q","f32":"f","f64":"d","unix":"Q"};
+_structTypes=["u8","u16","u32","u64","i8","i16","i32","i64","f32","f64","c","unix","unix4","time","time2","time60"];
+_structLen={"u8":8,"u16":16,"u32":32,"u64":64,"i8":8,"i16":16,"i32":32,"i64":64,"f32":32,"f64":64,"c":1,"unix":64,"unix4":32,"time":32,"time2":16,"time60":16};
+_structTrans={"u8":"B","u16":"H","u32":"I","u64":"Q","i8":"b","i16":"h","i32":"i","i64":"q","f32":"f","f64":"d","unix":"Q","unix4":"I","time":"I","time2":"H","time60":"H"};
 _byteMask={1:1,2:3,3:7,4:15,5:31,6:63,7:127,8:255};
 function u8Eq(a,b){if(a.length!==b.length)return false;return a.every((v,i)=>v===b[i]);}
 function Struct(structDef){
@@ -1588,7 +1594,21 @@ function struct_unpack(v,o,format){v=new DataView(v.buffer,v.byteOffset,v.byteLe
 case'b':return v.getInt8(o);case'B':return v.getUint8(o);case'h':return v.getInt16(o,true);case'H':return v.getUint16(o,true);
 case'i':return v.getInt32(o,true);case'I':return v.getUint32(o,true);case'q':return Number(v.getBigInt64(o,true));case'Q':return Number(v.getBigUint64(o,true));
 case'f':return v.getFloat32(o,true);case'd':return v.getFloat64(o,true);default:throw new Error(`Unknown format character: ${format}`);};}
-function unix2Iso(unix){const date=new Date(unix*1000);return`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}T${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}:${String(date.getSeconds()).padStart(2,'0')}`;}function iso2Unix(s){return Math.floor((new Date(s)).getTime()/1000);}""" # Struct
+function unix2Iso(unix){const date=new Date(unix*1000);return`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}T${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}:${String(date.getSeconds()).padStart(2,'0')}`;}function iso2Unix(s){return Math.floor((new Date(s)).getTime()/1000);}function dS(x){return document.querySelector(x);}
+function secs2Iso(num){return`${String(Math.floor(num/3600)).padStart(2,'0')}:${String(Math.floor((num%3600)/60)).padStart(2,'0')}:${String(num%60).padStart(2,'0')}`;}function iso2Secs(iso){const[h=0,m=0,s=0]=iso.split(":").map(Number);return h*3600+m*60+s;}
+function int2Iso(num,cL){if(cL.contains("unix"))return unix2Iso(num);if(cL.contains("unix4"))return unix2Iso(num*4);if(cL.contains("time"))return secs2Iso(num);if(cL.contains("time2"))return secs2Iso(num*2);if(cL.contains("time60"))return secs2Iso(num*60);}
+function iso2Int(iso,cL){if(cL.contains("unix"))return iso2Unix(iso);if(cL.contains("unix4"))return iso2Unix(iso)/4;if(cL.contains("time"))return iso2Secs(iso);if(cL.contains("time2"))return iso2Secs(iso)/2;if(cL.contains("time60"))return iso2Secs(iso)/60;}
+function Struct_setup(pre, structDef, nOs, delayedFunc, rawU8A) {
+    window[`${pre}_obj`]={st:Struct(structDef),nOs:nOs};(async()=>{let o=window[`${pre}_obj`];let dqA=(x)=>document.querySelectorAll(x);dqA(`.${pre}_inps`).forEach(x=>x.classList.add("input","input-bordered"));let iA=Array.isArray;let oE=Object.entries;
+    o._re=()=>{for(let n of Object.keys(o.nOs))if(iA(o.nOs[n])){for(let i=0;i<o.nOs[n].length;i++){o.nOs[n][i].st=o.st._d[n][i];o.nOs[n][i]._re();}}else{o.nOs[n].st=o.st._d[n];o.nOs[n]._re();}};o._re();
+    o._cD=()=>{return Object.fromEntries(Array.from(dqA(`.${pre}_inps`)).map((x)=>[x.name,x.type=="datetime-local"||x.type=="time"?(iso2Int(x.value,x.classList)):x.value]));}; /* collateD */
+    o._uS=()=>{for(let[n,_o]of oE(o.nOs)){if(iA(_o))_o.forEach(x=>x._uS());else _o._uS();}/* update structs from real values */
+        let d=o._cD();for(let[n,v]of oE(d))o.st._d[n]=v;};
+    o.collate=()=>{o._uS();return o.st._toBytes();};o._ui=()=>{for(let[n,a]of oE(o.st._s_vars))
+        if(typeof(a[0])==="string"){let _i=`#${pre}_${n}`;dS(_i).value=dS(_i).type=="datetime-local"||dS(_i).type=="time"?(int2Iso(o.st._d[n],dS(_i).classList)):o.st._d[n];dS(_i).value=dS(_i).value.replaceAll("\\x00","");
+        }else if(iA(a[0])&&typeof(a[0][0])==="string")dS(`#${pre}_${n}`).value=JSON.stringify(o.st._d[n]);
+        else{if(iA(a[0]))o.nOs[n].forEach(x=>x._ui());else o.nOs[n]._ui();}};/* updateUI */
+    o.update=(b)=>{o.st.parse(b);o._ui();};o.update(new Uint8Array(rawU8A));setTimeout(delayedFunc,100);})();}""" # Struct
     @staticmethod                                                                # Struct
     def _styles(): return """<style>._s_row{display:flex;flex-direction:row;align-items:center;margin-bottom:8px;}._s_row>div:first-child{width:120px;}._s_row>input{width:150px;margin:0px 12px;}</style>""" # Struct
     @staticmethod                                                                # Struct
@@ -1649,20 +1669,12 @@ This should allow you to easily send this to a server and have it deconstruct ev
                     for i in range(arrLen):                                      # Struct
                         _pre = _structUIAuto(); nestedPres[name].append(_pre)    # Struct
                         h += f"<div style='margin-bottom:8px'>struct '{name}'[{i}]:</div><div style='margin-left:24px'>{values[name][i]._toHtml(_pre)}</div>" # Struct
-            elif typeRaw == "unix":                                              # Struct
-                arrMod = f"[{arrLen}]" if arrLen > 0 else ""; descMod = f"<div>{desc}</div>" if desc else ""; j += f"dS('#{pre}_{name}').value=unix2Iso({values[name]});" # Struct
-                h += f"<div class='_s_row'><div>{name}{arrMod}, {typeRaw}:{typeLen//8 if typeRaw == 'c' else typeLen}</div><input id='{pre}_{name}'class='{pre}_inps'type='datetime-local'name='{name}'value=''/>{descMod}</div>\n" # Struct
+            elif typeRaw[:4] == "unix" or typeRaw[:4] == "time":                 # Struct
+                arrMod = f"[{arrLen}]" if arrLen > 0 else ""; descMod = f"<div>{desc}</div>" if desc else ""; j += f"dS('#{pre}_{name}').value=int2Iso({values[name]},dS('#{pre}_{name}').classList);" # Struct
+                h += f"<div class='_s_row'><div>{name}{arrMod}, {typeRaw}:{typeLen}</div><input id='{pre}_{name}'class='{pre}_inps {typeRaw}'type='{'datetime-local' if typeRaw[:4] == 'unix' else 'time'}'name='{name}'value=''/>{descMod}</div>\n" # Struct
             elif typeRaw[0] in "uifc":                                           # Struct
                 _type = "number" if typeRaw[0] in "uif" and arrLen == 0 else "text"; arrMod = f"[{arrLen}]" if arrLen > 0 else ""; descMod = f"<div>{desc}</div>" if desc else "" # Struct
                 h += f"<div class='_s_row'><div>{name}{arrMod}, {typeRaw}:{typeLen//8 if typeRaw == 'c' else typeLen}</div><input id='{pre}_{name}'class='{pre}_inps'type='{_type}'name='{name}'value='{values[name]}'/>{descMod}</div>\n" # Struct
             else: raise Exception(f"Don't support type {typeRaw}")               # Struct
         nO = ",".join([f"{name}: {_pre}_obj" if isinstance(_pre, str) else f"{name}: [" + ",".join([f"{x}_obj" for x in _pre]) + "]" for name, _pre in nestedPres.items()]) # nested objs # Struct
-        return f"""{h}<script>window.{pre}_obj={{st:Struct({json.dumps(_structNoDesc(self.structDef), separators=(",", ":"))}),nOs:{{{nO}}}}};(async()=>{{let o={pre}_obj;let dqA=(x)=>document.querySelectorAll(x);dqA(".{pre}_inps").forEach(x=>x.classList.add("input","input-bordered"));let dS=(x)=>document.querySelector(x);let iA=Array.isArray;let oE=Object.entries;
-o._re=()=>{{for(let n of Object.keys(o.nOs))if(iA(o.nOs[n])){{for(let i=0;i<o.nOs[n].length;i++){{o.nOs[n][i].st=o.st._d[n][i];o.nOs[n][i]._re();}}}}else{{o.nOs[n].st=o.st._d[n];o.nOs[n]._re();}}}};o._re();
-o._cD=()=>{{return Object.fromEntries(Array.from(dqA(".{pre}_inps")).map((x)=>[x.name,x.type=="datetime-local"?iso2Unix(x.value):x.value]));}};{'collateD' and ''}
-o._uS=()=>{{for(let[n,_o]of oE(o.nOs)){{if(iA(_o))_o.forEach(x=>x._uS());else _o._uS();}}{'update structs from real values' and ''}let d=o._cD();for(let[n,v]of oE(d))o.st._d[n]=v;}};
-o.collate=()=>{{o._uS();return o.st._toBytes();}};o._ui=()=>{{for(let[n,a]of oE(o.st._s_vars))
-    if(typeof(a[0])==="string"){{let _i=`#{pre}_${{n}}`;dS(_i).value=dS(_i).type=="datetime-local"?unix2Iso(o.st._d[n]):o.st._d[n];dS(_i).value=dS(_i).value.replaceAll("\\x00","");
-    }}else if(iA(a[0])&&typeof(a[0][0])==="string")dS(`#{pre}_${{n}}`).value=JSON.stringify(o.st._d[n]);
-    else{{if(iA(a[0]))o.nOs[n].forEach(x=>x._ui());else o.nOs[n]._ui();}}}};{'updateUI' and ''}
-o.update=(b)=>{{o.st.parse(b);o._ui();}};o.update(new Uint8Array([{','.join([str(x) for x in self._toBytes()])}]));setTimeout(()=>{{{j}}},100);}})();</script>""" # Struct
+        return f"""{h}<script>Struct_setup("{pre}",{json.dumps(_structNoDesc(self.structDef), separators=(",", ":"))},{{{nO}}},()=>{{{j}}},[{','.join([str(x) for x in self._toBytes()])}]);</script>""" # Struct
