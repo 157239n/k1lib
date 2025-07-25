@@ -1561,12 +1561,7 @@ All examples from :class:`applyMp` should work perfectly here.
                 yield data[1].value                                              # applyTh
             else: yield None                                                     # applyTh
     def _copy(self): return applyTh(self.f, self.prefetch, self.timeout, self.bs, **self.kwargs) # applyTh
-    def __invert__(self):                                                        # applyTh
-        res = self._copy(); f = fastF(res.f)                                     # applyTh
-        kw = res.kwargs                                                          # applyTh
-        res.f = lambda x: f(*x, **kw)                                            # applyTh
-        res.kwargs = {}                                                          # applyTh
-        return res                                                               # applyTh
+    def __invert__(self): res = self._copy(); f = fastF(res.f); kw = res.kwargs; res.f = lambda x: f(*x, **kw); res.kwargs = {}; return res # applyTh
 class applySerial(BaseCli):                                                      # applySerial
     blurb="Applies a function to an element repeatedly"                          # applySerial
     def __init__(self, f, *args, **kwargs):                                      # applySerial

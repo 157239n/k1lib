@@ -10,7 +10,7 @@ try: import torch; hasTorch = True
 except: hasTorch = False
 __all__ = ["Object", "Range", "Domain", "AutoIncrement", "Wrapper", "Every",
            "RunOnce", "MaxDepth", "MovingAvg", "Absorber",
-           "Settings", "settings", "_settings", "UValue", "ConstantPad", "AutoUpdateValue", "Aggregate", "Perlin", "Struct"]
+           "Settings", "settings", "_settings", "UValue", "ConstantPad", "AutoUpdateValue", "Aggregate", "Perlin", "DistQueue", "Icon", "Struct"]
 class Object:                                                                    # Object
     """Convenience class that acts like :class:`~collections.defaultdict`. You
 can use it like a normal object::
@@ -1344,12 +1344,144 @@ came from sensor data. Example::
             if guide*(random.random()-0.5)+0.5 < r: v -= std*step                # Perlin
             else: v += std*step                                                  # Perlin
             self.v = v; yield v                                                  # Perlin
-_structTypes = ["u8", "u16", "u32", "u64", "i8", "i16", "i32", "i64", "f32", "f64", "c", "unix", "unix4", "time", "time2", "time60"] # u8:1 for bit field, c:32 for char array of 32 bytes # Perlin
-_structLen   = {"u8": 8,   "u16": 16,  "u32": 32,  "u64": 64,  "i8": 8,   "i16": 16,  "i32": 32,  "i64": 64,  "f32": 32,  "f64": 64, "c": 1, "unix": 64, "unix4": 32, "time": 32, "time2": 16, "time60": 16} # Perlin
-_structTrans = {"u8": "B", "u16": "H", "u32": "I", "u64": "Q", "i8": "b", "i16": "h", "i32": "i", "i64": "q", "f32": "f", "f64": "d", "unix": "Q", "unix4": "I", "time": "I", "time2": "H", "time60": "H"} # Perlin
-_structInts = ["u8", "u16", "u32", "u64", "i8", "i16", "i32", "i64", "unix", "unix4", "time", "time2", "time60"] # Perlin
-_byteMask = {1: 0b00000001, 2: 0b00000011, 3: 0b00000111, 4: 0b00001111, 5: 0b00011111, 6: 0b00111111, 7: 0b01111111, 8: 0b11111111} # Perlin
-_structUIAuto = AutoIncrement(prefix="_s")                                       # Perlin
+class DistQueue:                                                                 # DistQueue
+    def __init__(self, timeout:float=10):                                        # DistQueue
+        """This is a queue that multiple parties can grab latest results out of.
+Example::
+
+    q = k1.DistQueue(timeout=3); q.append(123)
+    q.get("id 1") # returns [], as the id is registered after 123 has already been appended, so it got dropped
+    q.append(456)
+    q.get("id 1") # returns [456], as the id is already registered and saved
+    q.get("id 2") # returns []
+    q.append(789); q.append(234)
+    q.get("id 1") # returns [789, 234]
+    q.append(567)
+    q.get("id 2") # returns [789, 234, 567]
+    q.get("id 1") # returns [567]
+    q.get("id 2") # returns []
+    q.append(890); time.sleep(4)
+    q.get("id 1") # returns [], "id 1" got unregistered, then reregistered upon calling this, but then the internal queue related to "id 1" has disappeared
+    q.get("id 2") # returns [], same as above
+
+This kinda feels like a simplified pubsub, with a different feel to it. Some application might include
+multiple clients who want to incrementally live update their graphs from a single data source.
+
+:param timeout: after how many seconds to unregister an id automatically"""      # DistQueue
+        self.timeout = timeout; self.queues = {}; self.lastAccess = {}; self._lastPrune = time.time() # DistQueue
+    def _prune(self):                                                            # DistQueue
+        now = time.time(); self._lastPrune = now; timeout = self.timeout; lastAccess = self.lastAccess; qs = self.queues # DistQueue
+        for k,v in list(self.lastAccess.items()):                                # DistQueue
+            if now - v > timeout: del lastAccess[k]; del qs[k]                   # DistQueue
+    def get(self, idx):                                                          # DistQueue
+        now = time.time()                                                        # DistQueue
+        if now - self._lastPrune > 1: self._prune()                              # DistQueue
+        self.lastAccess[idx] = now; q = self.queues.get(idx, []); self.queues[idx] = []; return q # DistQueue
+    def append(self, obj):                                                       # DistQueue
+        for v in self.queues.values(): v.append(obj)                             # DistQueue
+settings.add("icon", Settings().add("fill", "#333", "default fill color").add("size", 24, "default width and height"), "k1.Icon related settings"); iS = settings.icon # DistQueue
+class Icon:                                                                      # Icon
+    """A collection of commonly used icon svg strings.
+Example::
+
+    k1.Icon.search()           # returns svg string with default color #333 and 24px size
+    k1.Icon.search("#ccc", 36) # returns svg string with specified color and size
+
+    settings.icon.fill = "#003366"; settings.icon.size = 30
+    k1.Icon.search()           # returns svg string with default color #003366 and 30px size
+
+There are 2 main settings at ``settings.icon``, "fill" and "size", to set as default values for the icons.
+
+These icons are taken from https://fonts.google.com/icons at 24px size. The same design for
+24px can be rescaled between 22px to 31px and look fine. Google has other icon versions for
+icons larger and smaller than that range, but tbh, even outside that range, it still looks
+relatively good."""                                                              # Icon
+    @staticmethod                                                                # Icon
+    def search(fill=None, size=None): return f'<svg name="search" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="M784-120 532-372q-30 24-69 38t-83 14q-109 0-184.5-75.5T120-580q0-109 75.5-184.5T380-840q109 0 184.5 75.5T640-580q0 44-14 83t-38 69l252 252-56 56ZM380-400q75 0 127.5-52.5T560-580q0-75-52.5-127.5T380-760q-75 0-127.5 52.5T200-580q0 75 52.5 127.5T380-400Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def home(fill=None, size=None): return f'<svg name="home" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="M240-200h120v-240h240v240h120v-360L480-740 240-560v360Zm-80 80v-480l320-240 320 240v480H520v-240h-80v240H160Zm320-350Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def menu(fill=None, size=None): return f'<svg name="menu" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="M120-240v-80h720v80H120Zm0-200v-80h720v80H120Zm0-200v-80h720v80H120Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def cross(fill=None, size=None): return f'<svg name="cross" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def settings(fill=None, size=None): return f'<svg name="settings" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="m370-80-16-128q-13-5-24.5-12T307-235l-119 50L78-375l103-78q-1-7-1-13.5v-27q0-6.5 1-13.5L78-585l110-190 119 50q11-8 23-15t24-12l16-128h220l16 128q13 5 24.5 12t22.5 15l119-50 110 190-103 78q1 7 1 13.5v27q0 6.5-2 13.5l103 78-110 190-118-50q-11 8-23 15t-24 12L590-80H370Zm70-80h79l14-106q31-8 57.5-23.5T639-327l99 41 39-68-86-65q5-14 7-29.5t2-31.5q0-16-2-31.5t-7-29.5l86-65-39-68-99 42q-22-23-48.5-38.5T533-694l-13-106h-79l-14 106q-31 8-57.5 23.5T321-633l-99-41-39 68 86 64q-5 15-7 30t-2 32q0 16 2 31t7 30l-86 65 39 68 99-42q22 23 48.5 38.5T427-266l13 106Zm42-180q58 0 99-41t41-99q0-58-41-99t-99-41q-59 0-99.5 41T342-480q0 58 40.5 99t99.5 41Zm-2-140Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def add(fill=None, size=None): return f'<svg name="add" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="M440-440H200v-80h240v-240h80v240h240v80H520v240h-80v-240Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def delete(fill=None, size=None): return f'<svg name="delete" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="M280-120q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520ZM360-280h80v-360h-80v360Zm160 0h80v-360h-80v360ZM280-720v520-520Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def arrowLeft(fill=None, size=None): return f'<svg name="arrowLeft" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="m313-440 224 224-57 56-320-320 320-320 57 56-224 224h487v80H313Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def arrowRight(fill=None, size=None): return f'<svg name="arrowRight" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="M647-440H160v-80h487L423-744l57-56 320 320-320 320-57-56 224-224Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def arrowUp(fill=None, size=None): return f'<svg name="arrowUp" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="M440-160v-487L216-423l-56-57 320-320 320 320-56 57-224-224v487h-80Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def arrowDown(fill=None, size=None): return f'<svg name="arrowDown" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="M440-800v487L216-537l-56 57 320 320 320-320-56-57-224 224v-487h-80Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def download(fill=None, size=None): return f'<svg name="download" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="M480-320 280-520l56-58 104 104v-326h80v326l104-104 56 58-200 200ZM240-160q-33 0-56.5-23.5T160-240v-120h80v120h480v-120h80v120q0 33-23.5 56.5T720-160H240Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def remove(fill=None, size=None): return f'<svg name="remove" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="M200-440v-80h560v80H200Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def check(fill=None, size=None): return f'<svg name="check" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="M382-240 154-468l57-57 171 171 367-367 57 57-424 424Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def refresh(fill=None, size=None): return f'<svg name="refresh" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="M480-160q-134 0-227-93t-93-227q0-134 93-227t227-93q69 0 132 28.5T720-690v-110h80v280H520v-80h168q-32-56-87.5-88T480-720q-100 0-170 70t-70 170q0 100 70 170t170 70q77 0 139-44t87-116h84q-28 106-114 173t-196 67Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def chevronLeft(fill=None, size=None): return f'<svg name="chevronLeft" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="M560-240 320-480l240-240 56 56-184 184 184 184-56 56Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def chevronRight(fill=None, size=None): return f'<svg name="chevronRight" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="M504-480 320-664l56-56 240 240-240 240-56-56 184-184Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def star(fill=None, size=None): return f'<svg name="star" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="m354-287 126-76 126 77-33-144 111-96-146-13-58-136-58 135-146 13 111 97-33 143ZM233-120l65-281L80-590l288-25 112-265 112 265 288 25-218 189 65 281-247-149-247 149Zm247-350Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def checkbox(fill=None, size=None): return f'<svg name="checkbox" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="m424-312 282-282-56-56-226 226-114-114-56 56 170 170ZM200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560H200v560Zm0-560v560-560Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def logout(fill=None, size=None): return f'<svg name="logout" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h280v80H200v560h280v80H200Zm440-160-55-58 102-102H360v-80h327L585-622l55-58 200 200-200 200Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def login(fill=None, size=None): return f'<svg name="login" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="M480-120v-80h280v-560H480v-80h280q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H480Zm-80-160-55-58 102-102H120v-80h327L345-622l55-58 200 200-200 200Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def publish(fill=None, size=None): return f'<svg name="publish" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="M440-160v-326L336-382l-56-58 200-200 200 200-56 58-104-104v326h-80ZM160-600v-120q0-33 23.5-56.5T240-800h480q33 0 56.5 23.5T800-720v120h-80v-120H240v120h-80Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def upload(fill=None, size=None): return f'<svg name="upload" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="M440-320v-326L336-542l-56-58 200-200 200 200-56 58-104-104v326h-80ZM240-160q-33 0-56.5-23.5T160-240v-120h80v120h480v-120h80v120q0 33-23.5 56.5T720-160H240Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def sync(fill=None, size=None): return f'<svg name="sync" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="M160-160v-80h110l-16-14q-52-46-73-105t-21-119q0-111 66.5-197.5T400-790v84q-72 26-116 88.5T240-478q0 45 17 87.5t53 78.5l10 10v-98h80v240H160Zm400-10v-84q72-26 116-88.5T720-482q0-45-17-87.5T650-648l-10-10v98h-80v-240h240v80H690l16 14q49 49 71.5 106.5T800-482q0 111-66.5 197.5T560-170Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def sort(fill=None, size=None): return f'<svg name="sort" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="M120-240v-80h240v80H120Zm0-200v-80h480v80H120Zm0-200v-80h720v80H120Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def moreVert(fill=None, size=None): return f'<svg name="moreVert" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="M480-160q-33 0-56.5-23.5T400-240q0-33 23.5-56.5T480-320q33 0 56.5 23.5T560-240q0 33-23.5 56.5T480-160Zm0-240q-33 0-56.5-23.5T400-480q0-33 23.5-56.5T480-560q33 0 56.5 23.5T560-480q0 33-23.5 56.5T480-400Zm0-240q-33 0-56.5-23.5T400-720q0-33 23.5-56.5T480-800q33 0 56.5 23.5T560-720q0 33-23.5 56.5T480-640Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def moreHoriz(fill=None, size=None): return f'<svg name="moreHoriz" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="M240-400q-33 0-56.5-23.5T160-480q0-33 23.5-56.5T240-560q33 0 56.5 23.5T320-480q0 33-23.5 56.5T240-400Zm240 0q-33 0-56.5-23.5T400-480q0-33 23.5-56.5T480-560q33 0 56.5 23.5T560-480q0 33-23.5 56.5T480-400Zm240 0q-33 0-56.5-23.5T640-480q0-33 23.5-56.5T720-560q33 0 56.5 23.5T800-480q0 33-23.5 56.5T720-400Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def filter(fill=None, size=None): return f'<svg name="filter" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="M440-160q-17 0-28.5-11.5T400-200v-240L168-736q-15-20-4.5-42t36.5-22h560q26 0 36.5 22t-4.5 42L560-440v240q0 17-11.5 28.5T520-160h-80Zm40-308 198-252H282l198 252Zm0 0Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def terminal(fill=None, size=None): return f'<svg name="terminal" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="M160-160q-33 0-56.5-23.5T80-240v-480q0-33 23.5-56.5T160-800h640q33 0 56.5 23.5T880-720v480q0 33-23.5 56.5T800-160H160Zm0-80h640v-400H160v400Zm140-40-56-56 103-104-104-104 57-56 160 160-160 160Zm180 0v-80h240v80H480Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def undo(fill=None, size=None): return f'<svg name="undo" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="M280-200v-80h284q63 0 109.5-40T720-420q0-60-46.5-100T564-560H312l104 104-56 56-200-200 200-200 56 56-104 104h252q97 0 166.5 63T800-420q0 94-69.5 157T564-200H280Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def redo(fill=None, size=None): return f'<svg name="redo" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="M396-200q-97 0-166.5-63T160-420q0-94 69.5-157T396-640h252L544-744l56-56 200 200-200 200-56-56 104-104H396q-63 0-109.5 40T240-420q0 60 46.5 100T396-280h284v80H396Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def key(fill=None, size=None): return f'<svg name="key" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="M280-400q-33 0-56.5-23.5T200-480q0-33 23.5-56.5T280-560q33 0 56.5 23.5T360-480q0 33-23.5 56.5T280-400Zm0 160q-100 0-170-70T40-480q0-100 70-170t170-70q67 0 121.5 33t86.5 87h352l120 120-180 180-80-60-80 60-85-60h-47q-32 54-86.5 87T280-240Zm0-80q56 0 98.5-34t56.5-86h125l58 41 82-61 71 55 75-75-40-40H435q-14-52-56.5-86T280-640q-66 0-113 47t-47 113q0 66 47 113t113 47Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def apps(fill=None, size=None): return f'<svg name="apps" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="M240-160q-33 0-56.5-23.5T160-240q0-33 23.5-56.5T240-320q33 0 56.5 23.5T320-240q0 33-23.5 56.5T240-160Zm240 0q-33 0-56.5-23.5T400-240q0-33 23.5-56.5T480-320q33 0 56.5 23.5T560-240q0 33-23.5 56.5T480-160Zm240 0q-33 0-56.5-23.5T640-240q0-33 23.5-56.5T720-320q33 0 56.5 23.5T800-240q0 33-23.5 56.5T720-160ZM240-400q-33 0-56.5-23.5T160-480q0-33 23.5-56.5T240-560q33 0 56.5 23.5T320-480q0 33-23.5 56.5T240-400Zm240 0q-33 0-56.5-23.5T400-480q0-33 23.5-56.5T480-560q33 0 56.5 23.5T560-480q0 33-23.5 56.5T480-400Zm240 0q-33 0-56.5-23.5T640-480q0-33 23.5-56.5T720-560q33 0 56.5 23.5T800-480q0 33-23.5 56.5T720-400ZM240-640q-33 0-56.5-23.5T160-720q0-33 23.5-56.5T240-800q33 0 56.5 23.5T320-720q0 33-23.5 56.5T240-640Zm240 0q-33 0-56.5-23.5T400-720q0-33 23.5-56.5T480-800q33 0 56.5 23.5T560-720q0 33-23.5 56.5T480-640Zm240 0q-33 0-56.5-23.5T640-720q0-33 23.5-56.5T720-800q33 0 56.5 23.5T800-720q0 33-23.5 56.5T720-640Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def heart(fill=None, size=None): return f'<svg name="heart" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="m480-120-58-52q-101-91-167-157T150-447.5Q111-500 95.5-544T80-634q0-94 63-157t157-63q52 0 99 22t81 62q34-40 81-62t99-22q94 0 157 63t63 157q0 46-15.5 90T810-447.5Q771-395 705-329T538-172l-58 52Zm0-108q96-86 158-147.5t98-107q36-45.5 50-81t14-70.5q0-60-40-100t-100-40q-47 0-87 26.5T518-680h-76q-15-41-55-67.5T300-774q-60 0-100 40t-40 100q0 35 14 70.5t50 81q36 45.5 98 107T480-228Zm0-273Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def bolt(fill=None, size=None): return f'<svg name="bolt" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="m422-232 207-248H469l29-227-185 267h139l-30 208ZM320-80l40-280H160l360-520h80l-40 320h240L400-80h-80Zm151-390Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def share(fill=None, size=None): return f'<svg name="share" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="M680-80q-50 0-85-35t-35-85q0-6 3-28L282-392q-16 15-37 23.5t-45 8.5q-50 0-85-35t-35-85q0-50 35-85t85-35q24 0 45 8.5t37 23.5l281-164q-2-7-2.5-13.5T560-760q0-50 35-85t85-35q50 0 85 35t35 85q0 50-35 85t-85 35q-24 0-45-8.5T598-672L317-508q2 7 2.5 13.5t.5 14.5q0 8-.5 14.5T317-452l281 164q16-15 37-23.5t45-8.5q50 0 85 35t35 85q0 50-35 85t-85 35Zm0-80q17 0 28.5-11.5T720-200q0-17-11.5-28.5T680-240q-17 0-28.5 11.5T640-200q0 17 11.5 28.5T680-160ZM200-440q17 0 28.5-11.5T240-480q0-17-11.5-28.5T200-520q-17 0-28.5 11.5T160-480q0 17 11.5 28.5T200-440Zm480-280q17 0 28.5-11.5T720-760q0-17-11.5-28.5T680-800q-17 0-28.5 11.5T640-760q0 17 11.5 28.5T680-720Zm0 520ZM200-480Zm480-280Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def stacks(fill=None, size=None): return f'<svg name="stacks" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="M480-400 40-640l440-240 440 240-440 240Zm0 160L63-467l84-46 333 182 333-182 84 46-417 227Zm0 160L63-307l84-46 333 182 333-182 84 46L480-80Zm0-411 273-149-273-149-273 149 273 149Zm0-149Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def bacteria(fill=None, size=None): return f'<svg name="bacteria" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="M600-80q-17 0-28.5-11.5T560-120v-43q-23-4-43.5-11.5T478-195l-40 40q-12 11-28.5 11.5T381-155q-12-12-12-28.5t12-28.5l41-41q-3-5-6-10.5t-6-10.5l-27-53-49 49q-12 11-28 11.5T278-278q-12-12-12-28t12-28l49-50-53-26q-5-2-9-4.5t-9-5.5l-36 36q-12 11-28.5 11.5T163-384q-12-12-12-28t12-28l35-35q-14-19-22.5-40.5T163-560h-43q-17 0-28.5-11.5T80-600q0-17 11.5-28.5T120-640h45q5-19 12-36t18-33l-35-35q-12-12-12-28t12-28q12-12 28-12t28 12l35 35q16-11 33-18t36-12v-45q0-17 11.5-28.5T360-880q17 0 28.5 11.5T400-840v43q24 4 45.5 13t40.5 23l35-35q12-12 28.5-12t28.5 12q12 12 12 28t-12 28l-37 37q2 4 4.5 8t4.5 9l25 50 46-46q12-12 28.5-12t28.5 12q12 12 12 28.5T678-625l-48 47 56 28q6 3 12.5 6.5T710-536l40-40q12-12 28-12t28 12q12 12 12 28.5T806-519l-40 39q12 18 19.5 38t11.5 42h43q17 0 28.5 11.5T880-360q0 17-11.5 28.5T840-320h-45q-5 19-12 35.5T765-252l34 34q12 12 12 28.5T799-161q-12 11-28.5 11.5T742-161l-33-34q-16 11-33 18t-36 12v45q0 17-11.5 28.5T600-80Zm-6-160q58 0 95.5-44T718-386q-5-30-22.5-54T650-478l-66-34q-23-12-41.5-30.5T512-584l-34-66q-16-32-46-51t-66-19q-58 0-95.5 44T242-574q5 30 22.5 54t45.5 38l66 34q23 12 41.5 30.5T448-376l34 66q16 32 46 51t66 19ZM380-540q25 0 42.5-17.5T440-600q0-25-17.5-42.5T380-660q-25 0-42.5 17.5T320-600q0 25 17.5 42.5T380-540Zm200 250q21 0 35.5-14.5T630-340q0-21-14.5-35.5T580-390q-21 0-35.5 14.5T530-340q0 21 14.5 35.5T580-290ZM480-480Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def save(fill=None, size=None): return f'<svg name="save" xmlns="http://www.w3.org/2000/svg" height="{size or iS.size}px" viewBox="0 -960 960 960" width="{size or iS.size}px" fill="{fill or iS.fill}"><path d="M840-680v480q0 33-23.5 56.5T760-120H200q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h480l160 160Zm-80 34L646-760H200v560h560v-446ZM480-240q50 0 85-35t35-85q0-50-35-85t-85-35q-50 0-85 35t-35 85q0 50 35 85t85 35ZM240-560h360v-160H240v160Zm-40-86v446-560 114Z"/></svg>' # Icon
+    @staticmethod                                                                # Icon
+    def dummy(fill=None, size=None): return f''                                  # Icon
+_structTypes = ["u8", "u16", "u32", "u64", "h8", "h16", "h32", "h64", "i8", "i16", "i32", "i64", "f32", "f64", "c", "unix", "unix4", "time", "time2", "time60"] # u8:1 for bit field, c:32 for char array of 32 bytes # Icon
+_structLen   = {"u8": 8,   "u16": 16,  "u32": 32,  "u64": 64,  "h8": 8,   "h16": 16,  "h32": 32,  "h64": 64,  "i8": 8,   "i16": 16,  "i32": 32,  "i64": 64,  "f32": 32,  "f64": 64, "c": 8, "unix": 64, "unix4": 32, "time": 32, "time2": 16, "time60": 16} # Icon
+_structTrans = {"u8": "B", "u16": "H", "u32": "I", "u64": "Q", "h8": "B", "h16": "H", "h32": "I", "h64": "Q", "i8": "b", "i16": "h", "i32": "i", "i64": "q", "f32": "f", "f64": "d", "unix": "Q", "unix4": "I", "time": "I", "time2": "H", "time60": "H"} # Icon
+_structInts = ["u8", "u16", "u32", "u64", "h8", "h16", "h32", "h64", "i8", "i16", "i32", "i64", "unix", "unix4", "time", "time2", "time60"] # Icon
+_byteMask = {1: 0b00000001, 2: 0b00000011, 3: 0b00000111, 4: 0b00001111, 5: 0b00011111, 6: 0b00111111, 7: 0b01111111, 8: 0b11111111} # Icon
+_structUIAuto = AutoIncrement(prefix="_s")                                       # Icon
 class StructParseException(Exception): pass                                      # StructParseException
 class Struct:                                                                    # Struct
     def __init__(self, structDef:dict, strict:bool=True):                        # Struct
@@ -1374,6 +1506,7 @@ without null character at the end! There are these data types:
 
 - Unsigned integers: u8, u16, u32, u64
 - Signed integers: i8, i16, i32, i64
+- Unsigned hex integers: h8, h16, h32, h64. Pretty much the same as normal unsigned integers on python side, but displays to web interface as "0x..."
 - Floating point: f32, f64
 - String: c
 - Time:
@@ -1410,41 +1543,46 @@ This mechanism is also available on JS side, see :meth:`_js`
     or not. If does not raise error (strict=False), then remaining padded bytes are zero""" # Struct
         self.structDef = structDef; self.strict = strict; self._s_vars = {}; groups = []; group = []; nbits = 0 # byte-aligned groups, number of bits in this group so far # Struct
         for name, _type in structDef.items():                                    # Struct
-            desc = ""                                                            # Struct
-            if isinstance(_type, tuple): _type, desc = _type                     # Struct
-            if isinstance(_type, (str, tuple, list)): # typical regular types    # Struct
-                if isinstance(_type, tuple): _type, desc = _type                 # Struct
-                if isinstance(_type, str): res = _type.split(":")                # Struct
-                elif isinstance(_type, list): res = _type                        # Struct
-                else: raise Exception(f"Does not know how to parse struct definition of type {type(_type)}") # Struct
-                typeRaw = res[0]; typeLen = int(res[1]) if len(res) > 1 else _structLen[typeRaw] # Struct
-                if isinstance(typeRaw, str):                                     # Struct
-                    if typeRaw not in _structTypes: raise StructParseException(f"Don't recognize type '{typeRaw}', has to be one of '{_structTypes}'") # Struct
-                    if typeRaw == "c": # char array, or string, makes an exception # Struct
-                        if isinstance(_type, list): raise StructParseException("Does not support arrays of char[]/string yet") # Struct
-                        if len(res) == 1: raise StructParseException(f"Character arrays/strings must have a length associated with it, like 'c:10', for char[10]") # Struct
-                        self.__dict__[name] = ""; self._s_vars[name] = [typeRaw, typeLen*8, desc] # Struct
-                        if nbits > 0: groups.append(group)                       # Struct
+            desc = ""; arrLen = None; charLen = None # typeLen: number of bits of the raw type (not counting arrays). arrLen is array length, charLen is c:3 or u8:3 length (in both case is 3) # Struct
+            if isinstance(_type, (tuple, list)):                                 # Struct
+                if len(_type) == 2: _type, arrLen = _type                        # Struct
+                elif len(_type) == 3: _type, arrLen, desc = _type                # Struct
+                else: assert False, f"_type has length {len(_type)}, which is not supported" # Struct
+            if isinstance(_type, str): # typical regular types                   # Struct
+                assert _type != "c", f"Character arrays/strings must have a length associated with it, like 'c:10', for char[10]" # Struct
+                if ":" in _type: _type, charLen = _type.split(":"); charLen = int(charLen) # Struct
+                typeLen = _structLen[_type]                                      # Struct
+                if _type not in _structTypes: raise StructParseException(f"Don't recognize type '{_typew}', has to be one of '{_structTypes}'") # Struct
+                if _type == "c": # char array, or string, makes an exception     # Struct
+                    if arrLen is not None: raise StructParseException("Does not support arrays of char[]/string yet") # Struct
+                    self.__dict__[name] = ""; self._s_vars[name] = [[_type, None], typeLen*charLen, desc] # Struct
+                    if nbits > 0: groups.append(group)                           # Struct
+                    groups.append([name]); group = []; nbits = 0                 # Struct
+                else: # other primitive types                                    # Struct
+                    if arrLen: # [type]                                          # Struct
+                        self.__dict__[name] = [0]*arrLen; self._s_vars[name] = [[_type, arrLen], typeLen*arrLen, desc] # Struct
+                        if group: groups.append(group)                           # Struct
                         groups.append([name]); group = []; nbits = 0             # Struct
-                    else: # other primitive types                                # Struct
-                        if isinstance(_type, list): # [type]                     # Struct
-                            self.__dict__[name] = [0]*typeLen; self._s_vars[name] = [[typeRaw, typeLen], typeLen*_structLen[typeRaw], desc] # Struct
-                            if group: groups.append(group)                       # Struct
-                            groups.append([name]); group = []; nbits = 0         # Struct
-                        else: # u8, u16, or u8:1                                 # Struct
-                            if typeLen % 8 > 0 and typeRaw != "u8": raise StructParseException("Only u8 type is allowed to have bit field values") # Struct
-                            self.__dict__[name] = 0; self._s_vars[name] = [typeRaw, typeLen, desc] # Struct
-                            if typeLen <= 8-nbits: group.append(name); nbits += typeLen # Struct
-                            else: groups.append(group); group = [name]; nbits = typeLen # Struct
-                else: # struct[]                                                 # Struct
-                    f = lambda: Struct(typeRaw); self.__dict__[name] = [f() for i in range(typeLen)] # Struct
-                    self._s_vars[name] = [[typeRaw, typeLen], len(self.__dict__[name][0])*typeLen*8, desc] # Struct
+                    else: # u8, u16, or u8:1                                     # Struct
+                        self.__dict__[name] = 0                                  # Struct
+                        if charLen: # u8:1, u8:5 and other u8 bitfields          # Struct
+                            if _type != "u8": raise StructParseException("Only u8 type is allowed to have bit field values") # Struct
+                            self._s_vars[name] = [[_type, None], charLen, desc]  # Struct
+                            if charLen <= 8-nbits: group.append(name); nbits += charLen # Struct
+                            else: groups.append(group); group = [name]; nbits = charLen # Struct
+                        else:                                                    # Struct
+                            self._s_vars[name] = [[_type, None], typeLen, desc]  # Struct
+                            groups.append(group); group = [name]; nbits = typeLen # Struct
+            elif isinstance(_type, dict): # nested structs, expects a dict       # Struct
+                if arrLen is None: # struct                                      # Struct
+                    self.__dict__[name] = Struct(_type); self._s_vars[name] = [[_type, None], len(self.__dict__[name])*8, desc] # Struct
                     if group: groups.append(group)                               # Struct
                     groups.append([name]); group = []                            # Struct
-            elif isinstance(_type, dict): # nested structs, expects a dict       # Struct
-                self.__dict__[name] = Struct(_type); self._s_vars[name] = [_type, len(self.__dict__[name])*8, desc] # Struct
-                if group: groups.append(group)                                   # Struct
-                groups.append([name]); group = []                                # Struct
+                else: # [struct]                                                 # Struct
+                    f = lambda: Struct(_type); self.__dict__[name] = [f() for i in range(arrLen)] # Struct
+                    self._s_vars[name] = [[_type, arrLen], len(self.__dict__[name][0])*arrLen*8, desc] # Struct
+                    if group: groups.append(group)                               # Struct
+                    groups.append([name]); group = []                            # Struct
             else: raise StructParseException(f"Does not accept variable of type {type(_type)}. It has to either be a primitive type (u8, f32, etc) or a dict (nested struct)") # Struct
         groups.append(group); _vars = self._s_vars; a_groups = []; byteOffset = 0 # Struct
         for group in groups:                                                     # Struct
@@ -1456,13 +1594,13 @@ This mechanism is also available on JS side, see :meth:`_js`
     def _s_valuesD(self): return {name: self.__dict__[name] for name in self._s_vars.keys()} # simple key - value, not in a super nice format tho # Struct
     def _values(self):                                                           # Struct
         ans = {}                                                                 # Struct
-        for name, [typeRaw, typeLen, desc] in self._s_vars.items():              # Struct
-            if isinstance(typeRaw, str): ans[name] = self.__dict__[name]         # Struct
-            elif isinstance(typeRaw, list):                                      # Struct
-                typeRaw, arrLen = typeRaw                                        # Struct
+        for name, [[typeRaw, arrLen], typeLen, desc] in self._s_vars.items():    # Struct
+            if not arrLen:                                                       # Struct
+                if isinstance(typeRaw, str): ans[name] = self.__dict__[name]     # Struct
+                else: ans[name] = self.__dict__[name]._values()                  # Struct
+            else:                                                                # Struct
                 if isinstance(typeRaw, str): ans[name] = self.__dict__[name]     # Struct
                 else: ans[name] = [x._values() for x in self.__dict__[name]]     # Struct
-            else: ans[name] = self.__dict__[name]._values()                      # Struct
         return ans                                                               # Struct
     def __repr__(self):                                                          # Struct
         v = {x:str(y) if isinstance(y, Struct) else y for x,y in self._s_valuesD().items()}; return f"<Struct len={len(self)} def={self.structDef}>\n{pprint.pformat(self._values())}" # Struct
@@ -1472,24 +1610,28 @@ This mechanism is also available on JS side, see :meth:`_js`
         for bitField, byteOffset, group in self._s_groups:                       # Struct
             if bitField:                                                         # Struct
                 value = 0; nbit = 0                                              # Struct
-                for name in group: typeRaw, typeLen, desc = _vars[name]; value += (values[name] & _byteMask[typeLen]) << nbit; nbit += typeLen # Struct
+                for name in group: [typeRaw, _], typeLen, desc = _vars[name]; value += (values[name] & _byteMask[typeLen]) << nbit; nbit += typeLen # Struct
                 ans += struct.pack("B", value)                                   # Struct
             else:                                                                # Struct
-                name = group[0]; typeRaw, typeLen, desc = _vars[name]            # Struct
-                if typeRaw == "c":                                               # Struct
-                    v = values[name]                                             # Struct
-                    if isinstance(v, str): v = v.encode()                        # Struct
-                    if not isinstance(v, bytes): raise StructParseException(f"Variable '{name}' should be a string, but it's of type {type(v)} instead") # Struct
-                    ans += (v + b"\0"*(typeLen//8-len(v)))[:typeLen//8]          # Struct
-                elif isinstance(typeRaw, str):                                   # Struct
-                    if typeRaw in _structInts: values[name] = int(values[name])  # Struct
-                    ans += struct.pack(_structTrans[typeRaw], values[name])      # Struct
-                elif isinstance(typeRaw, dict): ans += values[name]._toBytes()   # Struct
-                elif isinstance(typeRaw, list): typeRaw, arrLen = typeRaw; ans += b"".join([x._toBytes() for x in values[name]]) if isinstance(typeRaw, dict) else struct.pack(_structTrans[typeRaw]*arrLen, *values[name]) # Struct
+                name = group[0]; [typeRaw, arrLen], typeLen, desc = _vars[name]  # Struct
+                if not arrLen:                                                   # Struct
+                    if typeRaw == "c":                                           # Struct
+                        v = values[name]                                         # Struct
+                        if isinstance(v, str): v = v.encode()                    # Struct
+                        if not isinstance(v, bytes): raise StructParseException(f"Variable '{name}' should be a string, but it's of type {type(v)} instead") # Struct
+                        ans += (v + b"\0"*(typeLen//8-len(v)))[:typeLen//8]      # Struct
+                    elif isinstance(typeRaw, str):                               # Struct
+                        if typeRaw in _structInts: values[name] = int(values[name]) # Struct
+                        ans += struct.pack(_structTrans[typeRaw], values[name])  # Struct
+                    elif isinstance(typeRaw, dict): ans += values[name]._toBytes() # Struct
+                else:                                                            # Struct
+                    if isinstance(typeRaw, dict): ans += b"".join([x._toBytes() for x in values[name]]) # Struct
+                    else: ans += struct.pack(_structTrans[typeRaw]*arrLen, *values[name]) # Struct
         return ans                                                               # Struct
     def parse(self, data:bytes):                                                 # Struct
+        if data is None: return self                                             # Struct
         if self.strict:                                                          # Struct
-            if len(self) != len(data): raise StructParseException("Length of input data does not match struct's length") # Struct
+            if len(self) != len(data): raise StructParseException(f"Length of input data ({len(data)}) does not match struct's length ({len(self)})") # Struct
         elif len(self) > len(data): data = data + b"\x00" * (len(self) - len(data)) # Struct
         _vars = self._s_vars; groupBounds = [*[x[1] for x in self._s_groups], len(self)] # Struct
         for i, [bitField, byteOffset, group] in enumerate(self._s_groups):       # Struct
@@ -1498,13 +1640,15 @@ This mechanism is also available on JS side, see :meth:`_js`
                 assert len(localData) == 1; value = 0; nbit = 0; d = localData[0] # Struct
                 for name in group: typeRaw, typeLen, desc = _vars[name]; self.__dict__[name] = d & _byteMask[typeLen]; d = d >> typeLen # Struct
             else:                                                                # Struct
-                name = group[0]; typeRaw, typeLen, desc = _vars[name]            # Struct
-                if typeRaw == "c": self.__dict__[name] = localData               # Struct
-                elif isinstance(typeRaw, str): self.__dict__[name] = struct.unpack(_structTrans[typeRaw], localData)[0] # Struct
-                elif isinstance(typeRaw, dict): self.__dict__[name].parse(localData) # Struct
-                elif isinstance(typeRaw, list):                                  # Struct
-                    typeRaw, arrLen = typeRaw; eachLen = len(localData)//arrLen  # Struct
-                    self.__dict__[name] = [v.parse(localData[i*eachLen:(i+1)*eachLen]) for i,v in enumerate(self.__dict__[name])] if isinstance(typeRaw, dict) else list(struct.unpack(_structTrans[typeRaw]*arrLen, localData)) # Struct
+                name = group[0]; [typeRaw, arrLen], typeLen, desc = _vars[name]  # Struct
+                if not arrLen:                                                   # Struct
+                    if typeRaw == "c": self.__dict__[name] = localData           # Struct
+                    elif isinstance(typeRaw, str): self.__dict__[name] = struct.unpack(_structTrans[typeRaw], localData)[0] # Struct
+                    elif isinstance(typeRaw, dict): self.__dict__[name].parse(localData) # Struct
+                else:                                                            # Struct
+                    eachLen = len(localData)//arrLen                             # Struct
+                    if isinstance(typeRaw, dict): self.__dict__[name] = [v.parse(localData[i*eachLen:(i+1)*eachLen]) for i,v in enumerate(self.__dict__[name])] # Struct
+                    else: self.__dict__[name] = list(struct.unpack(_structTrans[typeRaw]*arrLen, localData)) # Struct
         return self                                                              # Struct
     @staticmethod                                                                # Struct
     def _js(opt=True):                                                           # Struct
@@ -1522,70 +1666,115 @@ Example::
 
 The above code is entirely in JS btw. See usage of this from Python to JS at :meth:`_toHtml`""" # Struct
         # don't expect the code above to be readable. It's optimized so as to fit in the least amount of space possible. The structure is pretty much identical to the python source code, so read over that instead # Struct
-        if opt: return "".join(x.strip() for x in Struct._js(False).split("\n")) # Struct
+        if opt: return "".join(x.lstrip() for x in Struct._js(False).split("\n")) # Struct
         return """
-_structTypes=["u8","u16","u32","u64","i8","i16","i32","i64","f32","f64","c","unix","unix4","time","time2","time60"];
-_structLen={"u8":8,"u16":16,"u32":32,"u64":64,"i8":8,"i16":16,"i32":32,"i64":64,"f32":32,"f64":64,"c":1,"unix":64,"unix4":32,"time":32,"time2":16,"time60":16};
-_structTrans={"u8":"B","u16":"H","u32":"I","u64":"Q","i8":"b","i16":"h","i32":"i","i64":"q","f32":"f","f64":"d","unix":"Q","unix4":"I","time":"I","time2":"H","time60":"H"};
-_byteMask={1:1,2:3,3:7,4:15,5:31,6:63,7:127,8:255};
-function u8Eq(a,b){if(a.length!==b.length)return false;return a.every((v,i)=>v===b[i]);}
-function Struct(structDef){
-    let self={structDef,"_s_vars":{},"_d":{},"__len__":()=>self._s_len};self._toBytes=()=>Struct_toBytes(self);self.parse=(data)=>Struct_parse(self,data);self._values=()=>Struct_values(self);
-    let groups=[];let group=[];let nbits=0;
-    for(let[name,_type]of Object.entries(structDef)){let desc="";
-        if(typeof(_type)==="string"||Array.isArray(_type)){
-            let res=Array.isArray(_type)?_type:_type.split(":");let typeRaw=res[0];let typeLen=res.length>1?parseInt(res[1]):_structLen[typeRaw];
-            if(typeof(typeRaw)==="string"){
-                if(!_structTypes.includes(typeRaw))throw new Error(`Don't recognize type '${typeRaw}', has to be one of '${_structTypes}'`);
-                if(typeRaw==="c"){if(res.length==1)throw new Error(`Character arrays/strings must have a length associated with it, like 'c:10', for char[10]`);
-                    self._d[name]="";self._s_vars[name]=[typeRaw,typeLen*8,desc];if(nbits>0)groups.push(group);groups.push([name]);group=[];nbits=0;
-                }else{
-                    if(Array.isArray(_type)){
-                        self._d[name]=[...Array(typeLen).keys()].map(x=>0);self._s_vars[name]=[[typeRaw,typeLen],typeLen*_structLen[typeRaw],desc];
+_structTypes=["u8","u16","u32","u64","h8","h16","h32","h64","i8","i16","i32","i64","f32","f64","c","unix","unix4","time","time2","time60"];
+_structLen={"u8":8,"u16":16,"u32":32,"u64":64,"h8":8,"h16":16,"h32":32,"h64":64,"i8":8,"i16":16,"i32":32,"i64":64,"f32":32,"f64":64,"c":8,"unix":64,"unix4":32,"time":32,"time2":16,"time60":16};
+_structTrans={"u8":"B","u16":"H","u32":"I","u64":"Q","h8":"B","h16":"H","h32":"I","h64":"Q","i8":"b","i16":"h","i32":"i","i64":"q","f32":"f","f64":"d","unix":"Q","unix4":"I","time":"I","time2":"H","time60":"H"};
+_byteMask={1:1,2:3,3:7,4:15,5:31,6:63,7:127,8:255};function u8Eq(a,b){if(a.length!==b.length)return false;return a.every((v,i)=>v===b[i]);}
+async function _struct_dynamicLoad_2(selector, rawHtml=null){
+    const elem=document.querySelector(selector);elem.innerHTML=rawHtml;await new Promise(r=>setTimeout(r,100));let currentScript="";
+    try{for(const script of elem.getElementsByTagName("script")){currentScript=script.innerHTML;eval(script.innerHTML);}
+    }catch(e){console.log(`Error encountered: `,e,e.stack,currentScript);}}
+async function _struct_dynamicLoad(selector, rawHtml=null){const targetDiv=document.querySelector(selector);targetDiv.innerHTML="";
+    const tempDiv=document.createElement('div');tempDiv.innerHTML=rawHtml;while(tempDiv.firstChild)targetDiv.appendChild(tempDiv.firstChild);
+    const scripts=targetDiv.querySelectorAll('script');scripts.forEach(oldScript=>{
+        const newScript=document.createElement('script');for(const attr of oldScript.attributes)newScript.setAttribute(attr.name,attr.value);
+        newScript.textContent=oldScript.textContent;oldScript.parentNode.replaceChild(newScript,oldScript);});};
+class Struct {
+    constructor(structDef){
+        this.structDef=structDef;this._s_vars={};this._d={};let self=this;let groups=[];let group=[];let nbits=0;
+        for(let[name,_type]of Object.entries(structDef)){let desc="";let arrLen=null;let charLen=null;
+            if(Array.isArray(_type)){
+                if(_type.length==2){[_type,arrLen]=_type;}else if(_type.length==3){[_type,arrLen,desc]=_type;}
+                else throw new Error(`_type has length ${_type.length}, which is not supported`);}
+            if(typeof(_type)==="string"){
+                if(_type=="c")throw new Error(`Character arrays/strings must have a length associated with it, like 'c:10', for char[10]`);
+                if(_type.includes(":")){[_type,charLen]=_type.split(":");charLen=parseInt(charLen);}let typeLen=_structLen[_type];
+                if(!_structTypes.includes(_type))throw new Error(`Don't recognize type '${_type}', has to be one of '${_structTypes}'`);
+                if(_type==="c"){if(arrLen)throw new Error("Does not support arrays of char[]/string yet");
+                    self._d[name]="";self._s_vars[name]=[[_type, null],typeLen*charLen,desc];if(nbits>0)groups.push(group);groups.push([name]);group=[];nbits=0;
+                }else{if(arrLen){
+                        self._d[name]=[...Array(arrLen).keys()].map(x=>0);self._s_vars[name]=[[_type,arrLen],arrLen*typeLen,desc];
                         if(group.length>0)groups.push(group);groups.push([name]);group=[];nbits=0;
-                    }else{
-                        if(typeLen%8>0&&typeRaw!="u8")throw new Error("Only u8 type is allowed to have bit field values");
-                        self._d[name]=0;self._s_vars[name]=[typeRaw,typeLen,desc];if(typeLen<=8-nbits){group.push(name);nbits+=typeLen;}else{groups.push(group);group=[name];nbits=typeLen;}}}
-            }else{
-                let f=()=>Struct(typeRaw);self._d[name]=[...Array(typeLen).keys()].map(x=>f());
-                self._s_vars[name]=[[typeRaw,typeLen],self._d[name][0].__len__()*typeLen*8,desc];
-                if(group.length>0)groups.push(group);groups.push([name]);group=[];}
-        }else{
-            self._d[name]=Struct(_type);self._s_vars[name]=[_type,self._d[name].__len__()*8,desc];
-            if(group.length>0)groups.push(group);groups.push([name]);group=[];}
-    };groups.push(group);let _vars=self._s_vars;let a_groups=[];let byteOffset=0;
-    for(let group of groups){if(group.length==0)continue;let bitField=false;for(let name of group)if(_vars[name][1]<8)bitField=true;
-        a_groups.push([bitField,byteOffset,group]);if(bitField)byteOffset+=1;else byteOffset+=Math.floor(_vars[group[0]][1]/8);};
-    self._s_valuesD=()=>{let d={};for(let name in self._s_vars)d[name]=self._d[name];return d;};self._s_len=byteOffset;self._s_groups=a_groups;return self;}
-function Struct_toBytes(struct){
-    let self=struct;let buffer=new ArrayBuffer(self.__len__());let offset=0;let ans=new DataView(buffer);let _vars=self._s_vars;let values=self._s_valuesD();
-    for(let[bitField,byteOffset,group]of self._s_groups){
-        if(bitField){let value=0;let nbit=0;for(let name of group){let[typeRaw,typeLen,desc]=_vars[name];value+=(values[name]&_byteMask[typeLen])<<nbit;nbit+=typeLen;}offset+=struct_pack(ans,offset,"B",value);}
-        else{let name=group[0];let[typeRaw,typeLen,desc]=_vars[name];
-            if(typeRaw==="c"){let encoded=(new TextEncoder()).encode(values[name]);let upper=Math.min(encoded.length,typeLen/8);
-                for(let i=0;i<upper;i++)ans.setUint8(offset+i,encoded[i]);for(let i=upper;i<typeLen/8;i++)ans.setUint8(offset+i,0);offset+=typeLen/8;}
-            else if(typeof typeRaw==="string")offset+=struct_pack(ans,offset,_structTrans[typeRaw],values[name]);
-            else if(Array.isArray(typeRaw)){
-                if(typeof(values[name])==="string")values[name]=JSON.parse(values[name]);
-                let arrLen;[typeRaw,arrLen]=typeRaw;if(typeof typeRaw==="string")for(let i=0;i<arrLen;i++)offset+=struct_pack(ans,offset,_structTrans[typeRaw],values[name][i]);
-                else{let sLen=values[name][0].__len__();for(let i=0;i<arrLen;i++){let sView=new DataView(values[name][i]._toBytes().buffer);for(let j=0;j<sLen;j++)ans.setUint8(offset+j,sView.getUint8(j));offset+=sLen;}}
-            }else{let sLen=values[name].__len__();let sView=new DataView(values[name]._toBytes().buffer);for(let i=0;i<sLen;i++)ans.setUint8(offset+i,sView.getUint8(i));offset+=sLen;}
-        }};return new Uint8Array(buffer);}
-function Struct_parse(struct,data){
-    let self=struct;if(self.__len__()!=data.length)throw new Error(`Length of input data (${data.length}) does not match struct's length (${self.__len__()})`);
-    let _vars=self._s_vars;let groupBounds=[...self._s_groups.map((x)=>x[1]),self.__len__()];
-    for(let i=0;i<self._s_groups.length;i++){
-        let[bitField,byteOffset,group]=self._s_groups[i];let localData=data.subarray(groupBounds[i],groupBounds[i+1]);let localDataLen=groupBounds[i+1]-groupBounds[i];
-        if(bitField){let d=localData[0];for(let name of group){let[typeRaw,typeLen,desc]=_vars[name];self._d[name]=d&_byteMask[typeLen];d=d>>typeLen;}}
-        else{let name=group[0];let[typeRaw,typeLen,desc]=_vars[name];
-            if(typeRaw==="c")try{self._d[name]=new TextDecoder().decode(localData).replaceAll("\\x00","");}catch(e){self._d[name]=localData;}
-            else if(typeof typeRaw==="string")self._d[name]=struct_unpack(localData,0,_structTrans[typeRaw]);
-            else if(Array.isArray(typeRaw)){
-                let arrLen;[typeRaw,arrLen]=typeRaw;let eachLen=Math.floor(localDataLen/arrLen);
-                if(typeof typeRaw==="string")self._d[name]=[...Array(arrLen).keys()].map(i=>struct_unpack(localData,i*eachLen,_structTrans[typeRaw]));
-                else self._d[name]=[...Array(arrLen).keys()].map(i=>self._d[name][i].parse(localData.subarray(i*eachLen,(i+1)*eachLen)));
-            }else self._d[name].parse(localData);}};return self;}
-function Struct_values(self){let ans={};for(let[name,[typeRaw,typeLen,desc]]of Object.entries(self._s_vars)){if(typeof typeRaw==="string")ans[name]=self._d[name];else if(Array.isArray(typeRaw)){if(typeof(typeRaw[0])==="string"){let v=self._d[name];ans[name]=(typeof v==="string")?JSON.parse(v):v;}else ans[name]=self._d[name].map(x=>x._values());}else ans[name]=self._d[name]._values();}return ans;}
+                    }else{self._d[name]=0;
+                        if(charLen){if(_type!="u8")throw new Error("Only u8 type is allowed to have bit field values");
+                            self._s_vars[name]=[[_type,null],charLen,desc];
+                            if(charLen<=8-nbits){group.push(name);nbits+=charLen;}else{groups.push(group);group=[name];nbits=charLen;}
+                        }else{self._s_vars[name]=[[_type,null],typeLen,desc];groups.push(group);group=[name];nbits=typeLen;}}}
+            }else{if(!arrLen){
+                    self._d[name]=new Struct(_type);self._s_vars[name]=[[_type,null],self._d[name].__len__()*8,desc];
+                    if(group.length>0)groups.push(group);groups.push([name]);group=[];
+                }else{let f=()=>new Struct(_type);self._d[name]=[...Array(arrLen).keys()].map(x=>f());
+                    self._s_vars[name]=[[_type,arrLen],self._d[name][0].__len__()*arrLen*8,desc];
+                    if(group.length>0)groups.push(group);groups.push([name]);group=[];}}
+        };groups.push(group);let _vars=self._s_vars;let a_groups=[];let byteOffset=0;
+        for(let group of groups){if(group.length==0)continue;let bitField=false;for(let name of group)if(_vars[name][1]<8)bitField=true;
+            a_groups.push([bitField,byteOffset,group]);if(bitField)byteOffset+=1;else byteOffset+=Math.floor(_vars[group[0]][1]/8);};
+        self._s_valuesD=()=>{let d={};for(let name in self._s_vars)d[name]=self._d[name];return d;};self._s_len=byteOffset;self._s_groups=a_groups;return self;}
+    _toBytes(){let self=this;let buffer=new ArrayBuffer(self.__len__());let offset=0;let ans=new DataView(buffer);let _vars=self._s_vars;let values=self._s_valuesD();
+        for(let[bitField,byteOffset,group]of self._s_groups){
+            if(bitField){let value=0;let nbit=0;for(let name of group){let[typeRaw,typeLen,desc]=_vars[name];value+=(values[name]&_byteMask[typeLen])<<nbit;nbit+=typeLen;}offset+=struct_pack(ans,offset,"B",value);}
+            else{let name=group[0];let[[typeRaw,arrLen],typeLen,desc]=_vars[name];
+                if(!arrLen){
+                    if(typeRaw==="c"){let encoded=(new TextEncoder()).encode(values[name]);let upper=Math.min(encoded.length,typeLen/8);
+                        for(let i=0;i<upper;i++)ans.setUint8(offset+i,encoded[i]);for(let i=upper;i<typeLen/8;i++)ans.setUint8(offset+i,0);offset+=typeLen/8;}
+                    else if(typeof typeRaw==="string")offset+=struct_pack(ans,offset,_structTrans[typeRaw],values[name]);
+                    else{let sLen=values[name].__len__();let sView=new DataView(values[name]._toBytes().buffer);for(let i=0;i<sLen;i++)ans.setUint8(offset+i,sView.getUint8(i));offset+=sLen;}
+                }else{if(typeof(values[name])==="string")values[name]=JSON.parse(values[name]);
+                    if(typeof typeRaw==="string")for(let i=0;i<arrLen;i++)offset+=struct_pack(ans,offset,_structTrans[typeRaw],values[name][i]);
+                    else{let sLen=values[name][0].__len__();for(let i=0;i<arrLen;i++){let sView=new DataView(values[name][i]._toBytes().buffer);for(let j=0;j<sLen;j++)ans.setUint8(offset+j,sView.getUint8(j));offset+=sLen;}}}
+            }};return new Uint8Array(buffer);}
+    parse(data) {
+        let self=this;if(self.__len__()!=data.length)throw new Error(`Length of input data (${data.length}) does not match struct's length (${self.__len__()})`);
+        let _vars=self._s_vars;let groupBounds=[...self._s_groups.map((x)=>x[1]),self.__len__()];
+        for(let i=0;i<self._s_groups.length;i++){
+            let[bitField,byteOffset,group]=self._s_groups[i];let localData=data.subarray(groupBounds[i],groupBounds[i+1]);let localDataLen=groupBounds[i+1]-groupBounds[i];
+            if(bitField){let d=localData[0];for(let name of group){let[typeRaw,typeLen,desc]=_vars[name];self._d[name]=d&_byteMask[typeLen];d=d>>typeLen;}}
+            else{let name=group[0];let[[typeRaw,arrLen],typeLen,desc]=_vars[name];
+                if(!arrLen){
+                    if(typeRaw==="c")try{self._d[name]=new TextDecoder().decode(localData).replaceAll("\\x00","");}catch(e){self._d[name]=localData;}
+                    else if(typeof typeRaw==="string")self._d[name]=struct_unpack(localData,0,_structTrans[typeRaw]);else self._d[name].parse(localData);
+                }else{let eachLen=Math.floor(localDataLen/arrLen);
+                    if(typeof typeRaw==="string")self._d[name]=[...Array(arrLen).keys()].map(i=>struct_unpack(localData,i*eachLen,_structTrans[typeRaw]));
+                    else self._d[name]=[...Array(arrLen).keys()].map(i=>self._d[name][i].parse(localData.subarray(i*eachLen,(i+1)*eachLen)));}
+            }};return self;};__len__(){return this._s_len;}
+    values(){let self=this;let ans={};for(let[name,[typeRaw,typeLen,desc]]of Object.entries(self._s_vars)){if(typeof typeRaw==="string")ans[name]=self._d[name];else if(Array.isArray(typeRaw)){if(typeof(typeRaw[0])==="string"){let v=self._d[name];ans[name]=(typeof v==="string")?JSON.parse(v):v;}else ans[name]=self._d[name].map(x=>x._values());}else ans[name]=self._d[name]._values();}return ans;}
+    static setup(pre,structDef,nOs,delayedFunc,rawU8A) {
+        window[`${pre}_obj`]={st:new Struct(structDef),nOs:nOs};(async()=>{let o=window[`${pre}_obj`];let dqA=(x)=>document.querySelectorAll(x);dqA(`.${pre}_inps`).forEach(x=>x.classList.add("input","input-bordered"));let iA=Array.isArray;let oE=Object.entries;
+        o._re=()=>{for(let n of Object.keys(o.nOs))if(iA(o.nOs[n])){for(let i=0;i<o.nOs[n].length;i++){o.nOs[n][i].st=o.st._d[n][i];o.nOs[n][i]._re();}}else{o.nOs[n].st=o.st._d[n];o.nOs[n]._re();}};o._re();
+        o._cD=()=>{return Object.fromEntries(Array.from(dqA(`.${pre}_inps`)).map((x)=>{
+            let value;if(x.type=="datetime-local"||x.type=="time")value=iso2Int(x.value,x.classList);
+            else if(x.classList.contains("_typeRaw_h")){if (x.classList.contains("_arrLen_0"))value=+x.value;else value=JSON.parse(x.value).map(x=>+x);}
+            else value=x.value;return [x.name,value];}));};/*collateD*/
+        o._uS=()=>{for(let[n,_o]of oE(o.nOs)){if(iA(_o))_o.forEach(x=>x._uS());else _o._uS();}/*update structs from real values*/let d=o._cD();for(let[n,v]of oE(d))o.st._d[n]=v;};
+        o.collate=()=>{o._uS();return o.st._toBytes();};o._ui=()=>{
+            for(let[n,[[typeRaw,arrLen],typeLen,desc]]of oE(o.st._s_vars)){
+                if (!arrLen){if(typeof(typeRaw)==="string"){let _i=`#${pre}_${n}`;
+                    if(dS(_i).type=="datetime-local"||dS(_i).type=="time")dS(_i).value=int2Iso(o.st._d[n],dS(_i).classList);
+                    else if(typeRaw[0]=="h")dS(_i).value="0x"+o.st._d[n].toString(16);else dS(_i).value=o.st._d[n];
+                    dS(_i).value=dS(_i).value.replaceAll("\\x00","");}else o.nOs[n]._ui();
+                }else{if(typeof(typeRaw)==="string")dS(`#${pre}_${n}`).value=JSON.stringify(typeRaw[0]=="h"?o.st._d[n].map(x=>"0x"+x.toString(16)):o.st._d[n]);else o.nOs[n].forEach(x=>x._ui());}}};/*updateUI*/
+        o.update=(b)=>{o.st.parse(b);o._ui();};o.update(new Uint8Array(rawU8A));setTimeout(delayedFunc,100);})();}
+    static _i=0;static _UIAuto(){Struct._i++;return `_s${Struct._i}_`;};attach(idx,rawU8A=null,verbose=true){_struct_dynamicLoad(`#${idx}_wrapper`,this._toHtml(idx,rawU8A,verbose));}
+    _toHtml(pre=null,rawU8A=null,verbose=true){let self=this;if(!pre)pre=Struct._UIAuto();if(!rawU8A)rawU8A=Array.from(self._toBytes());
+        let h="";let j="";let values=self._s_valuesD();let nestedPres={};/*name->pre*/
+        for(const[name,[[typeRaw,arrLen],typeLen,desc]]of Object.entries(self._s_vars)){
+            if(typeof typeRaw==="string"){
+                let arrMod=arrLen>0?`[${arrLen}]`:"";let descMod=desc?`<div>${desc}</div>`:"";
+                if(typeRaw.slice(0,4)=="unix"||typeRaw.slice(0,4)=="time"){let extras=verbose?`, ${typeRaw}:${typeLen}`:"";
+                    h+=`<div class='_s_row'><div>${name}${arrMod}${extras}</div><input id='${pre}_${name}'class='${pre}_inps ${typeRaw}'type='${typeRaw.slice(0, 4)=='unix'?'datetime-local':'time'}'name='${name}'value='${int2Iso(values[name],[typeRaw])}'/>${descMod}</div>`;
+                }else if("uifch".includes(typeRaw[0])){let _type="uif".includes(typeRaw[0])&&!arrLen?"number":"text";
+                    let extras = verbose?`, ${typeRaw}:${typeRaw[0]=='c'?typeLen/8:typeLen}`:"";let value;
+                    if(typeRaw[0] == "h")value=!arrLen?("0x"+values[name].toString(16)):JSON.stringify(values[name].map(x=>"0x"+x.toString(16)));
+                    else value=JSON.stringify(values[name]);h+=`<div class='_s_row'><div>${name}${arrMod}${extras}</div><input id='${pre}_${name}'class='${pre}_inps _typeRaw_${typeRaw[0]} _arrLen_${!arrLen?0:1}'type='${_type}'name='${name}'value='${value}'/>${descMod}</div>`;
+                }else throw new Error(`Don't support type ${typeRaw}`);
+            }else{if(!arrLen){let _pre=Struct._UIAuto();nestedPres[name]=_pre;
+                    let extras = verbose?`struct `:"";h+=`<div style='margin-bottom:8px'>${extras}${name}:</div><div style='margin-left:24px'>${values[name]._toHtml(_pre,null,verbose)}</div>`
+                }else{nestedPres[name]=[];for(const i of[...Array(arrLen).keys()]){let _pre=Struct._UIAuto();nestedPres[name].push(_pre);
+                    let extras = verbose?`struct `:"";h+=`<div style='margin-bottom:8px'>${extras}${name}[${i}]:</div><div style='margin-left:24px'>${values[name][i]._toHtml(_pre,null,verbose)}</div>`;}}}}
+        let nO=Object.entries(nestedPres).map(([name,_pre])=>(typeof _pre==="string")?`${name}:${_pre}_obj`:(`${name}:[`+_pre.map(x=>`${x}_obj`).join(",")+"]")).join(",");
+        return `${h}\ue001script>Struct.setup("${pre}",${JSON.stringify(self.structDef)},{${nO}},()=>{${j}},${JSON.stringify(rawU8A)});\ue001/script>`.replaceAll("\ue001", "<");}}
 function struct_pack(vw,o,format,v){switch(format){
 case'b':vw.setInt8(o,v);return 1;case'B':vw.setUint8(o,v);return 1;case'h':vw.setInt16(o,v,true);return 2;case'H':vw.setUint16(o,v,true);return 2;
 case'i':vw.setInt32(o,v,true);return 4;case'I':vw.setUint32(o,v,true);return 4;case'q':vw.setBigInt64(o,BigInt(v),true);return 8;case'Q':vw.setBigUint64(o,BigInt(v),true);return 8;
@@ -1596,25 +1785,14 @@ case'i':return v.getInt32(o,true);case'I':return v.getUint32(o,true);case'q':ret
 case'f':return v.getFloat32(o,true);case'd':return v.getFloat64(o,true);default:throw new Error(`Unknown format character: ${format}`);};}
 function unix2Iso(unix){const date=new Date(unix*1000);return`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}T${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}:${String(date.getSeconds()).padStart(2,'0')}`;}function iso2Unix(s){return Math.floor((new Date(s)).getTime()/1000);}function dS(x){return document.querySelector(x);}
 function secs2Iso(num){return`${String(Math.floor(num/3600)).padStart(2,'0')}:${String(Math.floor((num%3600)/60)).padStart(2,'0')}:${String(num%60).padStart(2,'0')}`;}function iso2Secs(iso){const[h=0,m=0,s=0]=iso.split(":").map(Number);return h*3600+m*60+s;}
-function int2Iso(num,cL){if(cL.contains("unix"))return unix2Iso(num);if(cL.contains("unix4"))return unix2Iso(num*4);if(cL.contains("time"))return secs2Iso(num);if(cL.contains("time2"))return secs2Iso(num*2);if(cL.contains("time60"))return secs2Iso(num*60);}
-function iso2Int(iso,cL){if(cL.contains("unix"))return iso2Unix(iso);if(cL.contains("unix4"))return iso2Unix(iso)/4;if(cL.contains("time"))return iso2Secs(iso);if(cL.contains("time2"))return iso2Secs(iso)/2;if(cL.contains("time60"))return iso2Secs(iso)/60;}
-function Struct_setup(pre, structDef, nOs, delayedFunc, rawU8A) {
-    window[`${pre}_obj`]={st:Struct(structDef),nOs:nOs};(async()=>{let o=window[`${pre}_obj`];let dqA=(x)=>document.querySelectorAll(x);dqA(`.${pre}_inps`).forEach(x=>x.classList.add("input","input-bordered"));let iA=Array.isArray;let oE=Object.entries;
-    o._re=()=>{for(let n of Object.keys(o.nOs))if(iA(o.nOs[n])){for(let i=0;i<o.nOs[n].length;i++){o.nOs[n][i].st=o.st._d[n][i];o.nOs[n][i]._re();}}else{o.nOs[n].st=o.st._d[n];o.nOs[n]._re();}};o._re();
-    o._cD=()=>{return Object.fromEntries(Array.from(dqA(`.${pre}_inps`)).map((x)=>[x.name,x.type=="datetime-local"||x.type=="time"?(iso2Int(x.value,x.classList)):x.value]));}; /* collateD */
-    o._uS=()=>{for(let[n,_o]of oE(o.nOs)){if(iA(_o))_o.forEach(x=>x._uS());else _o._uS();}/* update structs from real values */
-        let d=o._cD();for(let[n,v]of oE(d))o.st._d[n]=v;};
-    o.collate=()=>{o._uS();return o.st._toBytes();};o._ui=()=>{for(let[n,a]of oE(o.st._s_vars))
-        if(typeof(a[0])==="string"){let _i=`#${pre}_${n}`;dS(_i).value=dS(_i).type=="datetime-local"||dS(_i).type=="time"?(int2Iso(o.st._d[n],dS(_i).classList)):o.st._d[n];dS(_i).value=dS(_i).value.replaceAll("\\x00","");
-        }else if(iA(a[0])&&typeof(a[0][0])==="string")dS(`#${pre}_${n}`).value=JSON.stringify(o.st._d[n]);
-        else{if(iA(a[0]))o.nOs[n].forEach(x=>x._ui());else o.nOs[n]._ui();}};/* updateUI */
-    o.update=(b)=>{o.st.parse(b);o._ui();};o.update(new Uint8Array(rawU8A));setTimeout(delayedFunc,100);})();}""" # Struct
+function int2Iso(num,cL){cL=[...cL];if(cL.includes("unix"))return unix2Iso(num);if(cL.includes("unix4"))return unix2Iso(num*4);if(cL.includes("time"))return secs2Iso(num);if(cL.includes("time2"))return secs2Iso(num*2);if(cL.includes("time60"))return secs2Iso(num*60);}
+function iso2Int(iso,cL){cL=[...cL];if(cL.includes("unix"))return iso2Unix(iso);if(cL.includes("unix4"))return iso2Unix(iso)/4;if(cL.includes("time"))return iso2Secs(iso);if(cL.includes("time2"))return iso2Secs(iso)/2;if(cL.includes("time60"))return iso2Secs(iso)/60;}""" # Struct
     @staticmethod                                                                # Struct
     def _styles(): return """<style>._s_row{display:flex;flex-direction:row;align-items:center;margin-bottom:8px;}._s_row>div:first-child{width:120px;}._s_row>input{width:150px;margin:0px 12px;}</style>""" # Struct
     @staticmethod                                                                # Struct
     def _html(): return f"{Struct._styles()}<script>{Struct._js()}</script>" # convenience method to include both # Struct
     @staticmethod # just put here cause I've spent time making the unit tests and lazy to store them at another place! # Struct
-    def _jsTest(): return """
+    def _jsTest(): return """|
 let s, ans, def; let assert = (x) => console.assert(x);
 let assertClose = (x,y) => console.assert(Math.abs(x-y) < 1e-5);
 def = {"a": "u8", "b": "u32", "c": "c:6", "d": "c:10"}; ans = new Uint8Array([4, 5, 0, 0, 0, 107, 105, 114, 105, 115, 97, 107, 111, 110, 112, 97, 107, 117, 0, 0, 0]);
@@ -1632,7 +1810,7 @@ s = Struct(def).parse(ans); assertClose(s._d.d._d.a, 3.4); assertClose(s._d.d._d
 def = {"a": "u8", "b": "u32", "c": "c:6", "d": "c:10", "e": {"a": "f64", "b": "f32"}, "f": [{"a": "u16", "b": "c:3"}, 2], "g": ["f32", 4]};ans=new Uint8Array([3,89,1,0,0,107,105,114,105,115,97,107,111,110,112,97,107,117,49,0,0,0,0,0,0,0,0,18,64,154,153,217,64,0,0,0,0,0,4,0,0,0,0,0,0,96,64,0,0,0,0,0,0,0,0,0,0,0,0])
 s = Struct(def); s._d.e._d.a = 4.5; s._d.e._d.b = 6.8; s._d.a = 3; s._d.b = 345; s._d.c = "kirisame";s._d.d = "konpaku1"; s._d.f[1]._d.a = 4; s._d.g[0] = 3.5;
 assert(u8Eq(s._toBytes(), ans));assert(s.__len__()==59);x = Struct(def).parse(s._toBytes());assert(u8Eq(x._toBytes(), ans));""" # Struct
-    def _toHtml(self, pre=None, opt=True): # grabs interface to modify           # Struct
+    def _toHtml(self, pre=None, verbose=True): # grabs interface to modify       # Struct
         """Creates a really nice html interface to change the struct's fields,
 and provides callback functions to send the bytes to other places. Example::
 
@@ -1648,33 +1826,9 @@ in the structs, you can grab the modified bytes on the JS side like this::
     let raw = pre1_obj.collate() // returns Uint8Array of the struct
     pre1_obj.update(raw)         // loads the struct and apply changes to the UI
 
-This should allow you to easily send this to a server and have it deconstruct everything""" # Struct
-        if opt: return "".join(x.strip() for x in self._toHtml(pre, False).split("\n")) # Struct
-        def _structNoDesc(s):                                                    # Struct
-            ans = {}                                                             # Struct
-            for k,v in s.items():                                                # Struct
-                if isinstance(v, tuple): v = v[0]                                # Struct
-                if isinstance(v, list) and isinstance(v[0], dict): v = [_structNoDesc(v[0]), v[1]] # Struct
-                elif isinstance(v, dict): v = _structNoDesc(v)                   # Struct
-                ans[k] = v                                                       # Struct
-            return ans                                                           # Struct
-        h = ""; j = ""; pre = pre or _structUIAuto(); values = self._s_valuesD(); nestedPres = {} # name -> pre # Struct
-        for name, [typeRaw, typeLen, desc] in self._s_vars.items(): # what's up with the code smell in the generated html? Well, this generated html is intended to be served on an embedded environment, so has to be as small as possible! # Struct
-            arrLen = 0                                                           # Struct
-            if isinstance(typeRaw, list): typeRaw, arrLen = typeRaw              # Struct
-            if isinstance(typeRaw, dict):                                        # Struct
-                if arrLen == 0: _pre = _structUIAuto(); nestedPres[name] = _pre; h += f"<div style='margin-bottom:8px'>struct '{name}':</div><div style='margin-left:24px'>{values[name]._toHtml(_pre)}</div>" # Struct
-                else: # [struct] here                                            # Struct
-                    nestedPres[name] = []                                        # Struct
-                    for i in range(arrLen):                                      # Struct
-                        _pre = _structUIAuto(); nestedPres[name].append(_pre)    # Struct
-                        h += f"<div style='margin-bottom:8px'>struct '{name}'[{i}]:</div><div style='margin-left:24px'>{values[name][i]._toHtml(_pre)}</div>" # Struct
-            elif typeRaw[:4] == "unix" or typeRaw[:4] == "time":                 # Struct
-                arrMod = f"[{arrLen}]" if arrLen > 0 else ""; descMod = f"<div>{desc}</div>" if desc else ""; j += f"dS('#{pre}_{name}').value=int2Iso({values[name]},dS('#{pre}_{name}').classList);" # Struct
-                h += f"<div class='_s_row'><div>{name}{arrMod}, {typeRaw}:{typeLen}</div><input id='{pre}_{name}'class='{pre}_inps {typeRaw}'type='{'datetime-local' if typeRaw[:4] == 'unix' else 'time'}'name='{name}'value=''/>{descMod}</div>\n" # Struct
-            elif typeRaw[0] in "uifc":                                           # Struct
-                _type = "number" if typeRaw[0] in "uif" and arrLen == 0 else "text"; arrMod = f"[{arrLen}]" if arrLen > 0 else ""; descMod = f"<div>{desc}</div>" if desc else "" # Struct
-                h += f"<div class='_s_row'><div>{name}{arrMod}, {typeRaw}:{typeLen//8 if typeRaw == 'c' else typeLen}</div><input id='{pre}_{name}'class='{pre}_inps'type='{_type}'name='{name}'value='{values[name]}'/>{descMod}</div>\n" # Struct
-            else: raise Exception(f"Don't support type {typeRaw}")               # Struct
-        nO = ",".join([f"{name}: {_pre}_obj" if isinstance(_pre, str) else f"{name}: [" + ",".join([f"{x}_obj" for x in _pre]) + "]" for name, _pre in nestedPres.items()]) # nested objs # Struct
-        return f"""{h}<script>Struct_setup("{pre}",{json.dumps(_structNoDesc(self.structDef), separators=(",", ":"))},{{{nO}}},()=>{{{j}}},[{','.join([str(x) for x in self._toBytes()])}]);</script>""" # Struct
+This should allow you to easily send this to a server and have it deconstruct everything
+
+:param pre: object name prefix to control the struct in js
+:param verbose: if True (default), includes more info for clear meaning, else include less to be more customer friendly""" # Struct
+        allZeros = all([x == 0 for x in self._toBytes()]); u8a = "null" if allZeros else json.dumps(list(self._toBytes()), separators=",:") # Struct
+        pre = pre or _structUIAuto(); return f"""<div id="{pre}_wrapper"></div><script>(new Struct({json.dumps(self.structDef, separators=",:")})).attach("{pre}",{u8a},{json.dumps(verbose)});</script>""" # Struct

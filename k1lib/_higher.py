@@ -171,10 +171,10 @@ Now, if you send 10 requests within a window of 0.3s, then the total running tim
                     res = list(batchedFn(*args, **kws))                          # batchify
                     for k, out in zip(data.keys(), res): data[k][0][0] = out     # batchify
                     event.set()                                                  # batchify
-        threading.Thread(target=bgProcess).start()                               # batchify
+        threading.Thread(target=bgProcess, daemon=True).start()                  # batchify
         def inner(*args, **kwargs):                                              # batchify
             output = [...]; idx, event = con.add([output, args, kwargs])         # batchify
-            t = threading.Thread(target=lambda: event.wait()); t.start(); t.join() # batchify
+            t = threading.Thread(target=lambda: event.wait(), daemon=True); t.start(); t.join() # batchify
             return output[0]                                                     # batchify
         inner.fullargspec = inspect.getfullargspec(batchedFn)                    # batchify
         return inner                                                             # batchify

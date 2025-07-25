@@ -109,7 +109,7 @@ could be undesireable. Do you want to continue? Y/n: """)                       
         if self.size is None: self.size = self._getSize()                        # RemoteFile
         return self.size                                                         # RemoteFile
     def __repr__(self): return f"<RemoteFile url={self.url} size={k1lib.fmt.size(len(self))}>" # RemoteFile
-import zipfile, inspect                                                          # RemoteFile
+import zipfile, inspect; rarfile = k1lib.dep("rarfile")                          # RemoteFile
 class ZipWrapper:                                                                # ZipWrapper
     def __init__(self, a, zfn): self.a = a; self.zfn = zfn                       # ZipWrapper
     def __repr__(self):                                                          # ZipWrapper
@@ -121,9 +121,20 @@ class ZipWrapper:                                                               
     def compressedSize(self): return self.a.compress_size                        # ZipWrapper
     def _catHandle(self):                                                        # ZipWrapper
         with zipfile.ZipFile(self.zfn) as zipf:                                  # ZipWrapper
-            with zipf.open(self.a.filename) as subfile:                          # ZipWrapper
-                yield subfile                                                    # ZipWrapper
-@contextmanager                                                                  # ZipWrapper
+            with zipf.open(self.a.filename) as subfile: yield subfile            # ZipWrapper
+class RarWrapper:                                                                # RarWrapper
+    def __init__(self, a, zfn): self.a = a; self.zfn = zfn                       # RarWrapper
+    def __repr__(self):                                                          # RarWrapper
+        a = self.a; s = f" ({round(a.compress_size/a.file_size*100)}%)" if a.file_size > 0 else "" # RarWrapper
+        return f"<Rar subfile name='{a.filename}' {k1lib.fmt.size(a.file_size)} -> {k1lib.fmt.size(a.compress_size)}{s}>" # RarWrapper
+    @property                                                                    # RarWrapper
+    def size(self): return self.a.file_size                                      # RarWrapper
+    @property                                                                    # RarWrapper
+    def compressedSize(self): return self.a.compress_size                        # RarWrapper
+    def _catHandle(self):                                                        # RarWrapper
+        with rarfile.RarFile(self.zfn) as rarf:                                  # RarWrapper
+            with rarf.open(self.a.filename) as subfile: yield subfile            # RarWrapper
+@contextmanager                                                                  # RarWrapper
 def openFile(fn, text, noPartialConfirm=False): # can be actual file or url      # openFile
     if not isinstance(fn, str):                                                  # openFile
         if hasattr(fn, "_catHandle"): yield from fn._catHandle(); return # custom datatype case # openFile
@@ -693,18 +704,16 @@ def ls(folder:str=None):                                                        
     """List every file and folder inside the specified folder.
 Example::
 
-    # returns List[str]
-    ls("/home")
-    # same as above
-    "/home" | ls()
-    # only outputs files, not folders
-    ls("/home") | filt(os.path.isfile)
+    ls("/home")                        # returns List[str]
+    "/home" | ls()                     # same as above
+    ls("/home") | filt(os.path.isfile) # only outputs files, not folders
 
 This can handle things that are not plain folders. For example,
-it can handle zip file whereby it will list out all the files contained
+it can handle zip/rar file whereby it will list out all the files contained
 within a particular .zip::
 
-    ls("abc.zip")
+    ls("abc.zip")    # returns list
+    "abc.rar" | ls() # also returns list
 
 Then, you can use :meth:`cat` as usual, like this::
 
@@ -734,8 +743,11 @@ class _ls(BaseCli):                                                             
             path = os.path.expanduser(path.rstrip(os.sep))                       # _ls
             if os.path.exists(path):                                             # _ls
                 if os.path.isfile(path):                                         # _ls
-                    if cat(path, False, eB=2) == b"PK": # list subfiles in a zip file # _ls
+                    with open(path, 'rb') as f: header = f.read(8)               # _ls
+                    if header[:2] == b"PK": # list subfiles in a zip file        # _ls
                         return [ZipWrapper(e, path) for e in zipfile.ZipFile(path).infolist()] # _ls
+                    elif header.startswith(b'Rar!\x1A\x07'): # list subfiles in a rar file # _ls
+                        return [RarWrapper(e, path) for e in rarfile.RarFile(path).infolist()] # _ls
                     else: raise Exception(f"{path} is a file, not a folder, so can't list child directories") # _ls
                 else: return [f"{path}{os.sep}{e}" for e in os.listdir(path)]    # _ls
             else: return []                                                      # _ls
@@ -771,7 +783,7 @@ def executeCmd(cmd:str, inp:bytes, text):                                       
     p.stdin.close(); return p, lazySt(p.stdout, text), lazySt(p.stderr, text)    # executeCmd
 def printStderr(err):                                                            # printStderr
     if not k1lib.settings.cli.quiet:                                             # printStderr
-        e, it = err | cli.peek()                                                 # printStderr
+        e, it = err | cli.peek() # blocks until there's an error                 # printStderr
         if it != []: it | cli.insert("\nError encountered:\n") | cli.apply(k1lib.fmt.txt.red) | cli.stdout() # printStderr
 def requireCli(cliTool:str):                                                     # requireCli
     """Searches for a particular cli tool (eg. "ls"), throws ImportError if not
@@ -877,7 +889,7 @@ pass, then pass None"""                                                         
             if not self.ro.done(): mode = self.mode; self.p, self.out, self.err = executeCmd(self.cmd, it, self.text) # cmd
             if self.block: self.out = self.out | cli.deref(); self.err = self.err | cli.deref() # cmd
             if mode == 0: return (self.out, self.err)                            # cmd
-            elif mode == 1: threading.Thread(target=lambda: printStderr(self.err)).start(); return self.out # cmd
+            elif mode == 1: threading.Thread(target=lambda: printStderr(self.err), daemon=True).start(); return self.out # cmd
             elif mode == 2: return self.err                                      # cmd
     def __gt__(self, it): return None | self | it                                # cmd
     def __repr__(self): return (None | self).__repr__()                          # cmd

@@ -35,6 +35,8 @@ try: import plotly; import plotly.express as px; hasPlotly = True
 except: hasPlotly = False
 try: import pandas as pd; pd.core; hasPandas = True
 except: hasPandas = False
+try: import mss; hasMss = True
+except: hasMss = False
 class toNdArray(BaseCli):                                                        # toNdArray
     blurb="Converts several data types to numpy.ndarray"                         # toNdArray
     def __init__(self, dtype=None):                                              # toNdArray
@@ -376,9 +378,9 @@ def cropToContentNp(ogIm, pad=10):                                              
     coords = np.argwhere(im.max()-im); x_min, y_min = coords.min(axis=0); x_max, y_max = coords.max(axis=0) # cropToContentNp
     return ogIm[x_min-pad:x_max+1+pad, y_min-pad:y_max+1+pad] if dim == 2 else ogIm[:,x_min-pad:x_max+1+pad, y_min-pad:y_max+1+pad] # cropToContentNp
 def cropToContentPIL(im, pad=0):                                                 # cropToContentPIL
-    im = im | toNdArray(int) | cli.aS(cropToContentNp, pad)                      # cropToContentPIL
+    im = cropToContentNp(toNdArray(int)(im), pad)                                # cropToContentPIL
     # return torch.from_numpy(im).permute(1, 2, 0) | toImg() if len(im.shape) > 2 else im | toImg() # cropToContentPIL
-    return np.transpose(im, (1, 2, 0)) | toImg() if len(im.shape) > 2 else im | toImg() # cropToContentPIL
+    return toImg()(np.transpose(im, (1, 2, 0))) if len(im.shape) > 2 else toImg()(im) # cropToContentPIL
 class toImg(BaseCli):                                                            # toImg
     blurb="Converts multiple data types into a PIL image"                        # toImg
     def __init__(self, closeFig=True, crop=True):                                # toImg
@@ -394,6 +396,11 @@ Example::
     df | toHtml()                   | toImg() # converts pandas data frame to html, then render it to image
     "/dev/video0"                   | toImg() # reads an image from the 1st camera connected to the computer
     0                               | toImg() # same as above
+
+    "screen"                        | toImg() # captures the current active screen
+    "screen1"                       | toImg() # same as above
+    "screen2"                       | toImg() # captures the 2nd screen. Numbers meaning according to the mss library
+    "screen0"                       | toImg() # captures all screens
 
 You can also save a matplotlib figure by piping in a :class:`matplotlib.figure.Figure` object::
 
@@ -420,7 +427,18 @@ You can also save a matplotlib figure by piping in a :class:`matplotlib.figure.F
         if hasattr(path, "_toImg"): return path._toImg(closeFig=self.closeFig, crop=self.crop) # toImg
         if isinstance(path, str):                                                # toImg
             if path.startswith("/dev/video"): return int(path.replace("/dev/video", "")) | toImg() # toImg
-            return self.PIL.Image.open(os.path.expanduser(path))                 # toImg
+            path = os.path.expanduser(path)                                      # toImg
+            if not os.path.exists(path) and path.startswith("screen"):           # toImg
+                idx = path.replace("screen", "", 1); goodIdx = False;            # toImg
+                try:                                                             # toImg
+                    if idx == "": idx = 1                                        # toImg
+                    else: idx = int(idx)                                         # toImg
+                    goodIdx = True                                               # toImg
+                except: pass                                                     # toImg
+                if goodIdx:                                                      # toImg
+                    if not hasMss: raise Exception("Please install the library mss to allow screen capture") # toImg
+                    with mss.mss() as sct: screenshot = sct.grab(sct.monitors[idx]); return PIL.Image.frombytes('RGB', screenshot.size, screenshot.rgb) # toImg
+            return self.PIL.Image.open(path)                                     # toImg
         if isinstance(path, bytes): return self.PIL.Image.open(io.BytesIO(path)) # toImg
         if hasTorch and isinstance(path, torch.Tensor): path = path.numpy()      # toImg
         if isinstance(path, np.ndarray):                                         # toImg
@@ -430,7 +448,7 @@ You can also save a matplotlib figure by piping in a :class:`matplotlib.figure.F
             if hasattr(canvas, "tostring_rgb"): img = self.PIL.Image.frombytes('RGB', canvas.get_width_height(), canvas.tostring_rgb()) # toImg
             else: img = PIL.Image.frombytes('RGBA', canvas.get_width_height(), canvas.buffer_rgba()) # toImg
             if self.closeFig: plt.close(path)                                    # toImg
-            return img | cli.aS(cropToContentPIL)                                # toImg
+            return cropToContentPIL(img)                                         # toImg
         if hasGraphviz and isinstance(path, graphviz.Digraph):                   # toImg
             import tempfile; a = tempfile.NamedTemporaryFile()                   # toImg
             path.render(a.name, format="jpeg");                                  # toImg
@@ -439,8 +457,8 @@ You can also save a matplotlib figure by piping in a :class:`matplotlib.figure.F
             except: pass                                                         # toImg
             return im                                                            # toImg
         if hasRdkit and isinstance(path, rdkit.Chem.rdchem.Mol):                 # toImg
-            sz = settings.chem.imgSize                                           # toImg
-            return self.__ror__(rdkit.Chem.Draw.MolsToGridImage([path], subImgSize=[sz, sz]).data) | (cli.aS(cropToContentPIL) if self.crop else cli.iden()) # toImg
+            sz = settings.chem.imgSize; f = cli.aS(cropToContentPIL) if self.crop else cli.iden() # toImg
+            return f(self.__ror__(rdkit.Chem.Draw.MolsToGridImage([path], subImgSize=[sz, sz]).data)) # toImg
         if hasPandas and isinstance(path, pd.DataFrame): path = path | cli.toHtml() # toImg
         if isinstance(path, k1lib.viz.Html): return imgkit.from_string(path, False, options={'format': 'jpg'}) | toImg() # toImg
         if isinstance(path, int):                                                # toImg
@@ -456,7 +474,7 @@ You can also save a matplotlib figure by piping in a :class:`matplotlib.figure.F
             image = self.PIL.Image.new("L", ((w+1)*20, (h+1)*60), 255)           # toImg
             font = PIL.ImageFont.truetype(settings.font, 18) if settings.font else None # toImg
             ImageDraw.Draw(image).text((20, 20), path | cli.join("\n"), 0, font=font) # toImg
-            return np.array(image)/255 | (cli.aS(cropToContentNp) if self.crop else iden()) | cli.op()*255 | toImg() # toImg
+            return toImg()((cli.aS(cropToContentNp) if self.crop else iden())(np.array(image)/255)*255) # toImg
         return NotImplemented                                                    # toImg
 _nonNpImgTypes = [np.ndarray]                                                    # toImg
 if hasTorch: _nonNpImgTypes.append(torch.Tensor)                                 # toImg
@@ -468,8 +486,8 @@ class toNpImg(BaseCli):                                                         
         pass                                                                     # toNpImg
     def __ror__(self, it):                                                       # toNpImg
         if hasattr(it, "_toNpImg"): return it._toNpImg()                         # toNpImg
-        if not isinstance(it, _nonNpImgTypes): it = it | toImg()                 # toNpImg
-        if hasPIL and isinstance(it, PIL.Image.Image): it = it | toTensor()      # toNpImg
+        if not isinstance(it, _nonNpImgTypes): it = toImg()(it)                  # toNpImg
+        if hasPIL and isinstance(it, PIL.Image.Image): it = toTensor()(it)       # toNpImg
         if hasTorch and isinstance(it, torch.Tensor): it = it.numpy()            # toNpImg
         if isinstance(it, np.ndarray): it = it.astype(np.uint8)                  # toNpImg
         return it                                                                # toNpImg

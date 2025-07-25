@@ -1,6 +1,4 @@
-from pkg_resources import get_distribution as _get_distribution
-try: __version__ = _get_distribution("k1lib").version
-except: pass
+__version__ = "1.8"
 
 from ._hidden.hiddenFile import hiddenF
 from ._basics import *
@@ -32,6 +30,8 @@ from . import kcom;     kcom     = wrapMod(kcom)
 from . import kop;      kop      = wrapMod(kop)
 from . import kph;      kph      = wrapMod(kph)
 from . import kstr;     kstr     = wrapMod(kstr)
+from . import kgis;     kgis     = wrapMod(kgis)
+from . import assets;   assets   = wrapMod(assets)
 
 
 #from . import gE

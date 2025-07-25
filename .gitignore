@@ -13,5 +13,9 @@ githubPages
 **.pth
 dist.zip
 nohup.out
+**.db
+**.db-shm
+**.db-wal
+k1lib/web/test
 
 

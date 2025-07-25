@@ -32,7 +32,11 @@ Classes
 - :class:`k1lib.AutoUpdateValue`
 - :class:`k1lib.Aggregate`
 - :class:`k1lib.Perlin`
+- :class:`k1lib.DistQueue`
+- :class:`k1lib.Icon`
+- :class:`k1lib.Struct`
 
+- :class:`k1lib.managePlanes`
 - :class:`k1lib.cron`
 - :class:`k1lib.cache`
 - :class:`k1lib.preload`
@@ -135,6 +139,21 @@ Classes
    :undoc-members:
    :show-inheritance:
 
+.. autoclass:: k1lib.DistQueue
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. autoclass:: k1lib.Struct
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. autoclass:: k1lib.managePlanes
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 .. autoclass:: k1lib.cron
    :members:
    :undoc-members:
@@ -219,7 +238,12 @@ clean up code, then rethrow again. Same deal at the run level.
 Functions
 -----------
 
+.. autofunction:: k1lib.deprecated
+.. autofunction:: k1lib.argNames
 .. autofunction:: k1lib.isNumeric
+.. autofunction:: k1lib.hashPw
+.. autofunction:: k1lib.verifyPw
+.. autofunction:: k1lib.leakedPw
 .. autofunction:: k1lib.patch
 .. autofunction:: k1lib.wraps
 .. autofunction:: k1lib.squeeze

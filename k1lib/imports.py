@@ -16,14 +16,17 @@ if settings.startup.import_optionals:
         import matplotlib.pyplot as plt, matplotlib as mpl; import matplotlib.cm as cm
         plt.rcParams['figure.dpi'] = 100; plt.rcParams["animation.html"] = "jshtml"
     except: pass
+    try:
+        import pandas as pd
+    except: pass
     import dill as pickle, multiprocessing as mp, concurrent.futures as futures, threading
-    import math, os, time, sys, random, logging, traceback, re, typing, glob, warnings, asyncio, ast, itertools, pprint, copy, urllib, struct
+    import math, os, time, sys, random, logging, traceback, re, typing, glob, warnings, asyncio, ast, itertools, pprint, copy, urllib, struct; pp = pprint.pprint; pf = pprint.pformat
     import dill, json, inspect, xml, base64, io, html
     import functools; from functools import partial, lru_cache
     import contextlib; from contextlib import contextmanager
     from collections import deque, defaultdict
     from typing import List, Tuple, Callable, Union, Iterator, Set, Dict, Any
-    from k1lib import schedule, graphEqn, mo, knn, fmt, selector, viz, Cbs, _k1a, serve, p5, k1ui, selen, kws, kast, zircon, serpent, trans, kcom, kop, kph, kstr
+    from k1lib import schedule, graphEqn, mo, knn, fmt, selector, viz, Cbs, _k1a, serve, p5, k1ui, selen, kws, kast, zircon, serpent, trans, kcom, kop, kph, kstr, kgis
     k1a = _k1a; met = kph.met
     for e in cli._scatteredClis: globals()[e.__name__] = e
     if "py_k1lib_in_applyMp" not in os.environ: k1lib.dontWrap()

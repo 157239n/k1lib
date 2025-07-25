@@ -182,6 +182,12 @@ class Arg:                                                                      
         if isinstance(t, (range, k1lib.serve.slider, list, k1lib.serve.date)): return f"{q}.oninput = {cb};" # Arg
         raise Exception(f"Don't know type {t} on .onchange()")                   # Arg
     def copy(self): return Arg(self.arg)                                         # Arg
+k1lib.settings.cli.add("toJsFunc", k1lib.Settings()                              # Arg
+                       .add("k1js_amd", "https://k1js.com/dist/amd/latest.js")   # Arg
+                       .add("k1js_umd", "https://k1js.com/dist/umd/latest.js")   # Arg
+                       .add("acorn", "https://cdnjs.cloudflare.com/ajax/libs/acorn/8.11.3/acorn.js") # Arg
+                       .add("acorn_walk", "https://cdnjs.cloudflare.com/ajax/libs/acorn-walk/8.3.2/walk.js"), "Remote paths for toJsFunc() mechanism, static assets bundled with library at k1.assets.k1js_amd and whatnot, in case you want the application to completely go offline") # Arg
+toJsFuncSett = k1lib.settings.cli.toJsFunc                                       # Arg
 class _JsFuncInterface:                                                          # _JsFuncInterface
     def __init__(self, jsFunc, mode, args, debounce, delay, dataIdx, hideIdx, refreshPeriod): # _JsFuncInterface
         self.jsFunc = jsFunc; self.mode = mode; self.args = [a.copy() for a in args]; self.debounce = debounce; self.delay = delay; self.dataIdx = dataIdx; self.hideIdx = hideIdx; self.refreshPeriod = refreshPeriod # _JsFuncInterface
@@ -203,12 +209,12 @@ for (const scriptElem of containerDiv.querySelectorAll('script')) eval(scriptEle
                 if i == hideIdx: inps += f"""<div id="{pre}_plus" class="kjs_hidden_plus" onclick="Array.from(document.querySelectorAll('.{pre}_inp_hidden')).map((x) => x.style.display = null); document.querySelector('#{pre}_plus').remove();">+</div>""" # _JsFuncInterface
                 if i < hideIdx: inps += f"<div>{a.label}</div><div>{a.html()}</div>" # _JsFuncInterface
                 else: inps += f"""<div class="{pre}_inp_hidden" style="display: none">{a.label}</div><div class="{pre}_inp_hidden" style="display: none">{a.html()}</div>""" # _JsFuncInterface
-        inps = f"""<div style='display: grid; grid-template-columns: 1fr 3fr; column-gap: 12px; row-gap: 4px; width: 400px; align-items: center'>{inps}</div>""" # _JsFuncInterface
+        inps = f"""<div style='display: grid; grid-template-columns: 1fr 3fr; column-gap: 12px; row-gap: 4px; align-items: center'>{inps}</div>""" # _JsFuncInterface
         onchanges = "".join([a.onchange(f"{pre}_reload") for a in args]); values = ", ".join([a.value() for a in args]); preview = "\n".join([a.preview() for a in args]) # _JsFuncInterface
         delayCode = f"(async () => {{ while (true) {{ await new Promise(r => setTimeout(r, {self.delay*1000})); await {pre}_reload_core(); }} }})();" if self.delay else ""; return f"""\
 <!-- k1lib.JsFuncInterface -->
 {inps}<pre id="{pre}_error" style="color: red"></pre><div id="{pre}_loading" class="k1_jsFunc_loading" style="margin-top: 4px">&nbsp;</div><div id="{pre}_result" class="k1_jsFunc_result"></div>
-<script src="https://k1js.com/dist/amd/latest.js"></script><script>
+<script src="{toJsFuncSett.k1js_amd}"></script><script>
     k1_loadScript = (src) => {{ return new Promise((resolve, reject) => {{ var script = document.createElement('script'); script.src = src; script.onload = resolve; document.head.appendChild(script); }}); }}
     {pre}_loadF = () => {{
         {self.jsFunc.fn}; window.{self.jsFunc.fIdx} = {self.jsFunc.fIdx}; {pre}_error = document.querySelector("#{pre}_error");
@@ -229,7 +235,7 @@ for (const scriptElem of containerDiv.querySelectorAll('script')) eval(scriptEle
         {self.dataIdx}.reloadOnDiff = (asyncF, periodS, oldValue=null) => {{ setInterval(async () => {{ const res = await asyncF(); if (oldValue !== res) {{ oldValue = res; {pre}_reload(null); }} }}, periodS*1000); }}
     }}; if (window.k1lib_jsF_envLoaded) {{ (async () => {{ while (window.k1lib_jsF_envLoaded !== 2) await new Promise(r => setTimeout(r, 100)); /* waits for 100ms when the env is not ready yet */ {pre}_loadF(); }})();
     }} else {{ window.k1lib_jsF_envLoaded = 1; // some initial env setups
-        (async () => {{ await k1_loadScript("https://cdnjs.cloudflare.com/ajax/libs/acorn/8.11.3/acorn.js"); await k1_loadScript("https://cdnjs.cloudflare.com/ajax/libs/acorn-walk/8.3.2/walk.js")
+        (async () => {{ await k1_loadScript("{toJsFuncSett.acorn}"); await k1_loadScript("{toJsFuncSett.acorn_walk}")
         }})(); // loading up acorn, a JS AST analyzer, just to know what variables to expose globally
         async function extractVariableNamesAtDepthOne(funcString) {{ // courtesy of chatgpt-4.5
             while (!window.acorn) await new Promise(r => setTimeout(r, 100)); // loops until acorn is sure to be loaded
@@ -242,7 +248,7 @@ for (const scriptElem of containerDiv.querySelectorAll('script')) eval(scriptEle
         }}; window.k1lib_jsF_captureLocalVariables = extractVariableNamesAtDepthOne;
         // trying multiple loading schemes, because in a live jupyter nb, it's using umd, while in an exported jupyter nb, it's using amd. The madness of JS lol
         (async () => {{ try {{ require(['k1js'], function(k1js) {{ (async () => {{ window.k1js = await k1js; window.k1lib_jsF_envLoaded = 2; {pre}_loadF(); }})(); }}); }} catch (e) {{}} }})();
-        (async () => {{ try {{ const res = await (await fetch("https://k1js.com/dist/umd/latest.js")).text(); eval(res); window.k1js = await k1js; window.k1lib_jsF_envLoaded = 2; {pre}_loadF(); }} catch (e) {{}} }})();
+        (async () => {{ try {{ const res = await (await fetch("{toJsFuncSett.k1js_umd}")).text(); eval(res); window.k1js = await k1js; window.k1lib_jsF_envLoaded = 2; {pre}_loadF(); }} catch (e) {{}} }})();
     }}</script>"""                                                               # _JsFuncInterface
 class JsFunc:                                                                    # JsFunc
     def __init__(self, fn:str, fIdx:str, args, _async, dataIdx, hideIdx):        # JsFunc

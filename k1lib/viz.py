@@ -799,7 +799,7 @@ Pagination {pre}_obj values:
         try {{ // if the function don't raise any error, then actually delete the element, else just alert the user that the operation failed
             if ({ondeleteFName}.constructor.name === "AsyncFunction") res = await {ondeleteFName}(row, i, e);
             else res = {ondeleteFName}(row, i, e); if (res === "dont_delete") return;
-            document.querySelector("#{pre}_row_" + i).remove(); {pre}_obj.data[i] = null;
+            document.querySelector("#{pre}_row_" + i).remove(); {pre}_obj.data[i] = null; {pre}_obj.selectedRowId = -1;
         }} catch (e) {{ if (e.message !== "\ue000nopropagate") window.alertCallback(e); }}
     }}""" if ondeleteFName else ""; oneditFName = self.oneditFName; pre_edit = f"""
     {pre}_edit = async (row, rowi, e) => {{ // swaps out table contents with input boxes

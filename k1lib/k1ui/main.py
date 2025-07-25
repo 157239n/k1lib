@@ -106,7 +106,7 @@ Some of them include:
                 cap.release(); get(f"stopStream/{port}")                         # WsSession
         ports = [port, port + 100]; sel = 0                                      # WsSession
         while not self.closed:                                                   # WsSession
-            threading.Thread(target=threadLoop, args=(locks[sel], ports[sel])).start() # WsSession
+            threading.Thread(target=threadLoop, args=(locks[sel], ports[sel]), daemon=True).start() # WsSession
             await asyncio.sleep(streamRefresh); sel = 1-sel                      # WsSession
     def stream(self, width):                                                     # WsSession
         """Starts a stream with a particular output width. The lower the width, the higher the fps and vice versa""" # WsSession
