@@ -32,6 +32,7 @@ from . import kph;      kph      = wrapMod(kph)
 from . import kstr;     kstr     = wrapMod(kstr)
 from . import kgis;     kgis     = wrapMod(kgis)
 from . import assets;   assets   = wrapMod(assets)
+from . import web;      web      = wrapMod(web)
 
 
 #from . import gE

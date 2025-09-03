@@ -1115,7 +1115,7 @@ to get it in a different timezone, do this::
     timezone. Get all available timezones by executing ``toUnix.tzs()``"""       # toIso
         if isinstance(tz, dateutil.tz.tz.tzfile): self.tz = tz                   # toIso
         else:                                                                    # toIso
-            self.tz = dateutil.tz.gettz(tz)                                      # toIso
+            tz = tz or k1lib.settings.timezone; self.tz = dateutil.tz.gettz(tz)  # toIso
             if self.tz is None and tz: raise Exception(f"Timezone '{tz}' not found. You can get a list of all available timezones at `toUnix.tzs()`") # toIso
     def __ror__(self, it):                                                       # toIso
         if it is None: return it                                                 # toIso

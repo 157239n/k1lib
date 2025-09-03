@@ -930,7 +930,7 @@ _settings = Settings().add("test", Settings().add("bio", True, "whether to test 
 _settings.add("packages", Settings(), "which package is available to use?")      # Settings
 settings = Settings().add("displayCutoff", 50, "cutoff length when displaying a Settings object") # Settings
 settings.add("svgScale", 0.7, "default svg scales for clis that displays graphviz graphs") # Settings
-settings.add("timezone", "Asia/Ho_Chi_Minh", "default timezone for functions that displays a human-friendly timestamp") # Settings
+settings.add("timezone", None, "default timezone for functions that displays a human-friendly timestamp") # Settings
 def _cb_wd(s, p):                                                                # _cb_wd
     if p != None: p = os.path.abspath(os.path.expanduser(p)); _oschdir(p)        # _cb_wd
     s.__dict__["wd"] = p                                                         # _cb_wd

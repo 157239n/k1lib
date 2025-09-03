@@ -272,6 +272,7 @@ Functions
 .. autofunction:: k1lib.aes_decrypt_json
 .. autofunction:: k1lib.modbusCrc
 .. autofunction:: k1lib.parseTimeStr
+.. autofunction:: k1lib.extractLinks
 .. autofunction:: k1lib.compileCExt
 
 Higher order functions

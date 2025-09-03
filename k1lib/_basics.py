@@ -10,7 +10,7 @@ __all__ = ["_docsUrl", "mplLock", "dep", "depCli", "deprecated", "argNames", "is
            "limitChars", "showLog", "cleanDiv",
            "beep", "beepOnAvailable", "dontWrap",
            "debounce", "scaleSvg", "now", "pushNotification", "ticks", "digraph", "graph",
-           "encode", "decode", "hash", "resolve", "config", "modbusCrc", "parseTimeStr"]
+           "encode", "decode", "hash", "resolve", "config", "modbusCrc", "parseTimeStr", "extractLinks"]
 _docsUrl = "https://k1lib.com"
 mplLock = threading.Lock()
 class Dependency:                                                                # Dependency
@@ -1017,3 +1017,16 @@ Unfortunately, this function can't parse composite time strings, like "1 hr 5 mi
     if timeStr == "lastDay": return now-86400, now                               # parseTimeStr
     if timeStr == "lastWeek": return now-86400*7, now                            # parseTimeStr
     raise flask.FailureException(f"Don't understand '{timeStr}'. Has to be int followed by either 'hour' or 'day' or 'week'") # parseTimeStr
+def extractLinks(text):                                                          # extractLinks
+    """Extracts http/https/www links.
+Example::
+
+    extractLinks(\"\"\"
+        Here are some links:
+        https://example.com/test
+        https://www.example.com/test
+        http://another-site.org/page?q=123
+        Visit also www.example.net for more info.
+    \"\"\") # returns ['https://example.com/test', 'https://www.example.com/test', 'http://another-site.org/page?q=123', 'www.example.net']
+"""                                                                              # extractLinks
+    return re.findall(r'https?://[^\s<>"]+|www\.[^\s<>"]+', text)                # extractLinks

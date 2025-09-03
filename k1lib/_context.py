@@ -52,11 +52,13 @@ if you want to capture absolutely everything, C or not.
 :param out: if True, captures stdout, else captures stderr
 :param c: whether to capture at the C/C++ level or not"""                        # captureStdout
     if c is True:                                                                # captureStdout
-        import wurlitzer; w = k1lib.Wrapper("")                                  # captureStdout
-        try:                                                                     # captureStdout
-            with wurlitzer.pipes() as (_out, _err): yield w                      # captureStdout
-        except BrokenPipeError: pass                                             # captureStdout
-        finally: w.value = _out.read().split("\n") if out else _err.read().split("\n") # captureStdout
+        if os.name == "posix":                                                   # captureStdout
+            import wurlitzer; w = k1lib.Wrapper("")                              # captureStdout
+            try:                                                                 # captureStdout
+                with wurlitzer.pipes() as (_out, _err): yield w                  # captureStdout
+            except BrokenPipeError: pass                                         # captureStdout
+            finally: w.value = _out.read().split("\n") if out else _err.read().split("\n") # captureStdout
+        else: w = k1lib.Wrapper("On windows, can't capture stdout/stderr at the C level!"); yield w # captureStdout
     else:                                                                        # captureStdout
         if out: _stdout = sys.stdout; sys.stdout = _stringio = io.StringIO()     # captureStdout
         else:   _stdout = sys.stderr; sys.stderr = _stringio = io.StringIO()     # captureStdout

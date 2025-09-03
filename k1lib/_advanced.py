@@ -863,11 +863,12 @@ See also: :class:`~k1lib.managePlanes`
 
 :param app: flask app object
 :param kwargs: extra random kwargs that you want to add to ``app.route()`` function""" # FileSys
-        k1 = k1lib; cli = k1.cli; viz = k1.viz; k1.managePlanes.append("fs", "/k1/fs", "File system management"); k1.managePlanes.flask(app, **kwargs) # FileSys
+        k1 = k1lib; cli = k1.cli; viz = k1.viz; fmt = k1.fmt; k1.managePlanes.append("fs", "/k1/fs", "File system management"); k1.managePlanes.flask(app, **kwargs) # FileSys
         def k1_fs(fn:str):                                                       # FileSys
             self = FileSys.fns[fn]; pre = cli.init._jsDAuto(); data = self.db.query("select id, time, backing, src, mime, fn, size from files") | cli.apply(lambda x: f"{x:_}", 6) | cli.deref() # FileSys
             ui1 = data | (cli.toJsFunc("term") | cli.grep("${term}") | k1.viz.Table(["id", "time", "backing", "src", "mime", "fn", "size"], onclickFName=f"{pre}_select", ondeleteFName=f"{pre}_delete", selectable=True, height=400)) | cli.op().interface() | cli.toHtml() # FileSys
-            enc_fn = k1.aes_encrypt(fn); return f"""<div style="display: flex; flex-direction: row; align-items: center"><h1>File system '{fn}', {len(data)} files total</h1><button style="margin-left: 24px; padding: 8px" onclick="window.location='/k1';">Back</button></div>
+            totalSize = self.db.query("select sum(size) from files")[0][0]       # FileSys
+            enc_fn = k1.aes_encrypt(fn); return f"""<div style="display: flex; flex-direction: row; align-items: center"><h1>File system '{fn}', {len(data)} files total, {fmt.size(totalSize or 0)}</h1><button style="margin-left: 24px; padding: 8px" onclick="window.location='/k1';">Back</button></div>
 <div>{ui1}</div><div id="{pre}_details"></div><script>
     function {pre}_select(row, i, e) {{
         let details = document.querySelector("#{pre}_details"); let mime = row[4]; let url = `/k1/fs/{enc_fn}/file/${{row[0]}}`;
