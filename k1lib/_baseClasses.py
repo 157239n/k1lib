@@ -1324,7 +1324,8 @@ See also: :meth:`~k1lib.TimeSeries`"""                                          
             with self.lock: arr = self.arr; self.arr = []; res = []              # Aggregate
             if len(arr) > 0:                                                     # Aggregate
                 res = processF(arr)                                              # Aggregate
-                with self.lock: self.arr.extend(res)                             # Aggregate
+                with self.lock:                                                  # Aggregate
+                    if self.arr is not None: self.arr.extend(res) # for some reason on prod systems, self.arr sometimes becomes None, but doesn't seem like it can do that. No clue what happens, so I'm just gonna check for it here # Aggregate
     def append(self, obj):                                                       # Aggregate
         with self.lock: self.arr.append(obj)                                     # Aggregate
 class Perlin:                                                                    # Perlin
@@ -1725,7 +1726,7 @@ class Struct {
                     if(typeof typeRaw==="string")for(let i=0;i<arrLen;i++)offset+=struct_pack(ans,offset,_structTrans[typeRaw],values[name][i]);
                     else{let sLen=values[name][0].__len__();for(let i=0;i<arrLen;i++){let sView=new DataView(values[name][i]._toBytes().buffer);for(let j=0;j<sLen;j++)ans.setUint8(offset+j,sView.getUint8(j));offset+=sLen;}}}
             }};return new Uint8Array(buffer);}
-    parse(data) {
+    parse(data){
         let self=this;if(self.__len__()!=data.length)throw new Error(`Length of input data (${data.length}) does not match struct's length (${self.__len__()})`);
         let _vars=self._s_vars;let groupBounds=[...self._s_groups.map((x)=>x[1]),self.__len__()];
         for(let i=0;i<self._s_groups.length;i++){
@@ -1786,12 +1787,25 @@ case'f':return v.getFloat32(o,true);case'd':return v.getFloat64(o,true);default:
 function unix2Iso(unix){const date=new Date(unix*1000);return`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}T${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}:${String(date.getSeconds()).padStart(2,'0')}`;}function iso2Unix(s){return Math.floor((new Date(s)).getTime()/1000);}function dS(x){return document.querySelector(x);}
 function secs2Iso(num){return`${String(Math.floor(num/3600)).padStart(2,'0')}:${String(Math.floor((num%3600)/60)).padStart(2,'0')}:${String(num%60).padStart(2,'0')}`;}function iso2Secs(iso){const[h=0,m=0,s=0]=iso.split(":").map(Number);return h*3600+m*60+s;}
 function int2Iso(num,cL){cL=[...cL];if(cL.includes("unix"))return unix2Iso(num);if(cL.includes("unix4"))return unix2Iso(num*4);if(cL.includes("time"))return secs2Iso(num);if(cL.includes("time2"))return secs2Iso(num*2);if(cL.includes("time60"))return secs2Iso(num*60);}
-function iso2Int(iso,cL){cL=[...cL];if(cL.includes("unix"))return iso2Unix(iso);if(cL.includes("unix4"))return iso2Unix(iso)/4;if(cL.includes("time"))return iso2Secs(iso);if(cL.includes("time2"))return iso2Secs(iso)/2;if(cL.includes("time60"))return iso2Secs(iso)/60;}""" # Struct
-    @staticmethod                                                                # Struct
-    def _styles(): return """<style>._s_row{display:flex;flex-direction:row;align-items:center;margin-bottom:8px;}._s_row>div:first-child{width:120px;}._s_row>input{width:150px;margin:0px 12px;}</style>""" # Struct
-    @staticmethod                                                                # Struct
-    def _html(): return f"{Struct._styles()}<script>{Struct._js()}</script>" # convenience method to include both # Struct
-    @staticmethod # just put here cause I've spent time making the unit tests and lazy to store them at another place! # Struct
+function iso2Int(iso,cL){cL=[...cL];if(cL.includes("unix"))return iso2Unix(iso);if(cL.includes("unix4"))return iso2Unix(iso)/4;if(cL.includes("time"))return iso2Secs(iso);if(cL.includes("time2"))return iso2Secs(iso)/2;if(cL.includes("time60"))return iso2Secs(iso)/60;}
+class FStruct {
+    constructor(pre,html,dataTypes){this.pre=pre;this.html=html;this.dataTypes=dataTypes;
+        window[`${pre}_obj`]=this;let h=html;let di=0;let len=0;for(const dT of dataTypes){
+            if(dT.slice(0,4)=="unix"||dT.slice(0,4)=="time"){h=h.replace("$",`<input class='${pre}_inps ${dT}'type='${dT.slice(0,4)=='unix'?'datetime-local':'time'}'value='${int2Iso(0,[dT])}'/>`);
+            }else if("uifc".includes(dT[0])){let _type="uif".includes(dT[0])?"number":"text";h=h.replace("$",`<input class='${pre}_inps _typeRaw_${dT[0]}'type='${_type}'/>`);}
+            len+=_structLen[dT];di+=1;}this._s_len=len/8;dS(`#${pre}_wrapper`).innerHTML=h;setTimeout(()=>document.querySelectorAll(`.${pre}_inps`).forEach(x=>x.classList.add("input","input-bordered")),100);}
+    __len__(){return this._s_len}collate(){let inps=document.querySelectorAll(`.${this.pre}_inps`);let di=0;let buffer=new ArrayBuffer(this.__len__());let offset=0;let ans=new DataView(buffer);
+        for(const dT of this.dataTypes){let inp=inps[di];
+            if(dT.slice(0,4)=="unix"||dT.slice(0,4)=="time")offset+=struct_pack(ans,offset,_structTrans[dT],iso2Int(inp.value,inp.classList));
+            else if("uifc".includes(dT[0]))offset+=struct_pack(ans,offset,_structTrans[dT],inp.value);di+=1;}return new Uint8Array(buffer);}
+    parse(data){let di=0;let offset=0;for(const dT of this.dataTypes){let inps=document.querySelectorAll(`.${this.pre}_inps`);let inp=inps[di];
+            if(dT.slice(0,4)=="unix"||dT.slice(0,4)=="time"){inp.value=int2Iso(struct_unpack(data,offset,_structTrans[dT]), inp.classList);offset+=_structLen[dT]/8;
+            }else if("uifc".includes(dT[0])){inp.value=struct_unpack(data,offset,_structTrans[dT]);offset+=_structLen[dT]/8;}di+=1;}}}""" # FStruct
+    @staticmethod                                                                # FStruct
+    def _styles(): return """<style>._s_row{display:flex;flex-direction:row;align-items:center;margin-bottom:8px;}._s_row>div:first-child{width:120px;}._s_row>input{width:150px;margin:0px 12px;}</style>""" # FStruct
+    @staticmethod                                                                # FStruct
+    def _html(): return f"{Struct._styles()}<script>{Struct._js()}</script>" # convenience method to include both # FStruct
+    @staticmethod # just put here cause I've spent time making the unit tests and lazy to store them at another place! # FStruct
     def _jsTest(): return """|
 let s, ans, def; let assert = (x) => console.assert(x);
 let assertClose = (x,y) => console.assert(Math.abs(x-y) < 1e-5);
@@ -1809,8 +1823,8 @@ s = Struct(def); s._d.d._d.a = "3.4"; s._d.d._d.b = 0.1; s._d.c = "kirisame"; as
 s = Struct(def).parse(ans); assertClose(s._d.d._d.a, 3.4); assertClose(s._d.d._d.b, 0.1); assert(s._d.c == "kirisa");
 def = {"a": "u8", "b": "u32", "c": "c:6", "d": "c:10", "e": {"a": "f64", "b": "f32"}, "f": [{"a": "u16", "b": "c:3"}, 2], "g": ["f32", 4]};ans=new Uint8Array([3,89,1,0,0,107,105,114,105,115,97,107,111,110,112,97,107,117,49,0,0,0,0,0,0,0,0,18,64,154,153,217,64,0,0,0,0,0,4,0,0,0,0,0,0,96,64,0,0,0,0,0,0,0,0,0,0,0,0])
 s = Struct(def); s._d.e._d.a = 4.5; s._d.e._d.b = 6.8; s._d.a = 3; s._d.b = 345; s._d.c = "kirisame";s._d.d = "konpaku1"; s._d.f[1]._d.a = 4; s._d.g[0] = 3.5;
-assert(u8Eq(s._toBytes(), ans));assert(s.__len__()==59);x = Struct(def).parse(s._toBytes());assert(u8Eq(x._toBytes(), ans));""" # Struct
-    def _toHtml(self, pre=None, verbose=True): # grabs interface to modify       # Struct
+assert(u8Eq(s._toBytes(), ans));assert(s.__len__()==59);x = Struct(def).parse(s._toBytes());assert(u8Eq(x._toBytes(), ans));""" # FStruct
+    def _toHtml(self, pre=None, verbose=True): # grabs interface to modify       # FStruct
         """Creates a really nice html interface to change the struct's fields,
 and provides callback functions to send the bytes to other places. Example::
 
@@ -1828,7 +1842,33 @@ in the structs, you can grab the modified bytes on the JS side like this::
 
 This should allow you to easily send this to a server and have it deconstruct everything
 
+FStruct
+-------
+
+FStruct is an extra JS-only mechanism that allows frontend customization of a Struct, stands for "freeform Struct". Minimum example::
+
+    <div id='p0_wrapper'></div>
+
+Script section::
+
+    new FStruct("p0", "<div><div>$</div>abc<div>$</div></div>", ["u8", "u16"]); // p0_obj variable is injected into environment automatically
+
+After running this, it will replace all instances of dollars to appropriate input tags and inject into p0_wrapper element.
+Then you can either parse new data or collate::
+
+    p0_obj.parse(new Uint8Array([1,2,3])); // parses data and modifies the values of the input elements
+    p0_obj.collate(); // returns new Uint8Array([1,2,3])
+
+It's expected that the html input is flat, and the data types array is also flat, so stuff like ``["u8", ["u8", "u16"]]`` is not allowed.
+The range of supported data types are:
+- Unsigned integers: u8, u16, u32, u64
+- Signed integers: i8, i16, i32, i64
+- Floating point: f32, f64
+- Time: unix, unix4, time, time2, time60
+
+It's possible to support more data types like hex and strings in the future, but I haven't found a time to do it. I'm lazy okay?
+
 :param pre: object name prefix to control the struct in js
-:param verbose: if True (default), includes more info for clear meaning, else include less to be more customer friendly""" # Struct
-        allZeros = all([x == 0 for x in self._toBytes()]); u8a = "null" if allZeros else json.dumps(list(self._toBytes()), separators=",:") # Struct
-        pre = pre or _structUIAuto(); return f"""<div id="{pre}_wrapper"></div><script>(new Struct({json.dumps(self.structDef, separators=",:")})).attach("{pre}",{u8a},{json.dumps(verbose)});</script>""" # Struct
+:param verbose: if True (default), includes more info for clear meaning, else include less to be more customer friendly""" # FStruct
+        allZeros = all([x == 0 for x in self._toBytes()]); u8a = "null" if allZeros else json.dumps(list(self._toBytes()), separators=",:") # FStruct
+        pre = pre or _structUIAuto(); return f"""<div id="{pre}_wrapper"></div><script>(new Struct({json.dumps(self.structDef, separators=",:")})).attach("{pre}",{u8a},{json.dumps(verbose)});</script>""" # FStruct

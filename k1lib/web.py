@@ -65,20 +65,26 @@ in the function:
 :param kwargs: other kwargs passed into :class:`~flask.Flask`"""                 # Flask
         self.import_name = import_name; self.cors = cors; self.registeredFuncs = {} # Flask
         self._app = _flask.Flask(import_name); self._app.secret_key = "random string"; self._funcNames = set() # Flask
-        self._app.config["PERMANENT_SESSION_LIFETIME"] = 7*24*3600; self.routes = [] # Flask
+        self._app.config["PERMANENT_SESSION_LIFETIME"] = 7*24*3600; self.routes = []; self.middlewares = [] # Flask
         if cors: import flask_cors; flask_cors.CORS(self._app)                   # Flask
     def __getattr__(self, attr): return self.__dict__[attr] if attr in self.__dict__ else getattr(self._app, attr) # Flask
-    def __call__(self, *args, **kwargs): self._app(*args, **kwargs)              # Flask
+    def __call__(self, *args, **kwargs): return self._app(*args, **kwargs)       # Flask
     def __iter__(self): return self._app.__iter__()                              # Flask
     def __getitem__(self, *args, **kwargs): return self._app.__getitem__(*args, **kwargs) # Flask
-    def route(self, path, guard=None, daisyEnv=False, *route_args, **route_kwargs): # Flask
+    def route(self, path, guard=None, daisyEnv=False, sse=False, passthrough=False, *route_args, **route_kwargs): # Flask
         """
-:param daisyEnv: whether to add all the nice daisyUI environment around the response or not""" # Flask
+:param daisyEnv: whether to add all the nice daisyUI environment around the response or not
+:param sse: whether to enable Server Side Events. If True, expects the function to be a generator
+:param passthrough: look up 'WSGIResponse direct_passthrough'"""                 # Flask
         def inner(f):                                                            # Flask
             ogF = f; logErrF = k1.logErr(False, True)(f); ogF_args = _inspect.getfullargspec(ogF).args # Flask
             guard_args = _inspect.getfullargspec(guard).args if guard else []    # Flask
+            self.routes.append({"route": path, "func": ogF, "hasGuard": guard is not None}) # Flask
             def tryf(*args, **kwargs):                                           # Flask
                 _flask.session.permanent = True                                  # Flask
+                try:                                                             # Flask
+                    for middleF in self.middlewares: middleF(path, {})           # Flask
+                except: pass                                                     # Flask
                 try:                                                             # Flask
                     _guard_kw = {}; guardRes = None                              # Flask
                     if guard:                                                    # Flask
@@ -88,7 +94,14 @@ in the function:
                         guardRes = guard(**_guard_kw)                            # Flask
                     _updateFKws(ogF_args, kwargs)                                # Flask
                     if "guardRes" in ogF_args: kwargs["guardRes"] = guardRes     # Flask
-                    res = logErrF(*args, **kwargs); return _wrapDaisy(res) if daisyEnv else res # Flask
+                    if sse: res = flask.Response(f(*args, **kw), mimetype='text/event-stream') # Flask
+                    else:                                                        # Flask
+                        _res = logErrF(*args, **kwargs)                          # Flask
+                        if isinstance(_res, tuple) and passthrough:              # Flask
+                            res = WSGIResponse(response=_res[0], status=_res[1], headers=_res[2], direct_passthrough=passthrough) # Flask
+                            vary = res.headers.pop('Vary', None); res.headers.pop('Set-Cookie', None) # Flask
+                        else: res = _res                                         # Flask
+                    return _wrapDaisy(res) if daisyEnv else res                  # Flask
                 except _ShortCircuit as e: return e.res                          # Flask
                 except Exception as e: return _json.dumps({"exc": f"{e}", "tb": f"{_traceback.format_exc()}"}), 418, {"Content-Type": "application/json"} # Flask
             tryf.__name__ = f"{ogF.__name__}{_fnameAutoInc()}"; self._app.route(path, *route_args, **route_kwargs)(tryf); return logErrF # Flask
@@ -154,6 +167,7 @@ def _updateFKws(args, kw):                                                      
     if "files" in args: kw["files"] = _flask.request.files                       # _updateFKws
     if "form" in args: kw["form"] = _flask.request.form                          # _updateFKws
     if "data" in args: kw["data"] = _flask.request.get_data()                    # _updateFKws
+    if "args" in args: kw["args"] = _flask.request.args                          # _updateFKws
                                                                                  # _updateFKws
 _daisyHeader = r"""<!DOCTYPE html><html data-theme="light", lang="vi-VN"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">

@@ -40,8 +40,11 @@ Classes
 - :class:`k1lib.cron`
 - :class:`k1lib.cache`
 - :class:`k1lib.preload`
+- :class:`k1lib.SharedLock`
+- :class:`k1lib.SharedDict`
 - :class:`k1lib.TimeSeries`
 - :class:`k1lib.speed`
+- :class:`k1lib.FileSys`
 
 .. autoclass:: k1lib.Learner
    :members:
@@ -169,12 +172,27 @@ Classes
    :undoc-members:
    :show-inheritance:
 
+.. autoclass:: k1lib.SharedLock
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. autoclass:: k1lib.SharedDict
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 .. autoclass:: k1lib.TimeSeries
    :members:
    :undoc-members:
    :show-inheritance:
 
 .. autoclass:: k1lib.speed
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. autoclass:: k1lib.FileSys
    :members:
    :undoc-members:
    :show-inheritance:

@@ -36,7 +36,7 @@ class PgManager: # singleton, to efficiently manages all connections from everyw
         if backups != []: raise Exception("Postgresql mode does not support automated backups. Only works on sqlite") # PgManager
         key = (host, port, user, password)                                       # PgManager
         if key not in self.connss: self.connss[key] = PgConns(sqlobj, host, port, user, password) # PgManager
-        if manage: self.manage = manage; self.managedConns[host] = self.connss[key]; self.sanitizedD[host.replace(*"._").replace(*"/_") + f"_{port}"] = host # PgManager
+        if manage: self.manage = manage; self.managedConns[key] = self.connss[key]; self.sanitizedD[host.replace(*"._").replace(*"/_") + f"_{port}"] = key # PgManager
         return self.connss[key]                                                  # PgManager
 mysqlConn = k1.dep("mysql.connector", "mysql-connector-python", "https://pypi.org/project/mysql-connector-python/") # PgManager
 class MyConn:                                                                    # MyConn
@@ -130,7 +130,8 @@ class LiConn: # does not have restrictions such as changing database latency lik
         import shutil; shutil.copyfile(backupFn, self.fn); self.connect()        # LiConn
     def connect(self):                                                           # LiConn
         if self.connected: return                                                # LiConn
-        if not os.path.exists(os.path.dirname(self.fn)): os.makedirs(os.path.dirname(self.fn), exist_ok=True) # LiConn
+        dirname = os.path.dirname(self.fn)                                       # LiConn
+        if dirname and not os.path.exists(dirname): os.makedirs(dirname, exist_ok=True) # LiConn
         self.conn = sqlite3.connect(self.fn, check_same_thread=False); self.connected = True # LiConn
         if self.fn != ":memory:" and self.wal: self.query("pragma journal_mode=wal;") # LiConn
         return self                                                              # LiConn
@@ -149,7 +150,8 @@ class LiConn: # does not have restrictions such as changing database latency lik
     def __repr__(self): return f"<LiConn fn={self.fn} db='default'>"             # LiConn
     def manage(self, readOnly:bool=True, hasUpdate=False, whitelist:"list[str]"=None): self.acl["readOnly"] = readOnly; self.acl["hasUpdate"] = hasUpdate; self.acl["whitelist"] = whitelist or [] # LiConn
 class LiConns:                                                                   # LiConns
-    def __init__(self, sqlobj, fn:str, backups:"list[str]", wal:bool): self.conn = LiConn(None, fn, backups, wal); self.fn = fn; self.acl = {"readOnly": True, "hasUpdate": False, "whitelist": []} # LiConns
+    def __init__(self, sqlobj, fn:str, backups:"list[str]", wal:bool):           # LiConns
+        self.conn = LiConn(None, fn, backups, wal); self.fn = fn; self.acl = {"readOnly": True, "hasUpdate": False, "whitelist": []} # LiConns
     def connect(self): self.conn.connect(); return self                          # LiConns
     def close(self): self.conn.close(); return self                              # LiConns
     def __getitem__(self, key:str): return self.conn                             # LiConns
@@ -385,27 +387,59 @@ Example::
     @staticmethod                                                                # sql
     def pg_flask(app, raw=False, **kwargs):                                      # sql
         """Attaches a postgresql management plane to a flask app.
-Example::
+Minimum example::
 
+    from k1lib.imports import *
+    from flask import session
     app = flask.Flask(__name__)
-    sql.lite_flask(app)
+
+    def adminGuard():
+        if session.get("userId") != 1: # checks if logged in account is an admin account or something like that, whoever gets control of the pg interface
+            raise Exception("something")
+
+    s = sql(host, port, username, password, mode="pg", manage=True) # connect to db
+    sql.pg_flask(app, guard=adminGuard) # attaches "/k1/pg" endpoints to flask instance
+
     app.run(host="0.0.0.0", port=80)
 
 Then, you can access the route "/k1/pg" to see an overview of all postgresql databases
+
+Max security::
+
+    # say connection has 2 databases (someDb1 and someDb2). someDb1 has someTbl1 and someTbl2
+
+    s = sql(host, port, username, password, mode="pg", manage=True) # connect to db
+    sql.pg_flask(app, guard=adminGuard) # attaches "/k1/pg" endpoints to flask instance
+
+    s.manage(hasUpdate=False, readOnly=True, whitelist=["someDb1"]) # hasUpdate and readOnly applies to all databases in this connection
+    # hasUpdate (default False): whether to allow update-only UI (specify row id, column name, new value), not generic sql queries. If False, interface is not there
+    # readOnly (default True): whether to allow arbitrary sql queries. If False, allows all queries, if True, allow only select queries
+    # whitelist (default []): only allows access to someDb1, disallow access to someDb2
+
+    s["someDb1"].manage(hasUpdate=True, readOnly=True, whitelist=["someTbl2"]) # hasUpdate and readOnly applies only to the specific database in a connection
+    # whitelist: only allows access to someTbl2, someTbl1 is denied access
+
+    app.run(host="0.0.0.0", port=80)
+
+Regarding connection-specific or database-specific access controls, if any .readOnly is False, disallow any sql statements that's not select.
+If any .hasUpdate is True, display the update UI.
+
+Reminder that this is still a relatively huge attack vector. I've tried to close off all bugs, but there may still be some, and
+only use this interface in trusted environments, or as a last resort.
 
 :param app: flask app object
 :param raw: if True, provides interface to execute any raw sql queries, else only provide table-specific operations
 :param kwargs: extra random kwargs that you want to add to ``app.route()`` function""" # sql
         k1 = k1lib; cli = k1.cli; viz = k1.viz; init = cli.init; from flask import request; import pprint; k1.managePlanes.append("postgresql", "/k1/pg", "Postgresql overview & querying"); k1.managePlanes.flask(app, **kwargs) # sql
         @app.route("/k1/pg", **kwargs)                                           # sql
-        def k1_pg_index(): pre = init._jsDAuto(); ui1 = pgM.sanitizedD.keys() | cli.apply(lambda x: [pgM.sanitizedD[x], x]) | viz.Table(["Server", "Idx"], onclickFName=f"{pre}_select"); return f"""
+        def k1_pg_index(): pre = init._jsDAuto(); ui1 = pgM.sanitizedD.keys() | cli.apply(lambda x: [pgM.sanitizedD[x][:3], x]) | viz.Table(["Server", "Idx"], onclickFName=f"{pre}_select"); return f"""
 <div style="display: flex; flex-direction: row; align-items: center"><h1>Postgresql databases</h1><button style="margin-left: 24px; padding: 8px" onclick="window.location='/k1';">Back</button></div>
 <div style="overflow-x: auto">{ui1}</div><script>function {pre}_select(row, i, e) {{ window.location = `/k1/pg/${{row[1]}}`; }}</script>""" # sql
         @app.route("/k1/pg/<sand>", **kwargs) # sand = sanitized database name   # sql
         def k1_pg_server(sand):                                                  # sql
             pre = init._jsDAuto(); fn = pgM.sanitizedD[sand]; s = pgM.managedConns[fn].sqlobj; f = cli.filt(lambda x: x in s.conn.acl["whitelist"]) if s.conn.acl["whitelist"] else cli.iden() # sql
             ui1 = s._ls() | cli.apply("x.name") | f | cli.insId() | viz.Table(["idx", "Schema name"], onclickFName=f"{pre}_select"); return f"""
-<div style="display: flex; flex-direction: row; align-items: center"><h1 style="margin-right: 24px">Server '{fn}'</h1><button onclick="window.location = '/k1/pg';" style="padding: 8px">Back</button></div>
+<div style="display: flex; flex-direction: row; align-items: center"><h1 style="margin-right: 24px">Server '{fn[:3]}'</h1><button onclick="window.location = '/k1/pg';" style="padding: 8px">Back</button></div>
 <div>Db/schemas:</div><div style="overflow-x: auto">{ui1}</div><script>function {pre}_select(row, i, e) {{ window.location = `/k1/pg/{sand}/db/${{row[1]}}`; }}</script>""" # sql
         @app.route("/k1/pg/<sand>/db/<dbName>", **kwargs) # sand = sanitized database name # sql
         def k1_pg_db(sand, dbName):                                              # sql
@@ -413,7 +447,7 @@ Then, you can access the route "/k1/pg" to see an overview of all postgresql dat
             dbWl = pgM.managedConns[fn].sqlobj.conn.acl["whitelist"]             # sql
             if dbWl and dbName not in dbWl: return "", 403, {}                   # sql
             ui1 = s._ls() | cli.apply("x.name") | f | cli.insId() | viz.Table(["idx", "Table name"], onclickFName=f"{pre}_select"); return f"""
-<div style="display: flex; flex-direction: row; align-items: center"><h1 style="margin-right: 24px">Server '{fn}', database '{dbName}'</h1><button onclick="window.location = '/k1/pg/{sand}';" style="padding: 8px">Back</button></div>
+<div style="display: flex; flex-direction: row; align-items: center"><h1 style="margin-right: 24px">Server '{fn[:3]}', database '{dbName}'</h1><button onclick="window.location = '/k1/pg/{sand}';" style="padding: 8px">Back</button></div>
 <div>Tables:</div><div style="overflow-x: auto">{ui1}</div><script>function {pre}_select(row, i, e) {{ window.location = `/k1/pg/{sand}/db/{dbName}/table/${{row[1]}}`; }}</script>""" # sql
         @app.route("/k1/pg/<sand>/db/<dbName>/table/<tblName>", **kwargs)        # sql
         def k1_pg_table(sand, dbName, tblName):                                  # sql
@@ -422,7 +456,7 @@ Then, you can access the route "/k1/pg" to see an overview of all postgresql dat
             if dbAcl["whitelist"] and dbName not in dbAcl["whitelist"]: return "", 403, {} # sql
             if tblAcl["whitelist"] and tblName not in tblAcl["whitelist"]: return "", 403, {} # sql
             info = tbl.info(out=True) | cli.join("\n"); return f"""
-<div style="display: flex; flex-direction: row; align-items: center"><h1 style="margin-right: 24px">Server '{fn}', database '{dbName}', table '{tblName}'</h1><button onclick="window.location = '/k1/pg/{sand}/db/{dbName}';" style="padding: 8px">Back</button></div>
+<div style="display: flex; flex-direction: row; align-items: center"><h1 style="margin-right: 24px">Server '{fn[:3]}', database '{dbName}', table '{tblName}'</h1><button onclick="window.location = '/k1/pg/{sand}/db/{dbName}';" style="padding: 8px">Back</button></div>
 <div style="overflow-x: auto"><pre>{info}</pre></div>
 <div style="display: flex; flex-direction: row; flex-wrap: wrap">
     <div style="margin: 8px; flex: 1; min-width: 350px">
@@ -434,7 +468,16 @@ Then, you can access the route "/k1/pg" to see an overview of all postgresql dat
             <div style="margin-right: 8px"><div>id</div><input id="{pre}_idx" type="number" /></div>
             <div><div>field</div><input id="{pre}_field" type="text" /></div></div>
         <div style="margin-top: 8px"><div>value</div><textarea id="{pre}_value" style="width: 330px; height: 200px"></textarea></div>
-    </div></div>
+    </div>
+    <div style="margin: 8px; flex: 1; min-width: 350px; white-space: pre">
+Common commands:
+SELECT col1 FROM table1 WHERE col2 > 3 AND col3 in (1, 2, 3) ORDER BY col4 DESC LIMIT 10
+INSERT INTO table1 (col1, col2, col3) VALUES (val1, val2, val3);
+UPDATE table1 SET col1 = val1, col2 = val2 WHERE col3 = 3;
+DELETE FROM table1 WHERE col1 = 3;
+ALTER TABLE users ADD COLUMN age INTEGER;
+CREATE INDEX idx_users_email ON users(email);
+</div></div>
 <pre id="{pre}_result" contenteditable=true style="padding: 12px; overflow-x: auto; border: 1px solid black"></pre><script>
     {pre}_queryBtn.onclick = async () => {{ try {{ {pre}_duration.innerHTML = ""; {pre}_result.innerHTML = "Executing...";
         let res = await (await fetch("/k1/pg/{sand}/db/{dbName}/table/{tblName}/query", {{ method: "POST", headers: {{ "Content-Type": "application/json" }}, body: JSON.stringify({{query: {pre}_query.value}}) }})).json();
@@ -482,7 +525,7 @@ Then, you can access the route "/k1/sqlite" to see an overview of all sqlite dat
         @app.route("/k1/sqlite/<sand>", **kwargs) # sand = sanitized database name # sql
         def k1_sqlite_db(sand):                                                  # sql
             pre = init._jsDAuto(); fn = liM.sanitizedD[sand]; s = sql(fn, mode="lite")["default"]; ui1 = s._ls() | cli.apply("x.name") | cli.insId() | viz.Table(["idx", "Table name"], onclickFName=f"{pre}_select") # sql
-            bS = liteBackup_table(); ui2 = bS.query("select id, mode, sched, dur, time from backups where dbfn = ? order by time desc", s.conn.fn) | cli.apply(k1.fmt.time, 3, metric=False) | cli.apply(cli.toIso(k1.settings.timezone) | cli.op().replace(*"T "), 4) | (cli.toJsFunc("term") | cli.grep("${term}") | viz.Table(["id", "mode", "sched", "dur", "time"], selectable=True, onclickFName=f"{pre}_selectBackup")) | cli.op().interface() | cli.toHtml(); return f"""
+            bS = liteBackup_table(); ui2 = bS.query("select id, mode, sched, dur, time from backups where dbfn = ? order by time desc", s.conn.fn) | cli.apply(lambda arr: [*arr, f"{s.conn.fn}.backups/{arr[1]}_{arr[2]}"]) | cli.apply(cli.tryout() | cli.aS(os.path.getsize) | cli.aS(k1.fmt.size), 5) | cli.apply(k1.fmt.time, 3, metric=False) | cli.apply(cli.toIso(k1.settings.timezone) | cli.op().replace(*"T "), 4) | (cli.toJsFunc("term") | cli.grep("${term}") | viz.Table(["id", "mode", "sched", "dur", "time", "size"], selectable=True, onclickFName=f"{pre}_selectBackup")) | cli.op().interface() | cli.toHtml(); return f"""
 <div style="display: flex; flex-direction: row; align-items: center"><h1 style="margin-right: 24px">Database '{fn}'</h1><button onclick="window.location = '/k1/sqlite';" style="padding: 8px">Back</button></div>
 <div>Tables:</div><div style="overflow-x: auto">{ui1}</div>
 <div style="display: flex; flex-direction: row; align-items: center"><h2 style="margin-right: 24px">Backups (schedules: {s.conn.backups})</h2><button id="{pre}_manual" style="padding: 8px">Manual backup</button></div>
@@ -503,9 +546,18 @@ Then, you can access the route "/k1/sqlite" to see an overview of all sqlite dat
         def k1_sqlite_table(sand, tblName): pre = init._jsDAuto(); fn = liM.sanitizedD[sand]; s = sql(fn, mode="lite")["default"]; tbl = s[tblName]; info = tbl.info(out=True) | cli.join("\n"); return f"""
 <div style="display: flex; flex-direction: row; align-items: center"><h1 style="margin-right: 24px">Database '{fn}' - table '{tblName}'</h1><button onclick="window.location = '/k1/sqlite/{sand}';" style="padding: 8px">Back</button></div>
 <div style="overflow-x: auto"><pre>{info}</pre></div>
-<div style="display: flex; flex-direction: row; align-items: center"><h2 style="margin-right: 24px">Query</h2><button id="{pre}_queryBtn" style="padding: 8px">Query</button></div>
-<textarea id="{pre}_query" style="width: 350px; height: 200px"></textarea><div id="{pre}_duration"></div>
-<pre id="{pre}_result" contenteditable=true style="padding: 12px; overflow-x: auto"></pre>
+<div style="display: flex; flex-direction: row">
+    <div><div style="display: flex; flex-direction: row; align-items: center"><h2 style="margin-right: 24px">Query</h2><button id="{pre}_queryBtn" style="padding: 8px">Query</button></div><textarea id="{pre}_query" style="width: 350px; height: 200px"></textarea><div id="{pre}_duration"></div></div>
+    <div style="margin: 8px; flex: 1; min-width: 350px; white-space: pre">
+Common commands:
+SELECT col1 FROM table1 WHERE col2 > 3 AND col3 in (1, 2, 3) ORDER BY col4 DESC LIMIT 10
+INSERT INTO table1 (col1, col2, col3) VALUES (val1, val2, val3);
+UPDATE table1 SET col1 = val1, col2 = val2 WHERE col3 = 3;
+DELETE FROM table1 WHERE col1 = 3;
+ALTER TABLE users ADD COLUMN age INTEGER;
+CREATE INDEX idx_users_email ON users(email);
+PRAGMA wal_checkpoint(TRUNCATE); VACUUM; -- this is to truncate sqlite's wal file
+</div></div><pre id="{pre}_result" contenteditable=true style="padding: 12px; overflow-x: auto"></pre>
 <script>{pre}_queryBtn.onclick = async () => {{ try {{ {pre}_duration.innerHTML = ""; {pre}_result.innerHTML = "Executing...";
     let res = await (await fetch("/k1/sqlite/{sand}/table/{tblName}/query", {{ method: "POST", headers: {{ "Content-Type": "application/json" }}, body: JSON.stringify({{query: {pre}_query.value}}) }})).json();
     {pre}_duration.innerHTML = "Execute duration: " + res.duration; {pre}_result.innerHTML = res.tbl;

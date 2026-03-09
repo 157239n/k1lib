@@ -305,9 +305,9 @@ You can also check whether the function already has a key or not by doing this::
         self.name = name; self.docs = docs; self.pickle = pickle                 # cache
     def _setupSqlite(self):                                                      # cache
         if self._sqliteReady: return                                             # cache
-        self._sqliteReady = True; s = k1lib.cli.sql(self.fn, mode="lite")["default"] # cache
+        s = k1lib.cli.sql(self.fn, mode="lite")["default"]                       # cache
         s.query("CREATE TABLE IF NOT EXISTS cache (id INTEGER primary key autoincrement, key TEXT, value BLOB, time INTEGER);") # cache
-        s.query("CREATE INDEX IF NOT EXISTS cache_key ON cache (key);"); self.tbl = s["cache"] # cache
+        s.query("CREATE INDEX IF NOT EXISTS cache_key ON cache (key);"); self.tbl = s["cache"]; self._sqliteReady = True # cache
     def hasKey(self, *args, **kwargs):                                           # cache
         if not self._sqliteReady: self._setupSqlite()                            # cache
         key = hashableAKw(args, kwargs)                                          # cache
@@ -475,6 +475,11 @@ You can also quickly deploy a management plane to manage all cron jobs::
 
 See more about this at :meth:`flask`
 
+All exceptions that occur inside a cron-wrapped function will be saved to sqlite database managed by :class:`!k1lib.logErr`.
+Expose a management interface with::
+
+    k1.logErr.flask(app)
+
 :param f: function to trigger wrapped function when this transitions from False to True
 :param delay: if specified, just run the function repeatedly, delayed by this amount after running. Mutually exclusive with .f
 :param kw: extra keyword arguments to pass to the function
@@ -505,7 +510,7 @@ See more about this at :meth:`flask`
                         try:                                                     # cron
                             _k1_cron_delay_data[name]["lastRun"] = [beginTime, "now"]; res = func(**kw) # cron
                             if res == cron.stop: break                           # cron
-                        except Exception as e: print(f"{type(e)}\ue004{e}"); print(traceback.format_exc()); _k1_cron_delay_data[name]["logs"].append({"beginTime": beginTime, "duration": time.time() - beginTime, "success": False, "exc": f"{type(e)}\ue004{e}", "tb": traceback.format_exc()}) # cron
+                        except Exception as e: print(f"{type(e)}\ue004{e}"); print(traceback.format_exc()); _k1_cron_delay_data[name]["logs"].append({"beginTime": beginTime, "duration": time.time() - beginTime, "success": False, "exc": f"{type(e)}\ue004{e}", "tb": traceback.format_exc()}); k1lib.logErr.rawErr(func, e) # cron
                         threadRef[4] += time.thread_time() - beginTTime          # cron
                         if shutdownEvent.wait(delay): print(f"cron {self.name} stopped"); break # cron
                     del _k1_threadData[id(threadRef[1])]                         # cron
@@ -519,7 +524,7 @@ See more about this at :meth:`flask`
                         try:                                                     # cron
                             _k1_cron_delay_data[name]["lastRun"] = [beginTime, "now"]; res = await func(**kw) # cron
                             if res == cron.stop: break                           # cron
-                        except Exception as e: print(f"{type(e)}\ue004{e}"); print(traceback.format_exc()); _k1_cron_delay_data[name]["logs"].append({"beginTime": beginTime, "duration": time.time() - beginTime, "success": False, "exc": f"{type(e)}\ue004{e}", "tb": traceback.format_exc()}) # cron
+                        except Exception as e: print(f"{type(e)}\ue004{e}"); print(traceback.format_exc()); _k1_cron_delay_data[name]["logs"].append({"beginTime": beginTime, "duration": time.time() - beginTime, "success": False, "exc": f"{type(e)}\ue004{e}", "tb": traceback.format_exc()}); k1lib.logErr.rawErr(func, e) # cron
                         threadRef[4] += time.thread_time() - beginTTime; await asyncio.sleep(delay) # cron
                     del _k1_threadData[id(threadRef[1])]                         # cron
                 _startAsyncScanCron(); asyncio.run_coroutine_threadsafe(startALoop(), _c2_eventLoop[0]); _addThread(func, threadRef); return func # cron
@@ -545,7 +550,7 @@ See more about this at :meth:`flask`
                         if not last and this:                                    # cron
                             try:                                                 # cron
                                 if func(**kw) == cron.stop: break                # cron
-                            except Exception as e: print(f"{type(e)}\ue004{e}"); print(traceback.format_exc()) # cron
+                            except Exception as e: print(f"{type(e)}\ue004{e}"); print(traceback.format_exc()); k1lib.logErr.rawErr(func, e) # cron
                         last = this; threadRef[4] += time.thread_time() - beginTTime # cron
                         if shutdownEvent.wait(sleepDuration): print(f"cron {self.name} stopped"); break # cron
                     del _k1_threadData[id(threadRef[1])]                         # cron
@@ -563,7 +568,7 @@ See more about this at :meth:`flask`
                         if not last and this:                                    # cron
                             try:                                                 # cron
                                 if await func(**kw) == cron.stop: break          # cron
-                            except Exception as e: print(f"{type(e)}\ue004{e}"); print(traceback.format_exc()) # cron
+                            except Exception as e: print(f"{type(e)}\ue004{e}"); print(traceback.format_exc()); k1lib.logErr.rawErr(func, e) # cron
                         last = this; threadRef[4] += time.thread_time() - beginTTime; await asyncio.sleep(sleepDuration) # cron
                     del _k1_threadData[id(threadRef[1])]                         # cron
                 _startAsyncScanCron(); asyncio.run_coroutine_threadsafe(startALoop(), _c2_eventLoop[0]); _addThread(func, threadRef); return func # cron

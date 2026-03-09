@@ -625,7 +625,8 @@ Example::
     [[1, "a"], [2, "b"], [3, "c"], [2, "d"], [1, "e"]] | breakIf("x > 2", 0) | deref()
 
 :param col: column to apply the condition on"""                                  # breakIf
-        fs = [f]; super().__init__(fs); self.f = fs[0]; self._fC = fastF(self.f); self.col = col # breakIf
+        fs = [f]; super().__init__(fs); self.f = fs[0]; self._fC = fastF(self.f); self.col = col; self.inverted = False; self._gen = None # breakIf
+    def __invert__(self): res = breakIf(self.f, self.col); res.inverted = True; return res # breakIf
     def _typehint(self, inp):                                                    # breakIf
         if isinstance(inp, tListIterSet): return tIter(inp.child)                # breakIf
         return tIter(tAny())                                                     # breakIf
@@ -635,16 +636,31 @@ Example::
             ndim = len(it | cli.shape())                                         # breakIf
             a = init.preprocessPd(it, col, lambda x: bool(f(x)), lambda x: f(x).astype(bool)) # breakIf
             return it[:a.argmax()] if a[a.argmax()] else it                      # breakIf
-        def gen():                                                               # breakIf
+        if self._gen is None:                                                    # breakIf
             if col is None:                                                      # breakIf
-                for line in it:                                                  # breakIf
-                    if f(line): break                                            # breakIf
-                    yield line                                                   # breakIf
+                if not self.inverted:                                            # breakIf
+                    def gen(it):                                                 # breakIf
+                        for line in it:                                          # breakIf
+                            if f(line): break                                    # breakIf
+                            yield line                                           # breakIf
+                else:                                                            # breakIf
+                    def gen(it):                                                 # breakIf
+                        for line in it:                                          # breakIf
+                            if not f(line): break                                # breakIf
+                            yield line                                           # breakIf
             else:                                                                # breakIf
-                for row in it:                                                   # breakIf
-                    if f(row[col]): break                                        # breakIf
-                    yield row                                                    # breakIf
-        return gen()                                                             # breakIf
+                if not self.inverted:                                            # breakIf
+                    def gen(it):                                                 # breakIf
+                        for row in it:                                           # breakIf
+                            if f(row[col]): break                                # breakIf
+                            yield row                                            # breakIf
+                else:                                                            # breakIf
+                    def gen(it):                                                 # breakIf
+                        for row in it:                                           # breakIf
+                            if not f(row[col]): break                            # breakIf
+                            yield row                                            # breakIf
+            self._gen = gen                                                      # breakIf
+        return self._gen(it)                                                     # breakIf
     def _jsF(self, meta):                                                        # breakIf
         fIdx = init._jsFAuto(); dataIdx = init._jsDAuto(); argIdx = init._jsDAuto() # breakIf
         header, _fIdx = k1lib.kast.prepareFunc3(self.f, ("breakIf", meta))       # breakIf

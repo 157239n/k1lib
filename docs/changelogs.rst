@@ -12,15 +12,18 @@ Cli:
 - Added :class:`~kjs.toPyFunc`, for compiling clis to really optimized python
 - Added screen capture to :class:`~conv.toImg`
 - Added rar mode to :class:`~inp.ls`
+- Added more conversion clis: :class:`~conv.toSize`, :class:`~conv.toBase64`, :class:`~conv.fromBase64`
 
 Generic:
 
 - Added :class:`~k1lib.Struct`, to define structs, serialize and deserialize
-  them to bytes, on both Python and JS side
+  them to bytes, on both Python and JS side. Also added FStruct to allow for arbitrary UI customizations
 - Added :class:`~k1lib.DistQueue`, :class:`~k1lib.Icon`, :class:`~k1lib.managePlanes`
 - Added small functions :meth:`~k1lib.deprecated`, :meth:`~k1lib.argNames`, :meth:`~k1lib.extractLinks`
 - Added sqlite backup mode for :class:`~k1lib.cache`
 - Added password-related functions: :meth:`~k1lib.hashPw`, :meth:`~k1lib.verifyPw`, :meth:`~k1lib.leakedPw`
+- Added multiprocess helpers: :class:`~k1lib.SharedLock` and :class:`~k1lib.SharedDict`
+- Added web-based file system manager: :class:`~k1lib.FileSys`
 
 `1.7 </1.7>`_ - Jan 25th, 2025
 -------------------------------

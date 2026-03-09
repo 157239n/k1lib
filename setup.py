@@ -25,7 +25,7 @@ setup(
     data_files=[('k1lib/serve', ['k1lib/serve/main.html']),
                 ('k1lib', ['k1lib/pw_top100k_bloom.bin']),
                 ('k1lib/assets', ['k1lib/assets/k1js_amd.js', 'k1lib/assets/k1js_umd.js', 'k1lib/assets/acorn.js', 'k1lib/assets/acorn_walk.js', 'k1lib/assets/chartist.js', 'k1lib/assets/chartist.css', 'k1lib/assets/leaflet.js', 'k1lib/assets/leaflet.css'])],
-    version="1.8.1", # remember to also modify this number in __init__.py
+    version="1.8.2", # remember to also modify this number in __init__.py
     python_requires='>=3.7',
     install_requires=["numpy>=1.14", "matplotlib>=2.0", "dill", "forbiddenfruit", "wurlitzer", "validators"],
     extras_require={"all": deps},

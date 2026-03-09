@@ -14,14 +14,14 @@ convert object to object. Lastly, there are some that just feels right to input
 an iterator and output a single object (like getting max, min, std, mean values)."""
 __all__ = ["toNdArray", "toTensor", "toRange", "toList",
            "toSum", "toProd", "toAvg", "toMean", "toStd", "toMedian", "toMax", "toMin", "toArgmin", "toArgmax",
-           "toImg", "toRgb", "toRgba", "toGray", "toDict",
-           "toFloat", "toInt", "toRoman", "toBytes", "toDataUri", "toAnchor", "toHtml",
+           "toImg", "toSize", "toRgb", "toRgba", "toGray", "toDict",
+           "toFloat", "toInt", "toRoman", "toBytes", "toDataUri", "toAnchor", "toHtml", "toBase64", "fromBase64",
            "toAscii", "toHash", "toCsv", "toYaml", "Audio", "toAudio", "toUnix", "toIso", "toYMD", "toLinks",
            "toMovingAvg", "toCm", "Pdf", "toPdf", "toDist", "toAngle", "idxsToNdArray", "toFileType", "toQr", "toExcel", "toMdTable"]
 import re, k1lib, math, os, numpy as np, io, json, base64, unicodedata, inspect, time, functools
 from k1lib.cli.init import BaseCli, T, yieldT; import k1lib.cli as cli, k1lib.cli.init as init
 from k1lib.cli.typehint import *; mpl = k1lib.dep.mpl; plt = k1lib.dep.plt; yaml = k1lib.dep.yaml; pd = k1lib.dep.pd; cm = k1lib.dep.cm; cv2 = k1lib.dep.cv2
-from collections import deque, defaultdict, OrderedDict; from typing import Iterator, Any, List, Set, Tuple, Dict, Callable, Union
+from collections import deque, defaultdict, OrderedDict; from typing import Iterator, Any, List, Set, Tuple, Dict, Callable, Union, Optional
 settings = k1lib.settings.cli; imgkit = k1lib.dep("imgkit", url="https://github.com/csquared/IMGKit")
 try: import PIL; import PIL.Image; hasPIL = True
 except: hasPIL = False
@@ -491,6 +491,25 @@ class toNpImg(BaseCli):                                                         
         if hasTorch and isinstance(it, torch.Tensor): it = it.numpy()            # toNpImg
         if isinstance(it, np.ndarray): it = it.astype(np.uint8)                  # toNpImg
         return it                                                                # toNpImg
+class toSize(BaseCli):                                                           # toSize
+    def __init__(self, w=None, h=None):                                          # toSize
+        """Resizes incoming image.
+Example::
+
+    im = "a.png" | toImg()
+    im | toSize(300)      # resize image keeping aspect ratio so that it has width 300
+    im | toSize(h=300)    # resize image keeping aspect ratio so that it has height 300
+    im | toSize(200, 300) # resize image keeping so that it has width 200 and height 300
+    im | toSize()         # does not resize image
+"""                                                                              # toSize
+        self.w = w; self.h = h                                                   # toSize
+    def __ror__(self, it):                                                       # toSize
+        if hasPIL and isinstance(it, PIL.Image.Image):                           # toSize
+            if self.w is None and self.h is None: return it                      # toSize
+            if self.h   is None: ratio = self.w/it.width;  return it.resize((round(it.width * ratio), round(it.height * ratio)), PIL.Image.Resampling.LANCZOS) # toSize
+            elif self.w is None: ratio = self.h/it.height; return it.resize((round(it.width * ratio), round(it.height * ratio)), PIL.Image.Resampling.LANCZOS) # toSize
+            else: return it.resize((round(self.w), round(self.h)), PIL.Image.Resampling.LANCZOS) # toSize
+        return it                                                                # toSize
 class toRgb(BaseCli):                                                            # toRgb
     blurb="Converts grayscale/rgb PIL image to rgb image"                        # toRgb
     def __init__(self):                                                          # toRgb
@@ -915,7 +934,44 @@ Example::
     "c1ccc(C)cc1" | toMol() | toSmiles()"""                                      # toHtml
         return cli.aS(Chem.MolToSmiles)                                          # toHtml
 except: pass                                                                     # toHtml
-import unicodedata, hashlib                                                      # toHtml
+class toBase64(BaseCli):                                                         # toBase64
+    def __init__(self):                                                          # toBase64
+        """Encodes input object as base64.
+Example::
+
+    "Usami Renko"       | toBase64()             # returns 'VXNhbWkgUmVua28='
+    b"Usami Renko"      | toBase64()             # returns 'VXNhbWkgUmVua28='
+    'VXNhbWkgUmVua28='  | fromBase64()           # returns "Usami Renko"
+    b'VXNhbWkgUmVua28=' | fromBase64()           # returns "Usami Renko"
+    'VXNhbWkgUmVua28='  | fromBase64(text=False) # returns b"Usami Renko"
+
+Why do this? Isn't this just a super simple snippet of code? I just want to quickly
+convert strings to and from base64 across my systems, but with all the .encode()
+and .decode() correctly to convert strings to bytes and whatnot drives me insane.
+So I made this so that it works well with whatever the input type is"""          # toBase64
+        pass                                                                     # toBase64
+    def __ror__(self, it):                                                       # toBase64
+        if not isinstance(it, (str, bytes)): it = str(it)                        # toBase64
+        if isinstance(it, str): it = it.encode()                                 # toBase64
+        return base64.b64encode(it).decode()                                     # toBase64
+class fromBase64(BaseCli):                                                       # fromBase64
+    def __init__(self, text=True):                                               # fromBase64
+        """Decodes base64-encoded strings/bytes.
+Example::
+
+    "Usami Renko"       | toBase64()             # returns 'VXNhbWkgUmVua28='
+    b"Usami Renko"      | toBase64()             # returns 'VXNhbWkgUmVua28='
+    'VXNhbWkgUmVua28='  | fromBase64()           # returns "Usami Renko"
+    b'VXNhbWkgUmVua28=' | fromBase64()           # returns "Usami Renko"
+    'VXNhbWkgUmVua28='  | fromBase64(text=False) # returns b"Usami Renko"
+
+Why do this? Isn't this just a super simple snippet of code? I just want to quickly
+convert strings to and from base64 across my systems, but with all the .encode()
+and .decode() correctly to convert strings to bytes and whatnot drives me insane.
+So I made this so that it works well with whatever the input type is"""          # fromBase64
+        self.text = text                                                         # fromBase64
+    def __ror__(self, it): it = base64.b64decode(it); return it.decode() if self.text else it # fromBase64
+import unicodedata, hashlib                                                      # fromBase64
 def toAscii():                                                                   # toAscii
     """Converts complex unicode text to its base ascii form.
 Example::
@@ -924,17 +980,137 @@ Example::
 
 Taken from https://stackoverflow.com/questions/2365411/convert-unicode-to-ascii-without-errors-in-python""" # toAscii
     return cli.aS(lambda word: unicodedata.normalize('NFKD', word).encode('ascii', 'ignore')) # toAscii
-def toHash() -> str:                                                             # toHash
-    """Converts some string into some hash string.
-Example::
+def _to_grayscale(img):                                                          # _to_grayscale
+    if img.mode not in ("L", "RGB"): img = img.convert("RGB")                    # _to_grayscale
+    return img.convert("L") # Ensure deterministic handling of modes like "P", "RGBA", etc. # _to_grayscale
+def _resize(img, size: Tuple[int, int]): return img.resize(size, resample=PIL.Image.Resampling.LANCZOS) # LANCZOS is good for downsampling; bilinear also works. # _resize
+def _img_to_float_array(img_l) -> np.ndarray:                                    # _img_to_float_array
+    arr = np.asarray(img_l, dtype=np.float32) # Returns float32 array, shape (H, W), range 0..255 # _img_to_float_array
+    if arr.ndim != 2: raise ValueError("Expected grayscale image array with 2 dimensions.") # _img_to_float_array
+    return arr                                                                   # _img_to_float_array
+def bits_to_int(bits: np.ndarray) -> int: # Pack a 1D boolean/0-1 array into an integer. First element becomes the most-significant bit (MSB). # bits_to_int
+    bits = np.asarray(bits).astype(np.uint8).ravel(); out = 0                    # bits_to_int
+    for b in bits: out = (out << 1) | int(b)                                     # bits_to_int
+    return out                                                                   # bits_to_int
+def int_to_hex(h: int, bit_length: int) -> str: hex_len = (bit_length + 3) // 4; return f"{h:0{hex_len}x}" # int_to_hex
+def hamming_distance_int(a: int, b: int) -> int: return (a ^ b).bit_count()      # hamming_distance_int
+def ahash(img, hash_size: int = 8) -> int: # Average hash (aHash): resize to NxN, threshold by mean. Output bit-length = hash_size^2. # ahash
+    arr = _img_to_float_array(_resize(_to_grayscale(img), (hash_size, hash_size))); return bits_to_int((arr > float(arr.mean())).astype(np.uint8)) # ahash
+def mhash(img, hash_size: int = 8) -> int: # Median hash (mHash): resize to NxN, threshold by median. Often slightly more robust than mean for skewed histograms. Output bit-length = hash_size^2. # mhash
+    arr = _img_to_float_array(_resize(_to_grayscale(img), (hash_size, hash_size))); return bits_to_int((arr > float(np.median(arr))).astype(np.uint8)) # mhash
+def dhash(img, hash_size: int = 8, vertical: bool = False) -> int:               # dhash
+    """
+Difference hash (dHash). horizontal: resize to (hash_size+1, hash_size), compare adjacent x;      vertical=True: additionally compare adjacent y; concatenates bits.
+Bit-length: horizontal only: hash_size^2;     horizontal+vertical: 2*hash_size^2""" # dhash
+    img_l = _to_grayscale(img)                                                   # dhash
+    arr_h = _img_to_float_array(_resize(img_l, (hash_size + 1, hash_size))) # Horizontal differences # dhash
+    bits_h = (arr_h[:, :-1] > arr_h[:, 1:]).astype(np.uint8).ravel() # shape (hash_size, hash_size) for (arr > arr) # dhash
+    if not vertical: return bits_to_int(bits_h)                                  # dhash
+    arr_v = _img_to_float_array(_resize(img_l, (hash_size, hash_size + 1))) # Vertical differences # dhash
+    bits_v = (arr_v[:-1, :] > arr_v[1:, :]).astype(np.uint8).ravel() # shape (hash_size, hash_size) for (arr > arr) # dhash
+    return bits_to_int(np.concatenate([bits_h, bits_v], axis=0))                 # dhash
+def _dct_1d(x: np.ndarray) -> np.ndarray: # DCT-II (orthonormal) along last axis. Pure numpy implementation. This is not the fastest possible, but fine for small 32x32 inputs. # _dct_1d
+    x = np.asarray(x, dtype=np.float32); N = x.shape[-1]; n = np.arange(N, dtype=np.float32); k = n.reshape(-1, 1)  # (N,1) # _dct_1d
+    mat = np.cos((math.pi / N) * (n + 0.5) * k) # cos matrix: (N,N) for small N  # _dct_1d
+    mat[0, :] *= math.sqrt(1.0 / N); mat[1:, :] *= math.sqrt(2.0 / N) # Orthonormal scaling # _dct_1d
+    return x @ mat.T  # broadcasting for 2D inputs works if x is (H,N)           # _dct_1d
+def _dct_2d(a: np.ndarray) -> np.ndarray: return _dct_1d(_dct_1d(a).T).T # Apply DCT along rows then columns. # _dct_2d
+def phash(img, hash_size: int = 8, highfreq_factor: int = 4, exclude_dc: bool = True) -> int: # Perceptual hash (pHash): 1) resize to (hash_size*highfreq_factor)^2 (commonly 32x32), 2) DCT, 3) take top-left hash_size x hash_size low-frequency block, 4) threshold by median (optionally excluding DC coefficient). Output bit-length = hash_size^2. # phash
+    size = hash_size * highfreq_factor; low = _dct_2d(_img_to_float_array(_resize(_to_grayscale(img), (size, size))))[:hash_size, :hash_size].copy() # phash
+    med = float(np.median(low)) if not exclude_dc else float(np.median(low[1:, :].ravel().tolist() + low[0, 1:].ravel().tolist())) # Exclude [0,0] from threshold computation. # phash
+    return bits_to_int((low > med).astype(np.uint8).ravel())                     # phash
+def _haar_1d(x: np.ndarray) -> np.ndarray: # Single-level Haar wavelet transform (orthonormal), along last axis. Output length same as input, with [approx | detail]. # _haar_1d
+    x = np.asarray(x, dtype=np.float32); N = x.shape[-1]                         # _haar_1d
+    if N % 2 != 0: raise ValueError("Haar transform requires even length per axis.") # _haar_1d
+    a = (x[..., 0::2] + x[..., 1::2]) / math.sqrt(2.0); d = (x[..., 0::2] - x[..., 1::2]) / math.sqrt(2.0); return np.concatenate([a, d], axis=-1) # _haar_1d
+def _haar_2d(a: np.ndarray, levels: int = 1) -> np.ndarray: # Multi-level 2D Haar transform. Each level transforms the current top-left (approximation) quadrant. # _haar_2d
+    a = np.asarray(a, dtype=np.float32).copy(); h, w = a.shape                   # _haar_2d
+    if (h % (2 ** levels) != 0) or (w % (2 ** levels) != 0): raise ValueError("Image size must be divisible by 2**levels in both dimensions.") # _haar_2d
+    cur_h, cur_w = h, w                                                          # _haar_2d
+    for _ in range(levels): a[:cur_h, :cur_w] = _haar_1d(a[:cur_h, :cur_w]); a[:cur_h, :cur_w] = _haar_1d(a[:cur_h, :cur_w].T).T; cur_h //= 2; cur_w //= 2 # Transform rows/cols in current region # _haar_2d
+    return a                                                                     # _haar_2d
+def whash(img, hash_size: int = 8, image_scale: int = 32, levels: int = 1, exclude_dc: bool = True) -> int: # whash
+    img_l = _to_grayscale(img) # Wavelet hash (wHash): 1) resize to image_scale x image_scale (power of 2 recommended, e.g. 32); 2) multi-level Haar transform; 3) take top-left hash_size x hash_size of approximation (LL) band; 4) threshold by median (optionally excluding the top-left DC-like coeff). Output bit-length = hash_size^2. # whash
+    if (image_scale & (image_scale - 1)) != 0: raise ValueError("image_scale should be a power of two (e.g., 32, 64).") # whash
+    wt = _haar_2d(_img_to_float_array(_resize(img_l, (image_scale, image_scale))), levels=levels) # whash
+    approx_size = image_scale // (2 ** levels); ll = wt[:approx_size, :approx_size] # After 'levels', approximation band is top-left (image_scale / 2**levels) # whash
+    block = ll[:hash_size, :hash_size].copy() # Take top-left hash_size x hash_size from LL # whash
+    med = float(np.median(block)) if not exclude_dc else float(np.median(block[1:, :].ravel().tolist() + block[0, 1:].ravel().tolist())) # whash
+    return bits_to_int((block > med).astype(np.uint8).ravel())                   # whash
+def block_mean_hash(img, blocks: int = 8) -> int: # Block mean hash, very cheap: 1) resize to (blocks*8, blocks*8) for stable averaging (defaults 64x64); 2) compute mean of each block -> blocks x blocks grid; 3) threshold by median. Output bit-length = blocks^2. # block_mean_hash
+    size = blocks * 8; arr = _img_to_float_array(_resize(_to_grayscale(img), (size, size))) # block_mean_hash
+    block_means = arr.reshape(blocks, size // blocks, blocks, size // blocks).mean(axis=(1, 3))  # reshape into blocks, shape (blocks, blocks) # block_mean_hash
+    return bits_to_int((block_means > float(np.median(block_means))).astype(np.uint8).ravel()) # block_mean_hash
+def color_hash(img, bins: int = 4) -> int: # Very cheap coarse color signature: resize small, histogram in RGB with low bin count, pick top bins and encode. Output is an integer signature; NOT directly comparable by Hamming distance in a principled way, but useful as a pre-filter. # color_hash
+    arr = np.asarray(_resize(img.convert("RGB"), (64, 64)), dtype=np.uint8)  # (H,W,3) # color_hash
+    q = (arr.astype(np.int32) * bins) // 256 # Quantize each channel to bins, 0..bins-1 # color_hash
+    idx = (q[..., 0] * (bins * bins) + q[..., 1] * bins + q[..., 2]).ravel(); hist = np.bincount(idx, minlength=bins ** 3).astype(np.float32) # color_hash
+    top = np.argsort(hist)[-4:][::-1]; sig = 0 # Take top-4 bins (by count) and pack them # color_hash
+    for t in top: sig = (sig << 6) | int(t)  # 6 bits enough up to 64 bins       # color_hash
+    return sig                                                                   # color_hash
+class toHash(BaseCli):                                                           # toHash
+    def __init__(self, method:str=None):                                         # toHash
+        """Converts some obj into a string, then convert it into some hash string using sha256,
+finally encode using k1.encode() which pickles it then converts to base64. Example::
 
     "abc" | toHash() # returns 'gASVJAAAAAAAAABDILp4Fr+PAc/qQUFA3l2uIiOwA2Gjlhd6nLQQ/2HyABWtlC4='
 
 Why not just use the builtin function ``hash("abc")``? Because it generates different
 hashes for different interpreter sessions, and that breaks many of my applications that
-need the hash value to stay constant forever."""                                 # toHash
-    def hashF(msg:str) -> str: m = hashlib.sha256(); m.update(f"{msg}".encode()); return k1lib.encode(m.digest()) # toHash
-    return cli.aS(hashF)                                                         # toHash
+need the hash value to stay constant forever.
+
+Besides hasing random objects for identity purposes, this also has several image hashing
+functions to detect very similar images (say a png and its lossy jpg version):
+
+- avg: average hash. Downsamples the image and compares each pixel to the global average
+    brightness. Very fast but weak—sensitive to contrast changes and noise; suitable only
+    as a toy baseline or when performance is extremely constrained.
+- med: median hash. Same as avg, but thresholds pixels against the median instead of the
+    mean. Slightly more robust than aHash for skewed brightness distributions, but still
+    structurally weak; rarely used alone
+- diff: difference hash. Encodes whether brightness increases or decreases between adjacent
+    pixels (edges). Excellent for detecting recompressed or slightly altered duplicates
+    (PNG ↔ JPG), robust to brightness shifts, but weak to rotations and large crops.
+- percep: perceptual hash. Uses low-frequency DCT coefficients to encode global image structure.
+    Best general-purpose near-duplicate hash, robust to compression and noise, but can
+    falsely match different images with similar layouts.
+- wave: Haar wavelet hash. Uses Haar wavelets to capture structure across multiple spatial
+    scales. Often more stable than pHash under resizing, but slightly more complex and
+    less standardized across implementations.
+- block: block mean hash. Divides the image into blocks and hashes regional average brightness.
+    A cheap, noise-resistant structural hash, stronger than aHash and good as a first-stage
+    filter, but not robust to large crops or rotations.
+- color: color hash. Encodes the dominant color palette using aggressive color quantization.
+    Not a perceptual hash—used as a fast prefilter or false-positive killer; ignores
+    structure and should not be distance-compared.
+
+To use these hashes, just apply it to a PIL image like this::
+
+    im = requests.get("https://www.python.org/static/img/python-logo.png").content | toImg() # grab PIL image from random url on the internet
+    im | toHash("avg")
+
+If you don't know what to use, just use percep. Code and hash method descriptions courtesy
+of ChatGPT 5.2. Time taken for each type of hash:
+
+- avg: 4.51 ms ± 261 μs
+- med: 4.23 ms ± 259 μs
+- diff: 4.61 ms ± 209 μs
+- percep: 6.3 ms ± 484 μs
+- wave: 5.4 ms ± 178 μs
+- block: 5.4 ms ± 247 μs
+- color: 9.71 ms ± 336 μs"""                                                     # toHash
+        self.method = method                                                     # toHash
+    def __ror__(self, msg):                                                      # toHash
+        method = self.method                                                     # toHash
+        if method is None: m = hashlib.sha256(); m.update(f"{msg}".encode()); return k1lib.encode(m.digest()) # toHash
+        elif method == "avg": return ahash(msg, 8)                               # toHash
+        elif method == "med": return mhash(msg, 8)                               # toHash
+        elif method == "diff": return dhash(msg, 8, vertical=False) # 128bit version: dhash(img, 8, vertical=True), 7.71 ms ± 364 μs # toHash
+        elif method == "percep": return phash(msg, 8, 4, exclude_dc=True)        # toHash
+        elif method == "wave": return whash(msg, 8, 32, levels=1, exclude_dc=True) # toHash
+        elif method == "block": return block_mean_hash(msg, 8)                   # toHash
+        elif method == "color": return color_hash(msg, bins=4)                   # toHash
+        else: raise Exception(f"Does not recognize hash method '{method}'")      # toHash
 import csv                                                                       # toHash
 settings.add("toCsv", k1lib.Settings().add("df", False, "if False, use csv.reader (incrementally), else use pd.read_csv (all at once, might be huge!)"), "conv.toCsv() settings") # toHash
 class toCsv(BaseCli):                                                            # toCsv

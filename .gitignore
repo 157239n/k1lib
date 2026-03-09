@@ -17,5 +17,6 @@ nohup.out
 **.db-shm
 **.db-wal
 k1lib/web/test
+k1_dbs
 
 
