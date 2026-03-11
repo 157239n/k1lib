@@ -897,65 +897,34 @@ the same numeric properties as a normal hash function."""                       
     m = hashlib.sha256(); m.update(f"{msg}".encode()); return int.from_bytes(m.digest(), "big") # hash
 hash(34)                                                                         # hash
 import traceback                                                                 # hash
-try:                                                                             # hash
-    import asyncio, threading, time; from collections import deque               # hash
-    _coroutineQueue = deque() # deque of (idx, coroutine)                        # hash
-    _coroutineAns = dict() # Dict[idx -> coroutine ans]                          # hash
-    _coroutineAutoIdx = 0                                                        # hash
-    def _coroutineResolvingThread():                                             # hash
-        """Thread that resolves futures passed into k1.resolve(), to turn an async function to a completely normal function""" # hash
-        loop = asyncio.new_event_loop()                                          # hash
-        while True:                                                              # hash
-            if len(_coroutineQueue) == 0: time.sleep(0.01)                       # hash
-            else:                                                                # hash
-                idx, coroutine = _coroutineQueue.popleft()                       # hash
-                # important to recover from exceptions                           # hash
-                try: ans = loop.run_until_complete(coroutine); _coroutineAns[idx] = {"type": "success", "ans": ans} # hash
-                except Exception as e: _coroutineAns[idx] = {"type": "failure", "e": f"{e}", "tb": traceback.format_exc()} # hash
-    _coroutineResolvingThread_started = [False]                                  # hash
-    def _start_coroutineResolvingThread():                                       # hash
-        if _coroutineResolvingThread_started[0]: return                          # hash
-        _coroutineResolvingThread_started[0] = True; threading.Thread(target=_coroutineResolvingThread, daemon=True).start() # hash
-    _resolve_err = None                                                          # hash
-except Exception as e: _resolve_err = f"{e}"; _resolve_tb = traceback.format_exc() # hash
-def resolve(coroutine):                                                          # resolve
-    """Resolves coroutines without having to use await.
+_unasync_loop = [None]                                                           # hash
+def _unasync_start():                                                            # _unasync_start
+    if _unasync_loop[0]: return                                                  # _unasync_start
+    _unasync_loop[0] = asyncio.new_event_loop()                                  # _unasync_start
+    def _unasync_worker(): asyncio.set_event_loop(_unasync_loop[0]); _unasync_loop[0].run_forever() # _unasync_start
+    threading.Thread(target=_unasync_worker, daemon=True).start()                # _unasync_start
+def resolve(co):                                                                 # resolve
+    """Strips away async functions.
 Example::
 
-    async def f(x):
-        await asyncio.sleep(1) # simulates heavy processing
-        return x + 4
+    async def someFunc1():
+        await asyncio.sleep(1)
+        return 42
 
-    k1.resolve(f(5))
+    a = k1.resolve(someFunc1()) # hangs until someFunc1() finishes, returns 42
 
-This kinda feels just like ``asyncio.run(f(5))``, so why does this exist?
-Here's the docstring of that method:
+So this is kinda like ``await``, but await requires the outside function to also be
+async, but this doesn't have that limitation. Regarding performance::
 
-.. code-block:: text
+    async def func1(): return 42
+    k1.resolve(func1())           # 15.7 μs ± 158 ns
+    def func2(): return 42
+    func2()                       # 11 ns ± 0.0788 ns
 
-    This function cannot be called when another asyncio event loop is running in the same thread.
-
-    This function always creates a new event loop and closes it at the end. It should be used as a main entry point for asyncio programs, and should ideally only be called once.
-
-This has more limitations that I found annoying to deal with day-to-day. I want
-a function that always work, no matter my setup. So, how this function work
-internally is that it spins up a new (permanent, daemon) thread, creates a new
-event loop in that thread, then whenever a coroutine comes in, it runs it in
-that event loop, returns, then pass control back to whatever thread that called
-:meth:`resolve`. I'm sure this can still be messed up in some way, but seems
-more useful than the builtin method.
-
-This is just meant as a quick and dirty way to force resolving coroutines. Use
-this sparingly, as performance won't be as good as a proper async application.
-If you find yourself using this way too often, then I'd suggest reviewing how
-:mod:`asyncio` works"""                                                          # resolve
-    global _coroutineAutoIdx; _start_coroutineResolvingThread()                  # resolve
-    if _resolve_err: raise Exception(f"k1lib.resolve() not available, encoutered this error while starting up: {_resolve_err}. Traceback:\n{_resolve_tb}") # resolve
-    idx = _coroutineAutoIdx; _coroutineAutoIdx += 1; _coroutineQueue.append([idx, coroutine]) # resolve
-    while idx not in _coroutineAns: time.sleep(0.01)                             # resolve
-    ans = _coroutineAns[idx]; del _coroutineAns[idx]                             # resolve
-    if ans["type"] == "success": return ans["ans"]                               # resolve
-    else: raise Exception(f"Exception occured while trying to k1lib.resolve(): {ans['e']}. Traceback:\n{ans['tb']}") # resolve
+15us overhead seems pretty manageable. It's certainly not a good idea to put this inside
+a hot loop, but why does that anyway. If the loops are truly hot, just move all of them
+in a single async function, then .resolve() the whole thing"""                   # resolve
+    _unasync_start(); return asyncio.run_coroutine_threadsafe(co, _unasync_loop[0]).result() # resolve
 def config(s:str):                                                               # config
     """Convenience method to grab JSON config file from config.mlexps.com"""     # config
     return json.loads("".join(k1lib.cli.cat(f"https://config.mlexps.com/{s}")))  # config

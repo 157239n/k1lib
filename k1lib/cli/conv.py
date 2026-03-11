@@ -427,6 +427,7 @@ You can also save a matplotlib figure by piping in a :class:`matplotlib.figure.F
         if hasattr(path, "_toImg"): return path._toImg(closeFig=self.closeFig, crop=self.crop) # toImg
         if isinstance(path, str):                                                # toImg
             if path.startswith("/dev/video"): return int(path.replace("/dev/video", "")) | toImg() # toImg
+            if path.startswith("data:image/") and "base64" in path: return base64.b64decode(path.split("base64,")[1].strip()) | toImg() # toImg
             path = os.path.expanduser(path)                                      # toImg
             if not os.path.exists(path) and path.startswith("screen"):           # toImg
                 idx = path.replace("screen", "", 1); goodIdx = False;            # toImg
@@ -1374,7 +1375,9 @@ will appear twice in the result, once as itself, but also 'https://www.theguardi
 
 Note that if you really try, you will be able to find an example where this won't
 work, so don't expect 100% reliability. But for ost use cases, this should perform
-splendidly."""                                                                   # toLinks
+splendidly.
+
+:param f: optional filter function before returning"""                           # toLinks
         self.f = f or cli.iden()                                                 # toLinks
         chars = " \t,;" # random characters to split, so that the first instance in a line doesn't overshadow the ones after # toLinks
         self.preprocess = cli.serial(*[(cli.op().split(ch).all() | cli.joinSt()) for ch in settings.toLinks.splitChars]) # toLinks
