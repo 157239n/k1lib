@@ -108,14 +108,15 @@ class LiConn: # does not have restrictions such as changing database latency lik
                 if backupS == "monthly": backupS = "monthly-6"                   # LiConn
                 try: mode = backupS.split("-")[0]; sched = int(backupS.split("-")[1]) # LiConn
                 except e: raise Exception(f"Invalid backup string: '{backupS}', expected something like 'daily-3' or 'weekly-2'") # LiConn
+                lockPrefix = f"sqlite_backup_{fn.replace('/', '_')}_lock"        # LiConn
                 if mode == "daily":                                              # LiConn
-                    @k1.cron(lambda hour: hour == 0, name=f"daily_sqlite_backup_{fn.replace(*'/_').replace(*'._')}", docs=f"Daily sqlite backups for {fn}", daemon=True) # LiConn
+                    @k1.cron(lambda hour: hour == 0, name=f"daily_sqlite_backup_{fn.replace(*'/_').replace(*'._')}", docs=f"Daily sqlite backups for {fn}", daemon=True, ctx=k1.SharedLock(f"{lockPrefix}_daily")) # LiConn
                     def backupDaily(mode=mode, sched=sched): liteBackup_run(s, self, mode, sched) # LiConn
                 elif mode == "weekly":                                           # LiConn
-                    @k1.cron(lambda weekday, hour: weekday == 0 and hour == 0, name=f"weekly_sqlite_backup_{fn.replace(*'/_').replace(*'._')}", docs=f"Weekly sqlite backups for {fn}", daemon=True) # LiConn
+                    @k1.cron(lambda weekday, hour: weekday == 0 and hour == 0, name=f"weekly_sqlite_backup_{fn.replace(*'/_').replace(*'._')}", docs=f"Weekly sqlite backups for {fn}", daemon=True, ctx=k1.SharedLock(f"{lockPrefix}_weekly")) # LiConn
                     def backupWeekly(mode=mode, sched=sched): liteBackup_run(s, self, mode, sched) # LiConn
                 elif mode == "monthly":                                          # LiConn
-                    @k1.cron(lambda day, hour: day == 1 and hour == 0, name=f"monthly_sqlite_backup_{fn.replace(*'/_').replace(*'._')}", docs=f"Monthly sqlite backups for {fn}", daemon=True) # LiConn
+                    @k1.cron(lambda day, hour: day == 1 and hour == 0, name=f"monthly_sqlite_backup_{fn.replace(*'/_').replace(*'._')}", docs=f"Monthly sqlite backups for {fn}", daemon=True, ctx=k1.SharedLock(f"{lockPrefix}_monthly")) # LiConn
                     def backupMonthly(mode=mode, sched=sched): liteBackup_run(s, self, mode, sched) # LiConn
     def backup_manual(self, sched=0): s = liteBackup_init(self.fn); liteBackup_run(s, self, "manual", sched) # LiConn
     def backup_restore(self, bri:int): # br = specific row in table returned by liteBackup_init() to restore that copy from. Runtime ~1ms for very small test databases # LiConn

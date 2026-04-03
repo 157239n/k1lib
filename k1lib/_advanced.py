@@ -40,21 +40,35 @@ class logErr:                                                                   
 Example::
 
     @k1.logErr(logCall=True)
-    def someFunc(x):
+    def someFunc1(x):
+        if x: raise Exception("some exc")
+        return x
+    someFunc1(1)            # will log to sqlite table
+
+    @k1.logErr(logCall=True)
+    async def someFunc2(x): # works with async functions too
         if x: raise Exception("some exc")
         return x
 
-    k1.logErr.table.info() # prints out the table storing the errors/calls
+    def someFunc3(x):
+        if x: raise Exception("some exc")
+        return x
+    try: someFunc3(1)
+    except Exception as e: k1.logErr.rawErr(someFunc3, e) # manually logs errors to sqlite table
+
+    k1.logErr.table # cli.lsext.sqltable object represending a sqlite table of all calls/errors. Do `.info()` to print out overview
 
 :param logCall: whether to log all calls (True), or only log errors (False, default)
 :param hasUserId: if True, grabs the current flask session userId field"""       # logErr
         self.logCall = logCall; self.hasUserId = hasUserId; self.tbl = _log_callTbl() # logErr
     @staticmethod                                                                # logErr
-    def rawErr(func, e):                                                         # logErr
+    def rawErr(func, e, duration=0):                                             # logErr
         """Inserts an error to the central sqlite db storing all errors without wrapping overhead""" # logErr
-        _log_callTbl().insert(funcName=f"{func.__name__}", funcFile=inspect.getfile(func), success=False, time=int(time.time()), errType=f"{type(e)}", errStr=f"{e}", traceback=traceback.format_exc()) # logErr
+        try: funcName = f"{func.__name__}"; funcFile = inspect.getfile(func)     # logErr
+        except: funcName = f"(not available)"; funcFile = f"(not available)"     # logErr
+        _log_callTbl().insert(funcName=funcName, funcFile=funcFile, duration=duration, success=False, time=int(time.time()), userId=None, errType=f"{type(e)}", errStr=f"{e}", traceback=f"{traceback.format_exc()}") # logErr
     def __call__(self, f):                                                       # logErr
-        tbl = self.tbl; logCall = self.logCall; funcName = f"{f.__name__}"; funcFile = inspect.getfile(f) # logErr
+        tbl = self.tbl; logCall = self.logCall; funcName = f"{f.__name__}"; funcFile = inspect.getfile(f); isAsync = inspect.iscoroutinefunction(f) # logErr
         def inner(*args, **kwargs):                                              # logErr
             userId = None                                                        # logErr
             if self.hasUserId: from flask import session; userId = session.get("userId", None) # logErr
@@ -69,7 +83,21 @@ Example::
                     if logCall:          tbl.insert(funcName=funcName, funcFile=funcFile, duration=time.time()-beginTime, success=True,  time=int(time.time()), userId=userId) # logErr
                 else:                    tbl.insert(funcName=funcName, funcFile=funcFile, duration=time.time()-beginTime, success=False, time=int(time.time()), userId=userId, errType=f"{type(e)}", errStr=f"{e}", traceback=tb) # logErr
                 raise e                                                          # logErr
-        return inner                                                             # logErr
+        async def a_inner(*args, **kwargs):                                      # logErr
+            userId = None                                                        # logErr
+            if self.hasUserId: from flask import session; userId = session.get("userId", None) # logErr
+            beginTime = time.time()                                              # logErr
+            try:                                                                 # logErr
+                res = await f(*args, **kwargs)                                   # logErr
+                if logCall:              tbl.insert(funcName=funcName, funcFile=funcFile, duration=time.time()-beginTime, success=True,  time=int(time.time()), userId=userId) # logErr
+                return res                                                       # logErr
+            except Exception as e:                                               # logErr
+                tb = f"{traceback.format_exc()}"                                 # logErr
+                if "ShortCircuit" in tb: # special hidden feature, if causes by an exception with "ShortCircuit" name in it, then it's actually not an error, but just a web handling to get out of nested functions # logErr
+                    if logCall:          tbl.insert(funcName=funcName, funcFile=funcFile, duration=time.time()-beginTime, success=True,  time=int(time.time()), userId=userId) # logErr
+                else:                    tbl.insert(funcName=funcName, funcFile=funcFile, duration=time.time()-beginTime, success=False, time=int(time.time()), userId=userId, errType=f"{type(e)}", errStr=f"{e}", traceback=tb) # logErr
+                raise e                                                          # logErr
+        return a_inner if isAsync else inner                                     # logErr
     @staticmethod                                                                # logErr
     def flask(app, **kwargs):                                                    # logErr
         """Attaches a logErr management plane to a flask app.
@@ -89,14 +117,14 @@ See also: :class:`~k1lib.managePlanes`
         @app.route("/k1/logErr", **kwargs)                                       # logErr
         def k1_logErr():                                                         # logErr
             pre = init._jsDAuto(); ui1 = k1.logErr.table.query("select id, funcName, funcFile, duration, success, time, userId, errType, errStr, traceback from calls order by id desc limit 10000")\
-                | cli.apply(bool, 4) | cli.apply(fmt.time, 3, metric=False) | cli.apply(cli.toIso(k1.settings.timezone) | cli.op().replace(*"T "), 5) | cli.apply(lambda x: fmt.pre(html.escape(x or "")), [8, 9]) | (cli.toJsFunc("term") | cli.grep("${term}")\
+                | cli.apply(bool, 4) | cli.apply(cli.tryout() | cli.aS(fmt.time, metric=False), 3) | cli.apply(cli.tryout() | cli.toIso(k1.settings.timezone) | cli.op().replace(*"T "), 5) | cli.apply(lambda x: fmt.pre(html.escape(x or "")), [8, 9]) | (cli.toJsFunc("term") | cli.grep("${term}")\
                     | viz.Table(["id", "funcName", "funcFile", "duration", "success", "time", "userId", "errType", "errStr", "traceback"], height=650, sortF=True, ondeleteFName=f"{pre}_delete")) | cli.op().interface() | cli.toHtml() # logErr
-            return f"""<div style="display: flex; flex-direction: row; align-items: center"><h1>All logs/err</h1><button style="margin-left: 24px; padding: 8px" onclick="window.location='/k1';">Back</button><button style="margin-left: 24px; padding: 8px" onclick="deleteAll()">Delete all</button></div>
-<div style="overflow-x: auto">{ui1}</div><script>async function {pre}_delete(row, i, e) {{ await fetch(`/k1/logErr/delete/${{row[0]}}`); }}async function {pre}_deleteAll() {{ await fetch(`/k1/logErr/deleteAll`); }}</script>""" # logErr
+            return f"""<div style="display: flex; flex-direction: row; align-items: center"><h1>All logs/err</h1><button style="margin-left: 24px; padding: 8px" onclick="window.location='/k1';">Back</button><button style="margin-left: 24px; padding: 8px" onclick="{pre}_deleteAll()">Delete all</button></div>
+<div style="overflow-x: auto">{ui1}</div><script>async function {pre}_delete(row, i, e) {{ await fetch(`/k1/logErr/delete/${{row[0]}}`); }}async function {pre}_deleteAll() {{ await fetch(`/k1/logErr/deleteAll`); location.reload(); }}</script>""" # logErr
         @app.route("/k1/logErr/delete/<int:rowId>", **kwargs)                    # logErr
         def k1_logErr_delete(rowId): del k1.logErr.table[rowId]; return "ok"     # logErr
         @app.route("/k1/logErr/deleteAll", **kwargs)                             # logErr
-        def k1_logErr_deleteAll(rowId): k1.logErr.table.query("delete from calls"); return "ok" # logErr
+        def k1_logErr_deleteAll(): k1.logErr.table.query("delete from calls"); return "ok" # logErr
     @classmethod                                                                 # logErr
     @property                                                                    # logErr
     def table(cls): return _log_callTbl()                                        # logErr
@@ -193,7 +221,7 @@ class SharedLock:                                                               
         """Inter-process lock using an OS file lock that auto-releases if process crashes.
 Example::
 
-    lock1 = k1.SharedLock("lock1")
+    lock1 = k1.SharedLock("lock1") # actual lock file at "k1_dbs/SharedLock_lock1"
     with lock1:
         pass # do some stuff here
 
@@ -202,7 +230,7 @@ This is not supported on Windows.
 :param name: name of the lock
 :param timeout: if specified, waits until lock is acquired"""                    # SharedLock
         if os.name == "nt": raise RuntimeError("SharedLock is not supported on Windows.") # SharedLock
-        os.makedirs("k1_dbs", exist_ok=True); self.path = f"k1_dbs/{name}"; self.timeout = timeout; self._fd: int | None = None # SharedLock
+        os.makedirs("k1_dbs", exist_ok=True); self.path = f"k1_dbs/SharedLock_{name}"; self.timeout = timeout; self._fd: int | None = None # SharedLock
     def acquire(self, blocking: bool = True) -> bool:                            # SharedLock
         fd = os.open(self.path, os.O_CREAT | os.O_RDWR, 0o644); self._fd = fd; flags = fcntl.LOCK_EX # SharedLock
         if not blocking: flags |= fcntl.LOCK_NB                                  # SharedLock
@@ -279,6 +307,8 @@ If you want to make operations atomic, you can use :class:`SharedLock` like so::
     def __iter__(self):                                                          # SharedDict
         for k in self.s.query("select key from entries"): yield k[0]             # SharedDict
     def __len__(self): return self.s.query("select count(id) from entries")[0][0] # SharedDict
+    def __str__(self): return str(dict(self.items()))                            # SharedDict
+    def __repr__(self): return self.__str__()                                    # SharedDict
 k1lib.settings.add("env", k1.Settings()                                          # SharedDict
                    .add("multiprocess", False, "if True, prints out warnings whenever using operations/settings that does not work for a multiprocess environment, like"), "General environment configs") # SharedDict
 k1lib.settings.add("tempObj", k1.Settings()                                      # SharedDict

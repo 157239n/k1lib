@@ -110,11 +110,9 @@ Submodules
    kcom
    knn
    kop
-   kws
    p5
    schedule
    selector
-   selen
    serpent
    serve
    viz

@@ -26,7 +26,7 @@ if settings.startup.import_optionals:
     import contextlib; from contextlib import contextmanager
     from collections import deque, defaultdict
     from typing import List, Tuple, Callable, Union, Iterator, Set, Dict, Any
-    from k1lib import schedule, graphEqn, mo, knn, fmt, selector, viz, Cbs, _k1a, serve, p5, k1ui, selen, kws, kast, zircon, serpent, trans, kcom, kop, kph, kstr, kgis, web
+    from k1lib import schedule, graphEqn, mo, knn, fmt, selector, viz, Cbs, _k1a, serve, p5, k1ui, kast, zircon, serpent, trans, kcom, kop, kph, kstr, kgis, web
     k1a = _k1a; met = kph.met
     for e in cli._scatteredClis: globals()[e.__name__] = e
     if "py_k1lib_in_applyMp" not in os.environ: k1lib.dontWrap()

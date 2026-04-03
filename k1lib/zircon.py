@@ -17,141 +17,110 @@ can do:
 
 (yes, I'm still addicted to touhou and it's slowly destroying my life)"""
 import k1lib, math, numpy as np, random, base64, json, time, asyncio, threading, traceback, html, uuid; k1 = k1lib
-from collections import defaultdict, deque; import k1lib.cli as cli; import k1lib.kws as kws
+from collections import defaultdict, deque; import k1lib.cli as cli
 websockets = k1lib.dep.websockets
-__all__ = ["newBrowser", "Browser", "Element", "Locator", "BrowserCancel", "BrowserGroup"]
+__all__ = ["resolve", "newBrowser", "Browser", "Element", "Locator", "BrowserCancel", "BrowserGroup", "resolve"]
 autoMsgIdx = k1lib.AutoIncrement(prefix=f"_client_msgIdx_{round(random.random()*1e9)}_{round(time.time())}_")
-_browserAutoIdx = k1lib.AutoIncrement(prefix="_browser_"); _browserAnsD = dict(); _browserQueue = deque()
+_browserAutoIdx = k1lib.AutoIncrement(prefix="_browser_"); _browserAnsD = dict(); _browserQueue = deque(); _mainEventLoop = asyncio.new_event_loop()
 def bThread(): # runs a thread that takes in requests to create new browsers, then spits it out # bThread
-    loop = asyncio.new_event_loop(); asyncio.set_event_loop(loop)                # bThread
+    loop = _mainEventLoop; asyncio.set_event_loop(loop)                          # bThread
     async def inner(): # all future browser async interactions happens in this newly-created event loop, instead of the main loop of the notebooks, and thus all the comms Browsers make # bThread
         while True:                                                              # bThread
-            if len(_browserQueue) == 0: await asyncio.sleep(0.01)                # bThread
+            if len(_browserQueue) == 0: await asyncio.sleep(0.1)                 # bThread
             else: idx, isAsync = _browserQueue.popleft(); _browserAnsD[idx] = ABrowser() if isAsync else Browser() # bThread
     loop.run_until_complete(inner())                                             # bThread
 _bThread_started = [False]                                                       # bThread
 def _start_bThread():                                                            # _start_bThread
     if _bThread_started[0]: return                                               # _start_bThread
     _bThread_started[0] = True; threading.Thread(target=bThread, daemon=True).start() # _start_bThread
-zSett = k1lib.Settings().add("http_server", "https://zircon.aigu.vn").add("ws_server", "wss://wszircon.aigu.vn").add("debug", False) # _start_bThread
-k1lib.settings.add("zircon", zSett, "from k1lib.zircon module");                 # _start_bThread
-from urllib.parse import urlparse; import traceback                              # _start_bThread
-def trun(co): asyncio.create_task(co)                                            # trun
-def newABrowser() -> "ABrowser":                                                 # newABrowser
-    """Creates a new browser"""                                                  # newABrowser
-    websockets.version; _start_bThread(); idx = _browserAutoIdx(); _browserQueue.append([idx, True]) # here to warn users if websockets is not installed # newABrowser
-    while idx not in _browserAnsD: time.sleep(0.01)                              # newABrowser
-    ans = _browserAnsD[idx]; del _browserAnsD[idx]; return ans                   # newABrowser
-class ABrowser:                                                                  # ABrowser
-    def __init__(self):                                                          # ABrowser
-        self.msgD = {}; self.ws = None; self._ext_ws_updated = False; self.extId = None; self.clientId = "_client_" + str(uuid.uuid4()).replace(*"-_") # ABrowser
-        self._closed = False; trun(self._start()); trun(self._ping())            # ABrowser
-    async def close(self): self._closed = True                                   # ABrowser
-    async def _ping(self):                                                       # ABrowser
-        while True:                                                              # ABrowser
-            await asyncio.sleep(1)                                               # ABrowser
-            try:                                                                 # ABrowser
-                if self.ws: await asyncio.wait_for(self.ws.send(json.dumps({"src": "client", "dest": "py", "clientId": self.clientId, "type": "ping"})), timeout=1) # ABrowser
-            except asyncio.TimeoutError: pass                                    # ABrowser
-            except Exception as e: pass                                          # ABrowser
-    async def _start(self):                                                      # ABrowser
-        while not self._closed:                                                  # ABrowser
-            try:                                                                 # ABrowser
-                async with websockets.connect(zSett.ws_server) as ws:            # ABrowser
-                    self.ws = ws                                                 # ABrowser
-                    while not self._closed:                                      # ABrowser
-                        try: msg = json.loads(await asyncio.wait_for(ws.recv(), timeout=10)) # ABrowser
-                        except: break                                            # ABrowser
-                        try:                                                     # ABrowser
-                            if msg["type"] == "ext_ws_updated": self._ext_ws_updated = True; continue # ABrowser
-                            if msg["type"] == "pong": pass                       # ABrowser
-                            if msg["type"] == "cmdPy_res" or msg["type"] == "cmdExt_res": self.msgD[msg["idx"]] = msg # ABrowser
-                        except: pass                                             # ABrowser
-            except: pass                                                         # ABrowser
-    async def _wsGuard(self):                                                    # ABrowser
-        if self.ws is None: # connect guard                                      # ABrowser
-            print("Connecting to server...")                                     # ABrowser
-            while self.ws is None: await asyncio.sleep(0.01)                     # ABrowser
-            print("Connected")                                                   # ABrowser
-    async def _sendPy(self, d):                                                  # ABrowser
-        await self._wsGuard(); msgIdx = autoMsgIdx(); startTime = time.time()    # ABrowser
-        await self.ws.send(json.dumps({"src": "client", "dest": "py", "clientId": self.clientId, "type": "cmdPy", "idx": msgIdx, **d})) # ABrowser
-        while msgIdx not in self.msgD:                                           # ABrowser
-            await asyncio.sleep(0.01)                                            # ABrowser
-            if time.time() - startTime > 20: raise Exception("._sendPy() timed out") # ABrowser
-        msg = self.msgD[msgIdx]; del self.msgD[msgIdx]; return k1.raiseEx(Exception(msg.get("reason", "Failed, no reason logged"))) if "success" in msg and not msg["success"] else msg # ABrowser
-    async def _sendExt(self, d) -> "res": # always return if successful. If not successful then will throw an error instead! # ABrowser
-        await self._wsGuard(); msgIdx = autoMsgIdx(); startTime = time.time() - 30 # ABrowser
-        while msgIdx not in self.msgD:                                           # ABrowser
-            await asyncio.sleep(0.01) # resends if return message is not found for quite a while. kws module should have handled # ABrowser
-            if time.time() - startTime > 20: await self.ws.send(json.dumps({"src": "client", "dest": "py", "clientId": self.clientId, "type": "cmdExt", "idx": msgIdx, **d})); startTime = time.time() # ABrowser
-        msg = self.msgD[msgIdx]; del self.msgD[msgIdx]; return k1.raiseEx(Exception(msg.get("reason", "Failed, no reason logged") + "\nStack trace:\n\n" + msg.get("stack", "(no stack found)"))) if "success" in msg and not msg["success"] else msg # ABrowser
-    async def scan(self, groupPath:"str|list[str]"=None):                        # ABrowser
-        res = (await self._sendPy({"cmd": "scan"}))["exts"].items() | cli.contains("tabData", 1) | cli.deref() # ABrowser
-        if groupPath is None: return res | cli.toDict()                          # ABrowser
-        if isinstance(groupPath, str): return res | cli.filt(lambda x: groupPath in x["tabData"]["groupPaths"], 1) | cli.toDict() # ABrowser
-        else:                                                                    # ABrowser
-            def f(x):                                                            # ABrowser
-                gps = set(x["tabData"]["groupPaths"])                            # ABrowser
-                for gp in groupPath:                                             # ABrowser
-                    if gp in gps: return True                                    # ABrowser
-            return res | cli.filt(f, 1) | cli.toDict()                           # ABrowser
-    async def pickExt(self, extId:str): self.extId = extId; res = await self._sendPy({"cmd": "pickExt", "extId": extId}); return self # ABrowser
-    async def pickExtFromGroup(self, groupName:str): return await self.pickExt((await self.scan(groupName)).keys() | cli.item()) # ABrowser
-    @property                                                                    # ABrowser
-    async def tabData(self): return (await self._sendPy({"cmd": "tabData"}))["tabData"] # TODO # ABrowser
-    async def goto(self, url, timeout=15):                                       # ABrowser
-        self._ext_ws_updated = False; await self._wsGuard() # wait until page has reloaded, and extension reconnected, or 10s has passed # ABrowser
-        res = await self.ws.send(json.dumps({"src": "client", "dest": "py", "clientId": self.clientId, "idx": 0, "type": "cmdExt", "cmd": "goto", "url": url})); startTime = time.time() # ABrowser
-        while not self._ext_ws_updated:                                          # ABrowser
-            await asyncio.sleep(0.1)                                             # ABrowser
-            if time.time() - startTime > timeout: print(f"{timeout}s up, breaking..."); break # ABrowser
-        return res                                                               # ABrowser
-    def _unwrap(self, o): # unwraps to Element/RemoteStore when applicable       # ABrowser
-        if isinstance(o, dict):                                                  # ABrowser
-            if o.get("type", "") == "_zircon_local_":                            # ABrowser
-                if o.get("isElement", False): return AElement(self, o)           # ABrowser
-                else: return ARemoteStore(self, o)                               # ABrowser
-            elif o.get("type", "") == "_zircon_const_": return ARemoteStore(self, o) # ABrowser
-            else: return {k:self._unwrap(v) for k,v in o.items()}                # ABrowser
-        elif isinstance(o, list): return [self._unwrap(v) for v in o]            # ABrowser
-        else: return o                                                           # ABrowser
-    def _wrap(self, o): # wraps to raw json                                      # ABrowser
-        if isinstance(o, (ARemoteStore, RemoteStore)): return o._obj             # ABrowser
-        if isinstance(o, list): return [self._wrap(v) for v in o]                # ABrowser
-        if isinstance(o, dict): return {k:self._wrap(v) for k,v in o.items()}    # ABrowser
-        return o                                                                 # ABrowser
-    async def querySelector(self, selector: str): return self._unwrap((await self._sendExt({"cmd": "call", "obj": {"type": "_zircon_temp_", "prev": { "obj": {"type": "_zircon_const_", "idx": "document"}, "attr": "querySelector" } }, "args": [selector]}))["res"]) # ABrowser
-    async def querySelectorAll(self, selector: str): return self._unwrap((await self._sendExt({"cmd": "call", "obj": {"type": "_zircon_temp_", "prev": { "obj": {"type": "_zircon_const_", "idx": "document"}, "attr": "querySelectorAll" } }, "args": [selector]}))["res"]) # ABrowser
-    async def elementFromPoint(self, x, y): return self._unwrap((await self._sendExt({"cmd": "call", "obj": {"type": "_zircon_temp_", "prev": { "obj": {"type": "_zircon_const_", "idx": "document"}, "attr": "elementFromPoint" } }, "args": [x, y]}))["res"]) # ABrowser
-    @property                                                                    # ABrowser
-    async def document(self): return ARemoteStore(self, {"type": "_zircon_const_", "idx": "document"}) # ABrowser
-    @property                                                                    # ABrowser
-    async def window(self): return ARemoteStore(self, {"type": "_zircon_const_", "idx": "window"}) # ABrowser
-    async def screenshot(self): return (await self._sendExt({"cmd": "screenshot"}))["image"] | cli.toImg() # ABrowser
-    async def locate(self, s:str) -> "list[Element]": return [self._addE(d) for d in await self._sendExt({"cmd": "locate", "selector": None, "s": s}) if d["tag"].lower() != "body"] # ABrowser
-    async def locate2(self, locator:"Locator", depth:int=20, width:int=100): return {k:self._addE(v) for k,v in (await self._sendExt({"cmd": "locate2", "selector": None, "locator": locator.json(), "depth": depth, "width": width})).items()} # ABrowser
-    async def scrollDown(self, timeout=120, step=3000, sleep=5):                 # ABrowser
-        """Scrolls <step> pixels down continuously every <sleep> seconds, until can't, or time exceeds <timeout>""" # ABrowser
-        window = await self.window(); startTime = time.time()                    # ABrowser
-        newY = float("-inf")                                                     # ABrowser
-        while time.time() - startTime < timeout:                                 # ABrowser
-            await window.func("scrollBy", [0, step]); await asyncio.sleep(sleep) # ABrowser
-            oldY = newY; newY = await window.value("scrollY")                    # ABrowser
-            if newY <= oldY: break                                               # ABrowser
-    def _toLinks(self, f): return k1.resolve(self.querySelector("body")) | cli.toLinks(f) # ABrowser
-    def __repr__(self): tabData = k1.resolve(self.tabData); return f"<ABrowser extId={self.extId} groups={tabData.get('groupPaths', 'null')} title='{tabData.get('title', 'null')}' url={tabData.get('url', 'null')}>" # ABrowser
-from urllib.parse import urlparse; import traceback                              # ABrowser
-def trun(co): asyncio.create_task(co)                                            # trun
+def resolve(co):                                                                 # resolve
+    """Resolves any coroutine using zircon's internal event loop"""              # resolve
+    return k1.resolve(co, _mainEventLoop)                                        # resolve
+zSett = k1.Settings().add("http_server", "https://zircon.aigu.vn").add("ws_server", "wss://wszircon.aigu.vn")\
+    .add("debug", False, "whether to print ouf whenever a RemoteStore or Element use __getattr__, __setattr__ and __call__")\
+    .add("stdout", True, "whether to print out status updates for each Browser")\
+    .add("sleepTime", 0.01, "How many seconds to sleep when checking whether extension has replied. Too low you get 'thundering herd' when controlling 100-1000s of browsers. Too high and your python process feels sluggish to use") # resolve
+k1.settings.add("zircon", zSett, "from k1lib.zircon module");                    # resolve
+from urllib.parse import urlparse; import traceback                              # resolve
+def trun(co): return asyncio.create_task(co)                                     # trun
 def newBrowser() -> "Browser":                                                   # newBrowser
     """Creates a new browser"""                                                  # newBrowser
-    websockets.version; _start_bThread(); idx = _browserAutoIdx(); _browserQueue.append([idx, False]) # here to warn users if websockets is not installed # newBrowser
-    while idx not in _browserAnsD: time.sleep(0.01)                              # newBrowser
+    websockets.version; _start_bThread(); idx = _browserAutoIdx(); _browserQueue.append([idx, 0]) # here to warn users if websockets is not installed # newBrowser
+    while idx not in _browserAnsD: time.sleep(0.1)                               # newBrowser
     ans = _browserAnsD[idx]; del _browserAnsD[idx]; return ans                   # newBrowser
-class Browser(ABrowser):                                                         # Browser
-    def __init__(self): self._b = ABrowser()                                     # Browser
-    def close(self): unasyncR(self._b.close())                                   # Browser
-    def scan(self, groupPath:"str|list[str]"=None):                              # Browser
+class Browser:                                                                   # Browser
+    def __init__(self):                                                          # Browser
+        """Allows control over a regular chrome browser tab.
+Example::
+
+    # point to your particular server
+    settings.zircon.http_server = "https://zircon.mlexps.com"
+    settings.zircon.ws_server = "wss://wszircon.mlexps.com"
+
+    # setting up
+    b = zircon.newBrowser(); b.scan()                      # scan for browser tabs to take over
+    b.pickExt("_ext_4a9d7017_99ca_43c0_9961_e89608ba7624") # pick a particular extension id from .scan()
+
+    # using
+    b.goto("https://google.com")                                              # go to a particular page
+    b.querySelector("textarea").inputText("Cheese", {"enterAfterType": True}) # searches for "Cheese"
+    b.overlay()                                                               # inject grid overlay over the page, to help automate with LLMs
+    b.screenshot()                                                            # returns PIL image
+
+    b.goto("https://en.wikipedia.org/wiki/Cheese")
+    e = b.querySelector("#mw-content-text")
+    e.tagPath, e.idPath, e.classPath                  # css selector path to this particular element
+    e.classPath, e.textContent, e.innerHTML, e.parent # access normal element variables
+    e.style.background = "green"                      # setting any element
+    e.window.outerWidth, e.document.URL               # access any variables in window/document/navigator/location/history
+    e | toLinks(); b | toLinks()                      # grab all urls from the element or entire document
+    b.close()                                         # disconnects from C2 server
+
+More examples available at https://mlexps.com/other/62-zircon-new/"""            # Browser
+        self.msgD = {}; self.ws = None; self._ext_ws_updated = False; self.extId = None; self.clientId = "_client_" + str(uuid.uuid4()).replace(*"-_") # Browser
+        self._closed = False; trun(self._start()); trun(self._ping())            # Browser
+    def close(self): self._closed = True                                         # Browser
+    def __del__(self): self.close()                                              # Browser
+    async def _ping(self):                                                       # Browser
+        while True:                                                              # Browser
+            await asyncio.sleep(1)                                               # Browser
+            try:                                                                 # Browser
+                if self.ws: await asyncio.wait_for(self.ws.send(json.dumps({"src": "client", "dest": "py", "clientId": self.clientId, "type": "ping"})), timeout=1) # Browser
+            except asyncio.TimeoutError: pass                                    # Browser
+            except Exception as e: pass                                          # Browser
+    async def _start(self):                                                      # Browser
+        while not self._closed:                                                  # Browser
+            try:                                                                 # Browser
+                async with websockets.connect(zSett.ws_server) as ws:            # Browser
+                    self.ws = ws                                                 # Browser
+                    while not self._closed:                                      # Browser
+                        try: msg = json.loads(await asyncio.wait_for(ws.recv(), timeout=10)) # Browser
+                        except: break                                            # Browser
+                        try:                                                     # Browser
+                            if msg["type"] == "ext_ws_updated": self._ext_ws_updated = True; continue # Browser
+                            if msg["type"] == "pong": pass                       # Browser
+                            if msg["type"] == "cmdPy_res" or msg["type"] == "cmdExt_res": self.msgD[msg["idx"]] = msg # Browser
+                        except: pass                                             # Browser
+            except: pass                                                         # Browser
+    async def _wsGuard(self):                                                    # Browser
+        if self.ws is None: # connect guard                                      # Browser
+            if zSett.stdout: print("Connecting to server...")                    # Browser
+            while self.ws is None: await asyncio.sleep(zSett.sleepTime)          # Browser
+            if zSett.stdout: print("Connected")                                  # Browser
+    async def _sendPy(self, d):                                                  # Browser
+        await self._wsGuard(); msgIdx = autoMsgIdx(); startTime = time.time()    # Browser
+        await self.ws.send(json.dumps({"src": "client", "dest": "py", "clientId": self.clientId, "type": "cmdPy", "idx": msgIdx, **d})) # Browser
+        while msgIdx not in self.msgD:                                           # Browser
+            await asyncio.sleep(zSett.sleepTime)                                 # Browser
+            if time.time() - startTime > 20: raise Exception("._sendPy() timed out") # Browser
+        msg = self.msgD[msgIdx]; del self.msgD[msgIdx]; return k1.raiseEx(Exception(msg.get("reason", "Failed, no reason logged"))) if "success" in msg and not msg["success"] else msg # Browser
+    async def _sendExt(self, d) -> "res": # always return if successful. If not successful then will throw an error instead! # Browser
+        await self._wsGuard(); msgIdx = autoMsgIdx(); startTime = time.time() - 30 # Browser
+        while msgIdx not in self.msgD:                                           # Browser
+            await asyncio.sleep(zSett.sleepTime) # resends if return message is not found for quite a while. kws module should have handled # Browser
+            if time.time() - startTime > 20: await self.ws.send(json.dumps({"src": "client", "dest": "py", "clientId": self.clientId, "type": "cmdExt", "idx": msgIdx, **d})); startTime = time.time() # Browser
+        msg = self.msgD[msgIdx]; del self.msgD[msgIdx]; return k1.raiseEx(Exception(msg.get("reason", "Failed, no reason logged") + "\nStack trace:\n\n" + msg.get("stack", "(no stack found)"))) if "success" in msg and not msg["success"] else msg # Browser
+    async def a_scan(self, groupPath:"str|list[str]"=None, conflictDuration:int=0): # Browser
         """Scans for all attached Extensions in the system.
 Example::
 
@@ -178,13 +147,23 @@ The result might look something like this:
       'lastPing': 1701587171.2784846}}
 
 :param groupPath: (optional) If specified, only returns metadata for Extensions that
-    have the specified group"""                                                  # Browser
-        return unasyncR(self._b.scan(groupPath))                                 # Browser
-    def pickExt(self, extId:str): k1.resolve(self._b.pickExt(extId)); return self # Browser
-    def pickExtFromGroup(self, groupName:str): return unasyncR(self._b.pickExtFromGroup(groupName)) # Browser
+    have the specified group
+:param conflictDuration: (optional) if specified, then intentionally filter out any ext that has recently been commanded""" # Browser
+        f = cli.filt(lambda x: (time.time() - x["lastUpdated"]) > conflictDuration, 1) if conflictDuration else cli.iden() # Browser
+        res = (await self._sendPy({"cmd": "scan"}))["exts"].items() | cli.contains("tabData", 1) | f | cli.deref() # Browser
+        if groupPath is None: return res | cli.toDict()                          # Browser
+        if isinstance(groupPath, str): return res | cli.filt(lambda x: groupPath in x["tabData"]["groupPaths"], 1) | cli.toDict() # Browser
+        else:                                                                    # Browser
+            def f(x):                                                            # Browser
+                gps = x["tabData"]["groupPaths"]                                 # Browser
+                for gp in groupPath:                                             # Browser
+                    if gp in gps: return True                                    # Browser
+            return res | cli.filt(f, 1) | cli.toDict()                           # Browser
+    async def a_pickExt(self, extId:str): self.extId = extId; res = await self._sendPy({"cmd": "pickExt", "extId": extId}); return self # Browser
+    async def a_pickExtFromGroup(self, groupName:str): return await self.a_pickExt((await self.a_scan(groupName, 10)).keys() | cli.item()) # Browser
     @property                                                                    # Browser
-    def tabData(self): return unasyncR(self._b.tabData) or {}                    # Browser
-    def goto(self, url, timeout=15):                                             # Browser
+    def tabData(self): return resolve(self._sendPy({"cmd": "tabData"}))["tabData"] or {} # Browser
+    async def a_goto(self, url, timeout=15):                                     # Browser
         """Goes to a particular url. Typical times for this to be waiting for
 page change confirmation:
 
@@ -200,101 +179,186 @@ Quite a distribution. So I figure 15s would be a reasonable middle ground
 :param timeout: will hang until received confirmation that the extension has been
     loaded on the new page. If has not received anything after this many seconds,
     will return regardless"""                                                    # Browser
-        return unasyncR(self._b.goto(url, timeout))                              # Browser
-    def querySelector(self, selector): return unasyncR(self._b.querySelector(selector)) # Browser
-    def querySelectorAll(self, selector): return unasyncR(self._b.querySelectorAll(selector)) # Browser
-    def elementFromPoint(self, x, y): return unasyncR(self._b.elementFromPoint(x, y)) # Browser
+        self._ext_ws_updated = False; await self._wsGuard() # wait until page has reloaded, and extension reconnected, or 15s has passed # Browser
+        res = await self.ws.send(json.dumps({"src": "client", "dest": "py", "clientId": self.clientId, "idx": 0, "type": "cmdExt", "cmd": "goto", "url": url})); startTime = time.time() # Browser
+        while not self._ext_ws_updated:                                          # Browser
+            await asyncio.sleep(0.2)                                             # Browser
+            if time.time() - startTime > timeout: print(f"{timeout}s up, breaking..."); break # Browser
+        return res                                                               # Browser
+    def _unwrap(self, o): # unwraps to Element/RemoteStore when applicable       # Browser
+        if isinstance(o, dict):                                                  # Browser
+            if o.get("type", "") == "_zircon_local_":                            # Browser
+                if o.get("isElement", False): return Element(self, o)            # Browser
+                else: return RemoteStore(self, o)                                # Browser
+            elif o.get("type", "") == "_zircon_const_": return RemoteStore(self, o) # Browser
+            else: return {k:self._unwrap(v) for k,v in o.items()}                # Browser
+        elif isinstance(o, list): return [self._unwrap(v) for v in o]            # Browser
+        else: return o                                                           # Browser
+    def _wrap(self, o): # wraps to raw json                                      # Browser
+        if isinstance(o, RemoteStore): return o._obj                             # Browser
+        if isinstance(o, list): return [self._wrap(v) for v in o]                # Browser
+        if isinstance(o, dict): return {k:self._wrap(v) for k,v in o.items()}    # Browser
+        return o                                                                 # Browser
+    def _sendCall(self, constIdx:str, func:str, args:list): # constIdx.func(...args), like document.querySelector("#main"), mainly convenience method # Browser
+        return self._sendExt({"cmd": "call", "obj": {"type": "_zircon_temp_", "prev": { "obj": {"type": "_zircon_const_", "idx": constIdx}, "attr": func } }, "args": args}) # Browser
+    async def a_window_new(self, url):                                           # Browser
+        """Creates a new browser window and navigate to the specified url"""     # Browser
+        return await self._sendExt({"cmd": "window_new", "url": url})            # Browser
+    async def a_window_rm(self):                                                 # Browser
+        """Removes the currently selected tab"""                                 # Browser
+        return await self._sendExt({"cmd": "window_rm"})                         # Browser
+    async def a_querySelector(self, selector): return self._unwrap((await self._sendCall("document", "querySelector", [selector]))["res"]) # Browser
+    async def a_querySelectorAll(self, selector): return self._unwrap((await self._sendCall("document", "querySelectorAll", [selector]))["res"]) # Browser
+    async def a_elementFromPoint(self, x, y): return self._unwrap((await self._sendCall("document", "elementFromPoint", [x, y]))["res"]) # Browser
     @property                                                                    # Browser
-    def document(self): return unasyncR(self._b.document)                        # Browser
+    def document(self): return RemoteStore(self, {"type": "_zircon_const_", "idx": "document"}) # Browser
     @property                                                                    # Browser
-    def window(self): return unasyncR(self._b.window)                            # Browser
-    def screenshot(self): return unasyncR(self._b.screenshot())                  # Browser
-    def scrollDown(self, timeout=120, step=3000, sleep=5):                       # Browser
-        """Scrolls <step> pixels down continuously every <sleep> seconds, until can't, or time exceeds <timeout>""" # Browser
-        unasyncR(self._b.scrollDown(timeout, step, sleep))                       # Browser
-    def _toLinks(self, f): return self._b._toLinks(f)                            # Browser
-    def __repr__(self): return self._b.__repr__().replace("ABrowser", "Browser") # Browser
-class ARemoteStore:                                                              # ARemoteStore
-    def __init__(self, abrowser, obj): self._browser = abrowser; self._obj = obj # ARemoteStore
-    async def _getattr(self, attr): return self._browser._unwrap((await self._browser._sendExt({"cmd": "getattr", "obj": self._obj, "attr": attr})).get("res", None)) # ARemoteStore
-    def __getattr__(self, attr):                                                 # ARemoteStore
-        if attr.startswith("_"): raise AttributeError(attr)                      # ARemoteStore
-        return self._getattr(attr)                                               # ARemoteStore
-    async def _setattr(self, attr, value): return await self._browser._sendExt({"cmd": "setattr", "obj": self._obj, "attr": attr, "value": value}) # ARemoteStore
-    def __setattr__(self, attr, value):                                          # ARemoteStore
-        if attr.startswith("_"): super().__setattr__(attr, value); return        # ARemoteStore
-        return k1.resolve(self._setattr(attr, value))                            # ARemoteStore
-    async def _call(self, args): return self._browser._unwrap((await self._browser._sendExt({"cmd": "call", "obj": self._obj, "args": self._browser._wrap(args)})).get("res", None)) # ARemoteStore
-    def __call__(self, *args): return self._call(args)                           # ARemoteStore
-    def __repr__(self):                                                          # ARemoteStore
-        idx = "unknown"                                                          # ARemoteStore
-        if self._obj["type"] == "_zircon_const_": idx = f"const:{self._obj['idx']}" # ARemoteStore
-        if self._obj["type"] == "_zircon_local_": idx = f"local class={self._obj['klass']} idx={self._obj['idx']}" # ARemoteStore
-        return f"<ARemoteStore {idx}>"                                           # ARemoteStore
+    def window(self): return RemoteStore(self, {"type": "_zircon_const_", "idx": "window"}) # Browser
+    @property                                                                    # Browser
+    def location(self): return RemoteStore(self, {"type": "_zircon_const_", "idx": "location"}) # Browser
+    @property                                                                    # Browser
+    def history(self): return RemoteStore(self, {"type": "_zircon_const_", "idx": "history"}) # Browser
+    @property                                                                    # Browser
+    def navigator(self): return RemoteStore(self, {"type": "_zircon_const_", "idx": "navigator"}) # Browser
+    async def a_screenshot(self): return (await self._sendExt({"cmd": "screenshot"}))["image"] | cli.toImg() # Browser
+    async def a_longScroll(self, x, y, sleep, duration):                         # Browser
+        """Scrolls <x,y> pixels (+y = down) continuously every <sleep> seconds, until can't, or time exceeds <duration>""" # Browser
+        startTime = time.time(); newY = float("-inf")                            # Browser
+        while time.time() - startTime < duration:                                # Browser
+            await self._sendCall("window", "scrollBy", [0, step]); await asyncio.sleep(sleep); oldY = newY; newY = await self.window._getattr("scrollY") # Browser
+            if newY <= oldY: break # can't keep scrolling down any further, so breaking... # Browser
+    async def a_overlay(self, mode:int=2, opts:dict=None):                       # Browser
+        """Draws overlay to the current page. There are 2 modes: drawing a 9-chunk coarse
+grid (mode=1), and draw a detailed 15-points coordinate system (mode=0), or draw both (mode=2).
+
+.. admonition:: 9-chunk coarse grid
+    Draws a 3x3 screen division overlay.
+
+    The screen is divided into nine equal rectangular regions using two
+    vertical and two horizontal lines. Each region is labeled with a
+    number from 0 to 8 (left-to-right, top-to-bottom).
+
+    Options:
+    - lineColor (str): css color used for grid lines and chunk numbers. Can be "red" (default), "rgba(255,0,0,0.8)", etc
+    - lineThickness (int): thickness of grid lines in pixels (default 4)
+    - textSize (int): font size of the chunk numbers (default 50)
+
+.. admonition:: 15-points fine coordinate system
+    Draws a uniform grid of points or coordinate labels across the screen.
+
+    The screen is divided into rows × columns equal boxes. A point or text
+    label is drawn at the center of each box.
+
+    Options:
+    - rows (int): number of rows in the grid, default 15
+    - columns (int): number of columns in the grid, default 15
+    - mode (str): rendering mode, either "points" (drawing circular points), or "text" (draw coordinate labels, default)
+    - color (str): color used for points/text, default "green"
+    - size (int): point radius or font size in pixels
+    - numbering (str): coordinate numbering strategy, either "global" (default) or "perChunk"
+"""                                                                              # Browser
+        return await self._sendExt({"cmd": "overlay", "mode": mode, "opts": opts or {}}) # Browser
+    async def a_overlay_rm(self):                                                # Browser
+        """Removes all overlays"""                                               # Browser
+        return await self._sendExt({"cmd": "overlay_rm"})                        # Browser
+    def _toLinks(self, f): return self.querySelector("body") | cli.toLinks(f)    # Browser
+    def __repr__(self): return f"<Browser extId={self.extId} groups={self.tabData.get('groupPaths', 'null')} title='{self.tabData.get('title', 'null')}' url={self.tabData.get('url', 'null')}>" # Browser # Browser
+import inspect                                                                   # Browser
+def patch_async_convenience_methods(cls, prefix="a_", resolver=None, overwrite=False): # one-off chatgpt code: https://chatgpt.com/c/69b15cb4-e914-839d-a9ee-0ef2e0949c3a # patch_async_convenience_methods
+    if resolver is None: raise ValueError("resolver required")                   # patch_async_convenience_methods
+    for name, attr in list(vars(cls).items()):                                   # patch_async_convenience_methods
+        if not name.startswith(prefix) or not inspect.iscoroutinefunction(attr): continue # patch_async_convenience_methods
+        sync_name = name[len(prefix):]                                           # patch_async_convenience_methods
+        if not sync_name or (not overwrite and hasattr(cls, sync_name)): continue # patch_async_convenience_methods
+        sig = inspect.signature(attr); params = list(sig.parameters.values())    # patch_async_convenience_methods
+        if not params: raise TypeError(f"{name} needs receiver")                 # patch_async_convenience_methods
+        recv = params[0].name; env = {"__resolver": resolver}; parts = []; last = None; star = False # patch_async_convenience_methods
+        for i,p in enumerate(params):                                            # patch_async_convenience_methods
+            if last is inspect.Parameter.POSITIONAL_ONLY and p.kind is not inspect.Parameter.POSITIONAL_ONLY: parts.append("/") # patch_async_convenience_methods
+            if p.kind is inspect.Parameter.KEYWORD_ONLY and not star and not any(x.kind is inspect.Parameter.VAR_POSITIONAL for x in params): parts.append("*"); star=True # patch_async_convenience_methods
+            s=p.name                                                             # patch_async_convenience_methods
+            if p.kind is inspect.Parameter.VAR_POSITIONAL: s="*"+s               # patch_async_convenience_methods
+            elif p.kind is inspect.Parameter.VAR_KEYWORD: s="**"+s               # patch_async_convenience_methods
+            if p.annotation is not inspect._empty: k=f"__a{i}"; env[k]=p.annotation; s+=f": {k}" # patch_async_convenience_methods
+            if p.default is not inspect._empty: k=f"__d{i}"; env[k]=p.default; s+=f" = {k}" # patch_async_convenience_methods
+            parts.append(s); last=p.kind                                         # patch_async_convenience_methods
+        if params and params[-1].kind is inspect.Parameter.POSITIONAL_ONLY: parts.append("/") # patch_async_convenience_methods
+        params_src=", ".join(parts); call=[]                                     # patch_async_convenience_methods
+        for p in params[1:]:                                                     # patch_async_convenience_methods
+            if p.kind in (inspect.Parameter.POSITIONAL_ONLY,inspect.Parameter.POSITIONAL_OR_KEYWORD): call.append(p.name) # patch_async_convenience_methods
+            elif p.kind is inspect.Parameter.VAR_POSITIONAL: call.append("*"+p.name) # patch_async_convenience_methods
+            elif p.kind is inspect.Parameter.KEYWORD_ONLY: call.append(f"{p.name}={p.name}") # patch_async_convenience_methods
+            elif p.kind is inspect.Parameter.VAR_KEYWORD: call.append("**"+p.name) # patch_async_convenience_methods
+        call_src=", ".join(call); ret=""                                         # patch_async_convenience_methods
+        if sig.return_annotation is not inspect._empty: env["__ar"]=sig.return_annotation; ret=" -> __ar" # patch_async_convenience_methods
+        doc=(attr.__doc__ or "").replace('"""','\\"""'); src=f'def {sync_name}({params_src}){ret}:\n    """{doc}"""\n    return __resolver({recv}.{name}({call_src}))'; ns={}; exec(src,env,ns); f=ns[sync_name] # patch_async_convenience_methods
+        f.__name__=sync_name; f.__qualname__=attr.__qualname__.rsplit(".",1)[0]+"."+sync_name; f.__module__=attr.__module__; f.__doc__=attr.__doc__; f.__wrapped__=attr; setattr(cls,sync_name,f) # patch_async_convenience_methods
+    return cls                                                                   # patch_async_convenience_methods
+patch_async_convenience_methods(Browser, resolver=resolve)                       # patch_async_convenience_methods
 class RemoteStore:                                                               # RemoteStore
-    def __init__(self, abrowser, obj): self._rs = ARemoteStore(abrowser, obj)    # RemoteStore
+    def __init__(self, browser, obj): self._browser = browser; self._obj = obj   # RemoteStore
+    async def _getattr(self, attr): return self._browser._unwrap((await self._browser._sendExt({"cmd": "getattr", "obj": self._obj, "attr": attr})).get("res", None)) # RemoteStore
     def __getattr__(self, attr):                                                 # RemoteStore
         if attr.startswith("_"): raise AttributeError(attr)                      # RemoteStore
-        return unasyncR(self._rs._getattr(attr))                                 # RemoteStore
+        if zSett.debug: print(f"element.__getattr__({attr})")                    # RemoteStore
+        return resolve(self._getattr(attr))                                      # RemoteStore
+    async def _setattr(self, attr, value): return await self._browser._sendExt({"cmd": "setattr", "obj": self._obj, "attr": attr, "value": value}) # RemoteStore
     def __setattr__(self, attr, value):                                          # RemoteStore
         if attr.startswith("_"): super().__setattr__(attr, value); return        # RemoteStore
-        return unasyncR(self._rs._setattr(attr, value))                          # RemoteStore
-    def __call__(self, *args): return unasyncR(self._rs._call(args))             # RemoteStore
-    def __repr__(self): return self._rs.__repr__().replace("ARemoteStore", "RemoteStore") # RemoteStore
-def unasync(o):                                                                  # unasync
-    if isinstance(o, AElement): return Element(o._browser, o._obj)               # unasync
-    if isinstance(o, ARemoteStore): return RemoteStore(o._browser, o._obj)       # unasync
-    if isinstance(o, list): return [unasync(x) for x in o]                       # unasync
-    if isinstance(o, dict): return {k: unasync(v) for k, v in o.items()}         # unasync
-    return o                                                                     # unasync
-def unasyncR(o): return unasync(k1.resolve(o))                                   # unasyncR
-inf = float("inf")                                                               # unasyncR
-class AElement(ARemoteStore):                                                    # AElement
-    def __init__(self, abrowser, obj:dict): super().__init__(abrowser, obj)      # AElement
-    async def inputText(self, text, opts=None): return (await self._browser._sendExt({"cmd": "elem_inputText", "obj": self._obj, "text": text, "opts": opts or {}}))["res"] # AElement
-    async def _selectorPath(self, cmd): return self._browser._unwrap((await self._browser._sendExt({"cmd": cmd, "obj": self._obj}))["path"]) # get uniquely identifying css selector path (? not sure, long time ago) # AElement
-    @property                                                                    # AElement
-    async def tagPath(self): return await self._selectorPath("tagPath")          # AElement
-    @property                                                                    # AElement
-    async def idPath(self): return await self._selectorPath("idPath")            # AElement
-    @property                                                                    # AElement
-    async def classPath(self): return await self._selectorPath("classPath")      # AElement
-    def _toLinks(self, f):                                                       # AElement
-        url = k1.resolve(self._browser.tabData)["url"]; a = urlparse(url); baseUrl = f"{a.scheme}://{a.netloc}" # AElement
-        return [k1.resolve(self.innerHTML)] | cli.toLinks(f) | cli.apply(lambda x: f"{baseUrl}{x}" if x.startswith("/") else x)\
-            | cli.apply(lambda x: f"{url}{x}" if x.startswith("#") else x) | cli.aS(set) | cli.sort(None, False) | cli.aS(list) # AElement
-    def __repr__(self):                                                          # AElement
-        try:                                                                     # AElement
-            d = self._obj;                                                       # AElement
-            if "coords" in d: return f"""<AElement {d['tag']}/{d['klass']} id="{d['id']}" #child={d['nChildren']} class="{d['className']}" %parent={round(d['boundedCoords']['areaRatio']['parent']*100)} %screen={round(d['boundedCoords']['areaRatio']['screen']*100)} />""" # AElement
-            else: return f"""<AElement {d['tag']}/{d['klass']} id="{d['id']}" #child={d['nChildren']} class="{d['className']}" />""" # AElement
-        except: pass                                                             # AElement
-        return f"<AElement extId={self.browser.extId}/>"                         # AElement
-    def _repr_html_(self):                                                       # AElement
-        try:                                                                     # AElement
-            d = self._obj; im = ""                                               # AElement
-            if "coords" in d:                                                    # AElement
-                s = 400/d["screen"]["w"]; p5 = k1lib.p5; p5.newSketch(d["screen"]["w"]*s+1, d["screen"]["h"]*s+1, flip=False) # AElement
-                p5.stroke(0, 0, 255); p5.rect(0, 0, d["screen"]["w"]*s, d["screen"]["h"]*s) # AElement
-                p5.stroke(0, 255, 0); p5.rect(d["parent"]["boundedCoords"]["x"]*s, d["parent"]["boundedCoords"]["y"]*s, d["parent"]["boundedCoords"]["w"]*s, d["parent"]["boundedCoords"]["h"]*s) # AElement
-                p5.stroke(255, 0, 0); p5.rect(d["boundedCoords"]["x"]*s, d["boundedCoords"]["y"]*s, d["boundedCoords"]["w"]*s, d["boundedCoords"]["h"]*s) # AElement
-                im = p5.img() | cli.toHtml(); im = f"Location on screen (blue - window, green - parent, red - element):<br>{im}" # AElement
-            text = html.escape("\n".join([e for e in d["text"].split("\n") if e.strip()])) # AElement
-            return f"""<pre>{html.escape(self.__repr__())}</pre>{im}<br>Text content:<pre style='padding: 10px'>{text}</pre>""" # AElement
-        except Exception as e: pass                                              # AElement
-        return html.escape(self.__repr__())                                      # AElement
+        if zSett.debug: print(f"element.__setattr__({attr}, {value})")           # RemoteStore
+        return resolve(self._setattr(attr, value))                               # RemoteStore
+    async def _call(self, args): return self._browser._unwrap((await self._browser._sendExt({"cmd": "call", "obj": self._obj, "args": self._browser._wrap(args)})).get("res", None)) # RemoteStore
+    def __call__(self, *args):                                                   # RemoteStore
+        if zSett.debug: print(f"element.__call__(*{args})")                      # RemoteStore
+        return resolve(self._call(args))                                         # RemoteStore
+    def __repr__(self):                                                          # RemoteStore
+        idx = "unknown"                                                          # RemoteStore
+        if self._obj["type"] == "_zircon_const_": idx = f"const:{self._obj['idx']}" # RemoteStore
+        if self._obj["type"] == "_zircon_local_": idx = f"local class={self._obj['klass']} idx={self._obj['idx']}" # RemoteStore
+        return f"<RemoteStore {idx}>"                                            # RemoteStore
+inf = float("inf")                                                               # RemoteStore
 class Element(RemoteStore):                                                      # Element
-    def __init__(self, abrowser, obj:dict): super().__init__(abrowser, obj); self._ae = AElement(abrowser, obj) # Element
-    # def inputText(self, text, opts=None): return k1.resolve(self._ae.inputText(text, opts)) # Element
+    def __init__(self, browser, obj:dict):                                       # Element
+        """Represents a specific element in the current browser"""               # Element
+        super().__init__(browser, obj)                                           # Element
+    async def _inputText(self, text, opts=None): return (await self._browser._sendExt({"cmd": "elem_inputText", "obj": self._obj, "text": text, "opts": opts or {}}))["res"] # Element
+    def _sendCall(self, func:str, args:list): # constIdx.func(...args), like document.querySelector("#main"), mainly convenience method # Element
+        return self._browser._sendExt({"cmd": "call", "obj": {"type": "_zircon_temp_", "prev": { "obj": self._obj, "attr": func } }, "args": args}) # Element
+    async def a_querySelector(self, selector): return self._browser._unwrap((await self._sendCall("querySelector", [selector]))["res"]) # Element
+    async def a_querySelectorAll(self, selector): return self._browser._unwrap((await self._sendCall("querySelectorAll", [selector]))["res"]) # Element
+    async def a_click(self): return self._browser._unwrap((await self._sendCall("click", []))["res"]) # Element
+    async def _selectorPath(self, cmd): return self._browser._unwrap((await self._browser._sendExt({"cmd": cmd, "obj": self._obj}))["path"]) # get uniquely identifying css selector path (? not sure, long time ago) # Element
     @property                                                                    # Element
-    def tagPath(self): return unasyncR(self._ae.tagPath) # return unasyncR(self._browser, self._ae.tagPath) # Element
+    def tagPath(self): return resolve(self._selectorPath("tagPath"))             # Element
     @property                                                                    # Element
-    def idPath(self): return unasyncR(self._ae.idPath)                           # Element
+    def idPath(self): return resolve(self._selectorPath("idPath"))               # Element
     @property                                                                    # Element
-    def classPath(self): return unasyncR(self._ae.classPath)                     # Element
-    def _toLinks(self, f): return self._ae._toLinks(f)                           # Element
-    def __repr__(self): return self._ae.__repr__().replace("AElement", "Element") # Element
-    def _repr_html_(self): return self._ae._repr_html_().replace("AElement", "Element") # Element
+    def classPath(self): return resolve(self._selectorPath("classPath"))         # Element
+    def _toLinks(self, f):                                                       # Element
+        url = self._browser.tabData["url"]; a = urlparse(url); baseUrl = f"{a.scheme}://{a.netloc}" # Element
+        return [self.innerHTML] | cli.toLinks(f) | cli.apply(lambda x: f"{baseUrl}{x}" if x.startswith("/") else x)\
+            | cli.apply(lambda x: f"{url}{x}" if x.startswith("#") else x) | cli.aS(set) | cli.sort(None, False) | cli.aS(list) # Element
+    def __repr__(self):                                                          # Element
+        try:                                                                     # Element
+            d = self._obj                                                        # Element
+            if "coords" in d: return f"""<Element {d['tag']}/{d['klass']} id="{d['id']}" #child={d['nChildren']} class="{d['className']}" %parent={round(d['boundedCoords']['areaRatio']['parent']*100)} %screen={round(d['boundedCoords']['areaRatio']['screen']*100)} />""" # Element # Element
+            else: return f"""<Element {d['tag']}/{d['klass']} id="{d['id']}" #child={d['nChildren']} class="{d['className']}" />""" # Element # Element
+        except: pass                                                             # Element
+        return f"<Element extId={self.browser.extId}/>"                          # Element
+    def _repr_html_(self):                                                       # Element
+        try:                                                                     # Element
+            d = self._obj; im = ""                                               # Element
+            if "coords" in d:                                                    # Element
+                s = 400/d["screen"]["w"]; p5 = k1lib.p5; p5.newSketch(d["screen"]["w"]*s+1, d["screen"]["h"]*s+1, flip=False) # Element
+                p5.stroke(0, 0, 255); p5.rect(0, 0, d["screen"]["w"]*s, d["screen"]["h"]*s) # Element
+                p5.stroke(0, 255, 0); p5.rect(d["parent"]["boundedCoords"]["x"]*s, d["parent"]["boundedCoords"]["y"]*s, d["parent"]["boundedCoords"]["w"]*s, d["parent"]["boundedCoords"]["h"]*s) # Element
+                p5.stroke(255, 0, 0); p5.rect(d["boundedCoords"]["x"]*s, d["boundedCoords"]["y"]*s, d["boundedCoords"]["w"]*s, d["boundedCoords"]["h"]*s) # Element
+                im = p5.img() | cli.toHtml(); im = f"Location on screen (blue - window, green - parent, red - element):<br>{im}" # Element
+            text = html.escape("\n".join([e for e in d["text"].split("\n") if e.strip()])) # Element
+            return f"""<pre>{html.escape(self.__repr__())}</pre>{im}<br>Text content:<pre style='padding: 10px'>{text}</pre>""" # Element
+        except Exception as e: pass                                              # Element
+        return html.escape(self.__repr__())                                      # Element
+patch_async_convenience_methods(Element, resolver=resolve)                       # Element
 class Locator:                                                                   # Locator
     def __init__(self, name:str, topleft:int, bottomright:int, text:str="", tag:str="", klass:str="", nChildren:int=0): # Locator
         self.name = name; self.topleft = topleft; self.bottomright = bottomright; self.text = text # Locator
@@ -327,114 +391,106 @@ class Locator:                                                                  
         w = 800; h = w/1920*1080; p5 = k1lib.p5                                  # Locator
         p5.newSketch(w, h, False); p5.background(250)                            # Locator
         self._plot(0, 0, w, h); return p5.img()                                  # Locator
-zSett.add("conflictDuration", 10, "How many seconds does the Extensions need to not take orders from other Python clients before our Python clients can take over? If too high, there won't be any free Extensions left, and if too low, there will be interference with other ppl") # Locator
 class BrowserCancel(Exception): pass                                             # BrowserCancel
 class BrowserGroup:                                                              # BrowserGroup
-    def __init__(self, groupPath:"str|list[str]", limit:int=3):                  # BrowserGroup
-        """Constructs a browser group.
-
-:param groupPath: what group of browsers do you want to take control over?
-:param limit: only take over this many browsers"""                               # BrowserGroup
-        self.groupPath = groupPath; self.limit = limit                           # BrowserGroup
-        self._scanBrowser = newBrowser(); self._extIds = []; self._browsers = [] # BrowserGroup
-        self._setupFinished = False; trun(self._setup())                         # BrowserGroup
-    async def _setup(self):                                                      # BrowserGroup
-        with k1lib.captureStdout(): scan = await self._scanBrowser.scan(self.groupPath) # BrowserGroup
-        extIds = scan.items() | cli.filt(lambda x: (time.time() - x["lastUpdated"]) > zSett.conflictDuration, 1) | cli.cut(0) | cli.deref() # BrowserGroup
-        self._extIds = extIds | cli.head(self.limit) | cli.deref()               # BrowserGroup
-        # then have all the browsers pick the exts                               # BrowserGroup
-        for extId in self._extIds:                                               # BrowserGroup
-            b = newBrowser()                                                     # BrowserGroup
-            with k1lib.captureStdout(): await b.pickExt(extId)                   # BrowserGroup
-            self._browsers.append(b)                                             # BrowserGroup
-        self._setupFinished = True                                               # BrowserGroup
-    async def _setupGuard(self):                                                 # BrowserGroup
-        while not self._setupFinished: await asyncio.sleep(0.01)                 # BrowserGroup
-    async def execute(self, aFn, timeout=20):                                    # BrowserGroup
-        """Executes the specified async function repeatedly whenever a browser frees up.
+    def __init__(self, groupPath:"str|list[str]", limit:int=3, conflictDuration:float=10): # BrowserGroup
+        """Constructs a browser group to run a single task on multiple browsers at the same time.
 Example::
 
-    linksToVisit = deque([
-        'https://en.touhouwiki.net/wiki/Reimu_Hakurei',
-        'https://en.touhouwiki.net/wiki/Marisa_Kirisame',
-        'https://en.touhouwiki.net/wiki/Touhou_Project',
-        'https://en.touhouwiki.net/wiki/Imperishable_Night',
-        'https://en.touhouwiki.net/wiki/Perfect_Cherry_Blossom',
-        'https://en.touhouwiki.net/wiki/Embodiment_of_Scarlet_Devil',
-        'https://en.touhouwiki.net/wiki/Subterranean_Animism',
-        'https://en.touhouwiki.net/wiki/Mountain_of_Faith',
-        'https://en.touhouwiki.net/wiki/Phantasmagoria_of_Flower_View',
-        'https://en.touhouwiki.net/wiki/Hakurei_Shrine',
-        'https://en.touhouwiki.net/wiki/Touhou_Wiki:Projects',
-        'https://en.touhouwiki.net/wiki/Yukari_Yakumo',
-        'https://en.touhouwiki.net/wiki/Undefined_Fantastic_Object',
-        'https://en.touhouwiki.net/wiki/Aya_Shameimaru',
-        'https://en.touhouwiki.net/wiki/Sakuya_Izayoi',
-        'https://en.touhouwiki.net/wiki/Immaterial_and_Missing_Power',
-        'https://en.touhouwiki.net/wiki/Sanae_Kochiya'
-    ])
-    data = []
+    _linksToVisit = [
+        'https://en.touhouwiki.net/wiki/Reimu_Hakurei',                 'https://en.touhouwiki.net/wiki/Marisa_Kirisame',
+        'https://en.touhouwiki.net/wiki/Touhou_Project',                'https://en.touhouwiki.net/wiki/Imperishable_Night',
+        'https://en.touhouwiki.net/wiki/Perfect_Cherry_Blossom',        'https://en.touhouwiki.net/wiki/Embodiment_of_Scarlet_Devil',
+        'https://en.touhouwiki.net/wiki/Subterranean_Animism',          'https://en.touhouwiki.net/wiki/Mountain_of_Faith',
+        'https://en.touhouwiki.net/wiki/Phantasmagoria_of_Flower_View', 'https://en.touhouwiki.net/wiki/Hakurei_Shrine',
+        'https://en.touhouwiki.net/wiki/Touhou_Wiki:Projects',          'https://en.touhouwiki.net/wiki/Yukari_Yakumo',
+        'https://en.touhouwiki.net/wiki/Undefined_Fantastic_Object',    'https://en.touhouwiki.net/wiki/Aya_Shameimaru',
+        'https://en.touhouwiki.net/wiki/Sakuya_Izayoi',                 'https://en.touhouwiki.net/wiki/Immaterial_and_Missing_Power',
+        'https://en.touhouwiki.net/wiki/Sanae_Kochiya' ] # sanae's always last lol
 
+    # async version
+    linksToVisit = deque(_linksToVisit); data = []
     async def crawl(b:"zircon.Browser"):
-        # put here because it seems to resolve lots of problems that I have
-        # when browser instances are scheduled too close together
-        await asyncio.sleep(1)
+        if len(linksToVisit) == 0: raise zircon.BrowserCancel() # if it seems like there're no more data to process, then throw zircon.BrowserCancel()
+        try:
+            url = linksToVisit.popleft(); await b.a_goto(url)                      # grab a task from the queue
+            title = await (await b.a_querySelector("title"))._getattr("innerHTML") # do your normal web crawling stuff here
+            data.append([url, title])                                              # save data somewhere
+        except: linksToVisit.append(url)                                           # try again later
+    bg = zircon.BrowserGroup("touhou", 5)                  # take control of all browsers that's in group "touhou". Can also do something like zircon.BrowserGroup(["public", "starcraft"], 5)
+    await bg.a_execute(crawl)                              # executes the web scrape
 
-        # if it seems like there're no more data to process, then throw zircon.BrowserCancel().
-        # The current browser will never be scheduled while executing this function again
+    # sync version
+    linksToVisit = deque(_linksToVisit); data = []
+    def crawl(b:"zircon.Browser"):
         if len(linksToVisit) == 0: raise zircon.BrowserCancel()
-
-
-        url = linksToVisit.popleft()
-        try: # do your normal web crawling stuff here
-            await b.goto(url)
-            title = await (await b.querySelector("title")).value("innerHTML")
-
-            # save data somewhere
+        try:
+            url = linksToVisit.popleft(); b.goto(url)
+            title = b.querySelector("title").innerHTML     # it's so much cleaner isn't it?
             data.append([url, title])
-        except: linksToVisit.append(url) # try again later
+        except: linksToVisit.append(url)
+    zircon.BrowserGroup("touhou", 5).execute(crawl)
 
-    bg = zircon.BrowserGroup("public", 5)
-    # bg = zircon.BrowserGroup(["public", "starcraft"], 5) # or can also be this
-    await bg.execute(crawl)
-
-The last command will run the crawl function over and over again, as long as there's a free browser
-to do it. Also, by default, this will only use inactive browsers (no Python clients are sending them
-commands for a while, configurable at ``settings.zircon.conflictDuration``)
-
-Notice how I wrapped all browser interactions inside a try-except block? If some errors were to
-appear, like connection lost and the system is trying to restore the connection and you don't
-resolve it, .execute() will throw that same error and cancels all current tasks. So if you want
-to design something that will run for a long time, catch it and try to schedule the job for later
-
-:param aFn: async function to be executed
-:param timeout: if the function takes longer than this amount of time,
-    then cancel the task and make the browser available in the future
-    again. Can be None, but I'd advise against that"""                           # BrowserGroup
-        await self._setupGuard(); nCancelled = [0]; avaiBs = deque(list(self._browsers)) # BrowserGroup
-        n = len(self._browsers); errors = [None]; tasks = deque()                # BrowserGroup
+:param groupPath: what group of browsers do you want to take control over?
+:param limit: only take over this many browsers. If available browsers is below this number, then only use that much, and not the specified limit
+:param conflictDuration: how many seconds does the Extensions need to not take orders from other
+    Python clients before our Python clients can take over? If too high, there won't be any free
+    Extensions left, and if too low, there will be interference with other ppl""" # BrowserGroup
+        self.groupPath = groupPath; self.limit = limit; self.conflictDuration = conflictDuration; self.isAsync = None; self._scanBrowser = newBrowser(); self._browsers = [] # BrowserGroup
+    async def _setupCore(self):                                                  # BrowserGroup
+        with zSett.context(stdout=False):                                        # BrowserGroup
+            scan = await self._scanBrowser.a_scan(self.groupPath) # then have all the browsers pick the exts # BrowserGroup
+            for extId in scan.items() | cli.filt(lambda x: (time.time() - x["lastUpdated"]) > self.conflictDuration, 1) | cli.cut(0) | cli.head(self.limit): # BrowserGroup
+                b = newBrowser(); await b.a_pickExt(extId); self._browsers.append(b) # BrowserGroup
+    async def _a_setup(self):                                                    # BrowserGroup
+        if self.isAsync is False: raise Exception("BrowserGroup has already been setup to run in sync mode, can't run async functions now") # BrowserGroup
+        if self.isAsync is True: return                                          # BrowserGroup
+        await self._setupCore(); self.isAsync = True                             # BrowserGroup
+    def _setup(self):                                                            # BrowserGroup
+        if self.isAsync is True: raise Exception("BrowserGroup has already been setup to run in async mode, can't run sync functions now") # BrowserGroup
+        if self.isAsync is False: return                                         # BrowserGroup
+        resolve(self._setupCore()); self.isAsync = False                         # BrowserGroup
+    def execute(self, fn):                                                       # BrowserGroup
+        self._setup(); nCancelled = [0]; lock = threading.Lock(); threads = []; n = len(self._browsers); errors = [None]; startTime = time.time() # BrowserGroup
+        def inner(b):                                                            # BrowserGroup
+            while errors[0] is None:                                             # BrowserGroup
+                try: fn(b)                                                       # BrowserGroup
+                except BrowserCancel:                                            # BrowserGroup
+                    with lock: nCancelled[0] += 1                                # BrowserGroup
+                except Exception as e:                                           # BrowserGroup
+                    with lock: nCancelled[0] += 1; errors[0] = [f"{type(e)}, {e}", traceback.format_exc()] # BrowserGroup
+        for b in self._browsers: t = threading.Thread(target=inner, args=(b,), daemon=True); threads.append(t); t.start() # BrowserGroup
+        try:                                                                     # BrowserGroup
+            while nCancelled[0] < len(self._browsers): time.sleep(1); print(f"\rExecuting. Elapsed={k1.fmt.time(time.time()-startTime, metric=True)} #browsers={n} #running={n-nCancelled[0]}     ", end="") # BrowserGroup
+        except KeyboardInterrupt as e: errors[0] = [None, traceback.format_exc()] # BrowserGroup
+        if errors[0] is not None:                                                # BrowserGroup
+            if errors[0][0] is None: print("Interrupted")                        # BrowserGroup
+            else: raise Exception(f"Exception occurred during BrowserGroup.execute(): {errors[0][0]}. Traceback:\n\n{errors[0][1]} ") # BrowserGroup
+        else: print("BrowserGroup.execute() finished")                           # BrowserGroup
+    async def a_execute(self, aFn, timeout=20):                                  # BrowserGroup
+        await self._a_setup(); nCancelled = [0]; avaiBs = deque(list(self._browsers)); n = len(self._browsers); errors = [None]; tasks = deque(); startTime = time.time() # BrowserGroup
         async def inner(b):                                                      # BrowserGroup
             try:                                                                 # BrowserGroup
                 if timeout is None: await aFn(b); avaiBs.append(b)               # BrowserGroup
                 else: await asyncio.wait_for(aFn(b), timeout); avaiBs.append(b)  # BrowserGroup
             except BrowserCancel: nCancelled[0] += 1                             # BrowserGroup
             except asyncio.TimeoutError: avaiBs.append(b)                        # BrowserGroup
-            except Exception as e: errors[0] = [e, traceback.format_exc()]       # BrowserGroup
+            except Exception as e: errors[0] = [f"{type(e)}, {e}", traceback.format_exc()] # BrowserGroup
             # print(f"Encountered error {e} while executing async function. Stopping BrowserGroup.execute(). Traceback:\n\n{traceback.format_exc()}") # BrowserGroup
         while True:                                                              # BrowserGroup
             while len(tasks) and tasks[0].done(): tasks.popleft() # cleaning up old tasks # BrowserGroup
             if errors[0]: # trouble! Cancel all current tasks and break          # BrowserGroup
                 for task in tasks: task.cancel()                                 # BrowserGroup
-                e, tb = errors[0]; raise Exception(f"Exception occured during BrowserGroup.execute(): {e}. Traceback:\n\n{tb}") # BrowserGroup
-            print(f"\rExecuting. #browsers={n} #running={n-nCancelled[0]} #tasks={len(tasks)}  ", end="") # BrowserGroup
+                e, tb = errors[0]; raise Exception(f"Exception occured during BrowserGroup.a_execute(): {e}. Traceback:\n\n{tb}") # BrowserGroup
+            print(f"\rExecuting. Elapsed={k1.fmt.time(time.time()-startTime, metric=True)} #browsers={n} #running={n-nCancelled[0]} #tasks={len(tasks)}     ", end="") # BrowserGroup
             try:                                                                 # BrowserGroup
                 if len(avaiBs) == 0:                                             # BrowserGroup
-                    if nCancelled[0] >= len(self._browsers): print("Task finished"); break # BrowserGroup
+                    if nCancelled[0] >= len(self._browsers): print("BrowserGroup.a_execute() finished"); break # BrowserGroup
                     await asyncio.sleep(0.1)                                     # BrowserGroup
                 else: tasks.append(trun(inner(avaiBs.popleft())))                # BrowserGroup
             except asyncio.CancelledError:                                       # BrowserGroup
                 for task in tasks: task.cancel()                                 # BrowserGroup
-                break                                                            # BrowserGroup
+                print("Interrupted"); break                                      # BrowserGroup
 @k1.patch(Element)                                                               # BrowserGroup
 @k1.deprecated("too old")                                                        # BrowserGroup
 async def _locate(self, s:str) -> "list[Element]":                               # BrowserGroup
@@ -819,4 +875,4 @@ Notes
    overwriting the DOM during a rerender. In those cases, stronger strategies or
    editor-specific handling may be needed.
 """                                                                              # inputText
-    return unasyncR(self._ae.inputText(text, opts))                              # inputText
+    return resolve(self._inputText(text, opts))                                  # inputText

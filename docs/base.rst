@@ -75,12 +75,6 @@ Classes
    :show-inheritance:
    :special-members: __call__
 
-.. autoclass:: k1lib.ConfinedAutoIncrement
-   :members:
-   :undoc-members:
-   :show-inheritance:
-   :special-members: __call__
-
 .. autoclass:: k1lib.Wrapper
    :members:
    :undoc-members:
@@ -288,6 +282,8 @@ Functions
 .. autofunction:: k1lib.aes_decrypt
 .. autofunction:: k1lib.aes_encrypt_json
 .. autofunction:: k1lib.aes_decrypt_json
+.. autofunction:: k1lib.resolve
+.. autofunction:: k1lib.resolveAsyncGen
 .. autofunction:: k1lib.modbusCrc
 .. autofunction:: k1lib.parseTimeStr
 .. autofunction:: k1lib.extractLinks

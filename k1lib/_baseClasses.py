@@ -1324,6 +1324,7 @@ See also: :meth:`~k1lib.TimeSeries`"""                                          
             with self.lock: arr = self.arr; self.arr = []; res = []              # Aggregate
             if len(arr) > 0:                                                     # Aggregate
                 res = processF(arr)                                              # Aggregate
+                if res is None: return                                           # Aggregate
                 with self.lock:                                                  # Aggregate
                     if self.arr is not None: self.arr.extend(res) # for some reason on prod systems, self.arr sometimes becomes None, but doesn't seem like it can do that. No clue what happens, so I'm just gonna check for it here # Aggregate
     def append(self, obj):                                                       # Aggregate

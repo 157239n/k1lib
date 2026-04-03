@@ -24,6 +24,9 @@ Generic:
 - Added password-related functions: :meth:`~k1lib.hashPw`, :meth:`~k1lib.verifyPw`, :meth:`~k1lib.leakedPw`
 - Added multiprocess helpers: :class:`~k1lib.SharedLock` and :class:`~k1lib.SharedDict`
 - Added web-based file system manager: :class:`~k1lib.FileSys`
+- Removed :mod:`k1lib.kws` and :mod:`k1lib.selen` as it's not very useful
+- Added :mod:`k1lib.nbimports`, to specialize for notebook's autocomplete
+- Added :meth:`~k1lib.resolveAsyncGen`, a bit niche, but sure
 
 `1.7 </1.7>`_ - Jan 25th, 2025
 -------------------------------
