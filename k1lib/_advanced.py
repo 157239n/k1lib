@@ -3,7 +3,7 @@ import k1lib, json, base64, threading, time, random, struct, collections, os, sy
 import pickle, dill
 from collections import deque
 __all__ = ["logErr", "log", "aes_encrypt", "aes_decrypt", "aes_encrypt_json", "aes_decrypt_json", "SharedLock", "SharedDict",
-           "tempObj", "TimeSeries", "speed", "compileCExt", "FileSys"]
+           "tempObj", "TimeSeries", "speed", "compileCExt", "FileSys", "drawBoxesOnImage"]
 _logCall_initted = [None]
 k1.settings.add("logErr", k1.Settings()
                 .add("retention", 7*86400, "how long (in seconds) should the logs be retained for? Defaulted to 1 week")
@@ -214,7 +214,7 @@ See also: :meth:`aes_encrypt`"""                                                
         return aes_encrypt(json.dumps(obj).encode())                             # log
     def aes_decrypt_json(ciphertext:str) -> dict:                                # log
         return json.loads(aes_decrypt(ciphertext).decode())                      # log
-    k1lib.settings.cred.add("aes", k1lib.Settings().add("key", get_random_bytes(16), "16-byte aes key, used in aes_encrypt() and aes_decrypt()", sensitive=True), "anything related to AES block cipher") # log
+    k1lib.settings.cred.add("aes", k1lib.Settings().add("key", get_random_bytes(16), "16-byte aes key, used in aes_encrypt() and aes_decrypt(). Can set env to hex string of the key", sensitive=True, env=("K1_AES_KEY_HEXSTR", lambda x: bytes.fromhex(x))), "anything related to AES block cipher") # log
 except: pass                                                                     # log
 class SharedLock:                                                                # SharedLock
     def __init__(self, name: str, timeout: float | None = None):                 # SharedLock
@@ -1080,3 +1080,81 @@ See also: :class:`~k1lib.managePlanes`
         def k1_fs_file_delete(enc_fn, fileId): fn = k1.aes_decrypt(enc_fn).decode(); self = FileSys.fns[fn]; del self[fileId]; return "ok" # FileSys
         @app.route("/k1/fs", **kwargs)                                           # FileSys
         def k1_fs_index(): return "".join([k1_fs(fn) for fn in FileSys.fns.keys()]) # FileSys
+def _getFontFile() -> "None|str":                                                # _getFontFile
+    fn = f"{os.path.dirname(inspect.getabsfile(k1lib))}{os.sep}assets{os.sep}noto.ttc" # _getFontFile
+    if os.path.exists(fn): return fn                                             # _getFontFile
+    try:                                                                         # _getFontFile
+        import requests; res = requests.get("https://scripts.mlexps.com/noto.ttc") # _getFontFile
+        if res.ok:                                                               # _getFontFile
+            with open(fn, "wb") as f: f.write(res.content); return fn            # _getFontFile
+    except: return None                                                          # _getFontFile
+    return None                                                                  # _getFontFile
+from typing import List, Tuple, Optional; PIL = k1lib.dep("PIL"); TextBox = Tuple[float, float, float, float, str] # _getFontFile
+def load_font(font_path: Optional[str], size: int) -> "PIL.ImageFont.ImageFont": return PIL.ImageFont.truetype(font_path, size=size) if font_path and os.path.exists(font_path) else PIL.ImageFont.load_default() # load_font
+def wrap_text_to_width(draw: "PIL.ImageDraw.ImageDraw", text: str, font: "PIL.ImageFont.ImageFont", max_width: int) -> str: # wrap_text_to_width
+    text = text.strip()                                                          # wrap_text_to_width
+    if not text: return text                                                     # wrap_text_to_width
+    def line_width(s: str) -> int:                                               # wrap_text_to_width
+        if not s: return 0                                                       # wrap_text_to_width
+        bbox = draw.textbbox((0, 0), s, font=font); return bbox[2] - bbox[0]     # wrap_text_to_width
+    if line_width(text) <= max_width: return text                                # wrap_text_to_width
+    if " " in text:                                                              # wrap_text_to_width
+        words = text.split(); lines = []; current = words[0]                     # wrap_text_to_width
+        for word in words[1:]:                                                   # wrap_text_to_width
+            candidate = current + " " + word                                     # wrap_text_to_width
+            if line_width(candidate) <= max_width: current = candidate           # wrap_text_to_width
+            else: lines.append(current); current = word                          # wrap_text_to_width
+        lines.append(current); return "\n".join(lines)                           # wrap_text_to_width
+    lines = []; current = "" # Character-based wrapping for CJK / no-space text  # wrap_text_to_width
+    for ch in text:                                                              # wrap_text_to_width
+        candidate = current + ch                                                 # wrap_text_to_width
+        if not current or line_width(candidate) <= max_width: current = candidate # wrap_text_to_width
+        else: lines.append(current); current = ch                                # wrap_text_to_width
+    if current: lines.append(current)                                            # wrap_text_to_width
+    return "\n".join(lines)                                                      # wrap_text_to_width
+def multiline_bbox(draw: "PIL.ImageDraw.ImageDraw", text: str, font: "PIL.ImageFont.ImageFont", spacing: int): return draw.multiline_textbbox((0, 0), text, font=font, spacing=spacing, align="center") # multiline_bbox
+def _measure_wrapped_text(draw: "PIL.ImageDraw.ImageDraw", wrapped: str, font: "PIL.ImageFont.ImageFont", spacing: int): # Measure text using: actual max line width from rendered text & layout height from font metrics, not glyph ink bbox. This avoids underestimating height for short strings like digits/CJK. # _measure_wrapped_text
+    lines = wrapped.split("\n") if wrapped else [""]; max_w = 0                  # _measure_wrapped_text
+    for line in lines:                                                           # _measure_wrapped_text
+        if line: bbox = draw.textbbox((0, 0), line, font=font); w = bbox[2] - bbox[0] # _measure_wrapped_text
+        else: w = 0                                                              # _measure_wrapped_text
+        if w > max_w: max_w = w                                                  # _measure_wrapped_text
+    try: ascent, descent = font.getmetrics(); line_h = int((ascent + descent)*0.9) # _measure_wrapped_text
+    except Exception: bbox = draw.textbbox((0, 0), "Ag", font=font); line_h = bbox[3] - bbox[1] # _measure_wrapped_text
+    total_h = len(lines) * line_h + max(0, len(lines) - 1) * spacing; return max_w, total_h, line_h # _measure_wrapped_text
+def fit_text_to_box(draw: "PIL.ImageDraw.ImageDraw", text: str, box_w: int, box_h: int, font_path: Optional[str] = None, min_font_size: int = 8, max_font_size: Optional[int] = None, padding: int = 2, line_spacing_ratio: float = 0.15): # fit_text_to_box
+    usable_w = max(1, box_w - 2 * padding); usable_h = max(1, box_h - 2 * padding) # fit_text_to_box
+    if max_font_size is None: max_font_size = max(min(int(box_h * 0.9), int(box_w * 0.9)), min_font_size) # Conservative starting point # fit_text_to_box
+    best_font = load_font(font_path, min_font_size); best_text = text; best_spacing = 0 # fit_text_to_box
+    safety = 0.92 # Small safety margin to avoid "technically fits but looks too big" # fit_text_to_box
+    for size in range(max_font_size, min_font_size - 1, -1):                     # fit_text_to_box
+        font = load_font(font_path, size); spacing = max(0, int(size * line_spacing_ratio)) # fit_text_to_box
+        wrapped = wrap_text_to_width(draw, text, font, usable_w); text_w, text_h, _ = _measure_wrapped_text(draw, wrapped, font, spacing) # fit_text_to_box
+        if text_w <= usable_w * safety and text_h <= usable_h * safety: return font, wrapped, spacing # fit_text_to_box
+        best_font = font; best_text = wrapped; best_spacing = spacing            # fit_text_to_box
+    return best_font, best_text, best_spacing                                    # fit_text_to_box
+def draw_translated_text(image: "PIL.Image.Image", items: List[TextBox], font_path: Optional[str] = None, text_fill: Tuple[int, int, int] = (0, 0, 0), background_fill: Tuple[int, int, int] = None, debug_boxes: bool = False, padding: int = 2, line_spacing: float = 0.05) -> "PIL.Image.Image": # draw_translated_text
+    img = image.convert("RGB"); draw = PIL.ImageDraw.Draw(img)                   # draw_translated_text
+    for cx, cy, w, h, text in items:                                             # draw_translated_text
+        x0 = int(round(cx - w / 2)); y0 = int(round(cy - h / 2)); x1 = int(round(cx + w / 2)); y1 = int(round(cy + h / 2)); box_w = max(1, x1 - x0); box_h = max(1, y1 - y0) # draw_translated_text
+        if background_fill is not None: draw.rectangle([x0, y0, x1, y1], fill=background_fill) # draw_translated_text
+        font, wrapped, spacing = fit_text_to_box(draw=draw, text=text, box_w=box_w, box_h=box_h, font_path=font_path, padding=padding, line_spacing_ratio=line_spacing) # draw_translated_text
+        text_w, text_h, line_h = _measure_wrapped_text(draw, wrapped, font, spacing) # Center based on layout box, not glyph ink bbox # draw_translated_text
+        tx = x0 + (box_w - text_w) / 2; lines = wrapped.split("\n") if wrapped else [""]; start_y = y0 + (box_h - text_h) / 2 # draw_translated_text
+        for i, line in enumerate(lines):                                         # draw_translated_text
+            if line: bbox = draw.textbbox((0, 0), line, font=font); line_w = bbox[2] - bbox[0] # draw_translated_text
+            else: line_w = 0                                                     # draw_translated_text
+            line_x = x0 + (box_w - line_w) / 2; line_y = start_y + i * (line_h + spacing); draw.text((line_x, line_y), line, font=font, fill=text_fill) # draw_translated_text
+        if debug_boxes: draw.rectangle([x0, y0, x1, y1], outline=(255, 0, 0), width=1) # draw_translated_text
+    return img                                                                   # draw_translated_text
+def drawBoxesOnImage(im, items, color=(0,0,0), bg=(255,255,255), outline=True, lineSpacing=0.05): # drawBoxesOnImage
+    """Draws a bunch of boxes on an image. For CJK (and other languages) characters, ensure
+'requests' python library is installed. The fonts file will be fetch automatically.
+
+:param im: PIL image
+:param items: 5-tuple of (center x, center y, width, height, text)
+:param color: text color
+:param bg: background color, put None for transparent/no background
+:param outline: whether to draw a red outline around the box or not
+:param lineSpacing: line spacing ratio, multiplies with single line's height"""  # drawBoxesOnImage
+    return draw_translated_text(image=im, items=items, text_fill=color, background_fill=bg, debug_boxes=outline, padding=0, font_path=_getFontFile(), line_spacing=lineSpacing) # drawBoxesOnImage

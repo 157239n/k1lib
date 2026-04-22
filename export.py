@@ -1,4 +1,4 @@
-#!/home/kelvin/envs/torch/bin/python
+#!/home/quang/envs/torch/bin/python
 
 # to refresh all files, just do `./export.py`
 # to refresh all files and install everywhere: `./export.py --dist=True`
@@ -7,11 +7,11 @@
 import json, fire, os, re, warnings, traceback, sys
 os.chdir(os.path.dirname(os.path.realpath(__file__)))
 
-pythonExec = "/home/kelvin/envs/torch/bin/python"
-libFolder = "/home/kelvin/repos/labs/k1lib"
-pypiFolder = "/home/kelvin/web/pypi/data/k1lib/"
-uvExec = "/home/kelvin/.local/bin/uv"
-uvAct = "/home/kelvin/envs/torch/bin/activate"
+pythonExec = "/home/quang/envs/torch/bin/python"
+libFolder = "/home/quang/k1lib"
+pypiFolder = "/home/quang/pypi/k1lib/"
+uvExec = "/snap/bin/uv"
+uvAct = "/home/quang/envs/torch/bin/activate"
 
 try: from k1lib.imports import *; hasK1 = True
 except Exception as e: hasK1 = False; traceback.print_exc()

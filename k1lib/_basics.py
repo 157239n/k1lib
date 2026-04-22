@@ -959,6 +959,9 @@ A more complicated example::
 
     for x in f(3, 4): print(x) # prints 7, then 12, then -1
 
+So, when you want to return from an async generator, you have to raise that specific exception
+instead of returning as usual. Niche feature, but useful in some cases
+
 See also: :meth:`k1lib.resolve`
 
 :param eventLoop: Custom event loop. If not specified, use the same event loop as :meth:`k1lib.resolve`""" # resolveAsyncGen

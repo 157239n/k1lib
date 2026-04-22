@@ -4,7 +4,7 @@ __all__ = ["k1js_amd", "k1js_umd", "acorn", "acorn_walk"]
 basePath = os.path.dirname(inspect.getabsfile(k1lib)) + os.sep
 @k1.cache(timeout=None)
 def readFile(fn):                                                                # readFile
-    with open(f"{basePath}assets/{fn}") as f: return f.read()                    # readFile
+    with open(f"{basePath}assets{os.sep}{fn}") as f: return f.read()             # readFile
 def k1js_amd(): return readFile("k1js_amd.js")                                   # k1js_amd
 def k1js_umd(): return readFile("k1js_umd.js")                                   # k1js_umd
 def acorn(): return readFile("acorn.js")                                         # acorn

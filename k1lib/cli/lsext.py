@@ -556,6 +556,8 @@ INSERT INTO table1 (col1, col2, col3) VALUES (val1, val2, val3);
 UPDATE table1 SET col1 = val1, col2 = val2 WHERE col3 = 3;
 DELETE FROM table1 WHERE col1 = 3;
 ALTER TABLE users ADD COLUMN age INTEGER;
+PRAGMA foreign_keys = ON; -- enables foreign keys checking
+ALTER TABLE documents ADD CONSTRAINT fk_user FOREIGN KEY (userId) REFERENCES users(id);
 CREATE INDEX idx_users_email ON users(email);
 PRAGMA wal_checkpoint(TRUNCATE); VACUUM; -- this is to truncate sqlite's wal file
 </div></div><pre id="{pre}_result" contenteditable=true style="padding: 12px; overflow-x: auto"></pre>

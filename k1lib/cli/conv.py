@@ -1258,7 +1258,7 @@ really care.
         self.mode = mode                                                         # toUnix
         if isinstance(tz, dateutil.tz.tz.tzfile): self.tz = tz                   # toUnix
         else:                                                                    # toUnix
-            self.tz = dateutil.tz.gettz(tz)                                      # toUnix
+            self.tz = dateutil.tz.gettz(tz or k1lib.settings.timezone)           # toUnix
             if self.tz is None and tz: raise Exception(f"Timezone '{tz}' not found. You can get a list of all available timezones at `toUnix.tzs()`") # toUnix
     @staticmethod                                                                # toUnix
     def tzs(): return list(dateutil.zoneinfo.get_zonefile_instance().zones.keys()) # toUnix
@@ -1501,12 +1501,12 @@ PyPDF2 = k1lib.dep("PyPDF2", url="https://pypdf2.readthedocs.io/")              
 pymupdf = k1lib.dep("pymupdf", url="https://pymupdf.readthedocs.io/")            # toCm
 class Pdf:                                                                       # Pdf
     def __init__(self, fn):                                                      # Pdf
-        self.fn = os.path.expanduser(fn); self._handle = None; self._open()      # Pdf
+        self.mode = "file" if isinstance(fn, str) else "bytes"                   # Pdf
+        self.fn = os.path.expanduser(fn) if self.mode == "file" else fn; self._handle = None; self._open() # Pdf
     def _open(self):                                                             # Pdf
         if self._handle is not None: return                                      # Pdf
-        self._handle = open(self.fn, 'rb')                                       # Pdf
-        self._reader = PyPDF2.PdfReader(self._handle)                            # Pdf
-        self._npages = len(self._reader.pages);                                  # Pdf
+        self._handle = open(self.fn, 'rb') if self.mode == "file" else io.BytesIO(self.fn) # Pdf
+        self._reader = PyPDF2.PdfReader(self._handle); self._npages = len(self._reader.pages); # Pdf
     def __iter__(self): return (PdfPage(self, i) for i in range(len(self)))      # Pdf
     def __getitem__(self, s):                                                    # Pdf
         if isinstance(s, slice): return [PdfPage(self, i) for i in range(len(self))[s]] # Pdf
@@ -1514,19 +1514,15 @@ class Pdf:                                                                      
     def __getstate__(self): d = dict(self.__dict__); d["_handle"] = None; d["_reader"] = None; return d # Pdf
     def __setstate__(self, d): self.__dict__.update(d)                           # Pdf
     def __repr__(self): return f"<Pdf #pages={len(self)} '{self.fn}'>"           # Pdf
-    def __del__(self):                                                           # Pdf
-        if self._handle: self._handle.close()                                    # Pdf
+    def __del__(self): self._handle.close() if self._handle else 0               # Pdf
     def __len__(self): return self._npages                                       # Pdf
 class PdfPage:                                                                   # PdfPage
-    def __init__(self, pdf:Pdf, i:int):                                          # PdfPage
-        self.pdf = pdf; self.i = i; self._cached_fitz = None                     # PdfPage
+    def __init__(self, pdf:Pdf, i:int): self.pdf = pdf; self.i = i; self._cached_fitz = None # PdfPage
     def __repr__(self): return f"<PdfPage page={self.i} #pages={len(self.pdf)} fn='{self.pdf.fn}'>" # PdfPage
-    def _cat(self):                                                              # PdfPage
-        self.pdf._open()                                                         # PdfPage
-        with open(self.pdf.fn, 'rb') as o: return self.pdf._reader.pages[self.i].extract_text().split("\n") # PdfPage
+    def _cat(self): self.pdf._open(); return self.pdf._reader.pages[self.i].extract_text().split("\n") # PdfPage
     def _fitz(self):                                                             # PdfPage
-        if self._cached_fitz is None: self._cached_fitz = pymupdf.open(self.pdf.fn)[self.i] # PdfPage
-        return self._cached_fitz                                                 # PdfPage
+        if self._cached_fitz: return self._cached_fitz                           # PdfPage
+        self._cached_fitz = (pymupdf.open(self.pdf.fn) if self.pdf.mode == "file" else pymupdf.open(stream=self.pdf.fn, filetype="pdf"))[self.i]; return self._cached_fitz # PdfPage
     def blocks(self, heightFrac=0.01, group=False, ratio=False):                 # PdfPage
         """Grab text blocks. Returns blocks in reading order.
 Example::
@@ -1541,12 +1537,9 @@ Example::
 :param group: if True, returns blocks of rows instead of joining all of them together by default
 :param ratio: if True, return coordinate ratios with width and height, instead of absolute pixels""" # PdfPage
         blocks = self._fitz().get_text("blocks") | cli.filt("x==0", 6) | cli.sort(1) | cli.apply(lambda row: row[:5]) | cli.deref() # PdfPage
-        width, height = self._shape(); ratioF = (cli.apply(lambda x: x/width, [0, 2]) | cli.apply(lambda y: y/height, [1, 3])) if ratio else cli.iden() # PdfPage
+        width, height = self._shape(); ratioF = (cli.apply(lambda x: round(x/width, 2), [0, 2]) | cli.apply(lambda y: round(y/height, 2), [1, 3])) if ratio else cli.apply(round, [0,1,2,3]) # PdfPage
         return blocks | cli.batchedTrigger(1, delta=height*heightFrac, adj=False) | cli.apply(cli.sort(0) | ratioF | cli.apply(lambda row: [row[:4], row[4]])) | (cli.iden() if group else cli.joinSt()) | cli.deref() # PdfPage
-    def _toImg(self, **kwargs):                                                  # PdfPage
-        k1lib.depCli("pdftoppm"); fn2 = b"" | cli.file(); fn = self.pdf.fn.replace("'", "\\'"); i = self.i # PdfPage
-        None | cli.cmd(f"pdftoppm -f {i+1} -l {i+1} -jpeg '{fn}' {fn2} -singlefile") | cli.deref() # PdfPage
-        im = f"{fn2}.jpg" | cli.toImg(); os.remove(f"{fn2}.jpg"); os.remove(fn2); return im # PdfPage
+    def _toImg(self, **kwargs): return self._fitz().get_pixmap().tobytes("jpeg") | cli.toImg() # PdfPage
     def _shape(self, idx=None): d = (self._fitz().rect.width, self._fitz().rect.height); return d if idx is None else d[idx] # PdfPage
 _pdf_initialized = [False]                                                       # PdfPage
 def _pdf_init():                                                                 # _pdf_init

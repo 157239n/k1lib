@@ -37,6 +37,7 @@ def resolve(co):                                                                
     """Resolves any coroutine using zircon's internal event loop"""              # resolve
     return k1.resolve(co, _mainEventLoop)                                        # resolve
 zSett = k1.Settings().add("http_server", "https://zircon.aigu.vn").add("ws_server", "wss://wszircon.aigu.vn")\
+    .add("clientGroup", "general", "this string gets added to client id, to make client connections more easily debuggable")\
     .add("debug", False, "whether to print ouf whenever a RemoteStore or Element use __getattr__, __setattr__ and __call__")\
     .add("stdout", True, "whether to print out status updates for each Browser")\
     .add("sleepTime", 0.01, "How many seconds to sleep when checking whether extension has replied. Too low you get 'thundering herd' when controlling 100-1000s of browsers. Too high and your python process feels sluggish to use") # resolve
@@ -57,30 +58,41 @@ Example::
     settings.zircon.http_server = "https://zircon.mlexps.com"
     settings.zircon.ws_server = "wss://wszircon.mlexps.com"
 
-    # setting up
-    b = zircon.newBrowser(); b.scan()                      # scan for browser tabs to take over
-    b.pickExt("_ext_4a9d7017_99ca_43c0_9961_e89608ba7624") # pick a particular extension id from .scan()
+    with zircon.newBrowser() as b:                             # setting up
+        print(b.scan())                                        # scan for browser tabs to take over
+        b.pickExt("_ext_4a9d7017_99ca_43c0_9961_e89608ba7624") # pick a particular extension id from .scan()
+        b.pickExtFromGroup("someGroup")                        # or pick extensions from a group
 
-    # using
-    b.goto("https://google.com")                                              # go to a particular page
-    b.querySelector("textarea").inputText("Cheese", {"enterAfterType": True}) # searches for "Cheese"
-    b.overlay()                                                               # inject grid overlay over the page, to help automate with LLMs
-    b.screenshot()                                                            # returns PIL image
+        # using
+        b.goto("https://google.com")                                              # go to a particular page
+        b.querySelector("textarea").inputText("Cheese", {"enterAfterType": True}) # searches for "Cheese"
+        b.overlay()                                                               # inject grid overlay over the page, to help automate with LLMs
+        b.screenshot()                                                            # returns PIL image
 
-    b.goto("https://en.wikipedia.org/wiki/Cheese")
-    e = b.querySelector("#mw-content-text")
-    e.tagPath, e.idPath, e.classPath                  # css selector path to this particular element
-    e.classPath, e.textContent, e.innerHTML, e.parent # access normal element variables
-    e.style.background = "green"                      # setting any element
-    e.window.outerWidth, e.document.URL               # access any variables in window/document/navigator/location/history
-    e | toLinks(); b | toLinks()                      # grab all urls from the element or entire document
-    b.close()                                         # disconnects from C2 server
+        b.goto("https://en.wikipedia.org/wiki/Cheese")
+        e = b.querySelector("#mw-content-text")
+        e.tagPath, e.idPath, e.classPath                  # css selector path to this particular element
+        e.classPath, e.textContent, e.innerHTML, e.parent # access normal element variables
+        e.style.background = "green"                      # setting any element
+        e.window.outerWidth, e.document.URL               # access any variables in window/document/navigator/location/history
+        e | toLinks(); b | toLinks()                      # grab all urls from the element or entire document
+
+Or, you can also choose not to use the context decorator::
+
+    b = zircon.newBrowser() # setting up
+    b.scan()                # do whatever you want with the browser
+    b.close()               # disconnects from C2 server and closing websockets connection
 
 More examples available at https://mlexps.com/other/62-zircon-new/"""            # Browser
-        self.msgD = {}; self.ws = None; self._ext_ws_updated = False; self.extId = None; self.clientId = "_client_" + str(uuid.uuid4()).replace(*"-_") # Browser
-        self._closed = False; trun(self._start()); trun(self._ping())            # Browser
-    def close(self): self._closed = True                                         # Browser
+        self.msgD = {}; self.ws = None; self._ext_ws_updated = False; self.extId = None; self.clientId = "_client_" + zSett.clientGroup + "_" + str(uuid.uuid4()).replace(*"-_") # Browser
+        self._finalized = False; self._closed = False; trun(self._start()); trun(self._ping()) # Browser
+    def close(self):                                                             # Browser
+        self._closed = True                                                      # Browser
+        while not self._finalized: time.sleep(0.01)                              # Browser
+        print("Browser closed")                                                  # Browser
     def __del__(self): self.close()                                              # Browser
+    def __enter__(self): return self                                             # Browser
+    def __exit__(self, *args): self.close()                                      # Browser
     async def _ping(self):                                                       # Browser
         while True:                                                              # Browser
             await asyncio.sleep(1)                                               # Browser
@@ -101,6 +113,7 @@ More examples available at https://mlexps.com/other/62-zircon-new/"""           
                             if msg["type"] == "pong": pass                       # Browser
                             if msg["type"] == "cmdPy_res" or msg["type"] == "cmdExt_res": self.msgD[msg["idx"]] = msg # Browser
                         except: pass                                             # Browser
+                self._finalized = True                                           # Browser
             except: pass                                                         # Browser
     async def _wsGuard(self):                                                    # Browser
         if self.ws is None: # connect guard                                      # Browser
@@ -391,6 +404,11 @@ class Locator:                                                                  
         w = 800; h = w/1920*1080; p5 = k1lib.p5                                  # Locator
         p5.newSketch(w, h, False); p5.background(250)                            # Locator
         self._plot(0, 0, w, h); return p5.img()                                  # Locator
+async def iterate_with_timeout(agen, timeout):                                   # Locator
+    startTime = time.time(); deadline = startTime + timeout                      # Locator
+    while True:                                                                  # Locator
+        try: yield await asyncio.wait_for(agen.__anext__(), deadline - time.time()) # Locator
+        except StopAsyncIteration: return                                        # Locator
 class BrowserCancel(Exception): pass                                             # BrowserCancel
 class BrowserGroup:                                                              # BrowserGroup
     def __init__(self, groupPath:"str|list[str]", limit:int=3, conflictDuration:float=10): # BrowserGroup
@@ -442,6 +460,9 @@ Example::
             scan = await self._scanBrowser.a_scan(self.groupPath) # then have all the browsers pick the exts # BrowserGroup
             for extId in scan.items() | cli.filt(lambda x: (time.time() - x["lastUpdated"]) > self.conflictDuration, 1) | cli.cut(0) | cli.head(self.limit): # BrowserGroup
                 b = newBrowser(); await b.a_pickExt(extId); self._browsers.append(b) # BrowserGroup
+    def close(self): self._scanBrowser.close(); [b.close() for b in self._browsers] # BrowserGroup
+    def __enter__(self): return self                                             # BrowserGroup
+    def __exit__(self, *args): self.close(); return self                         # BrowserGroup
     async def _a_setup(self):                                                    # BrowserGroup
         if self.isAsync is False: raise Exception("BrowserGroup has already been setup to run in sync mode, can't run async functions now") # BrowserGroup
         if self.isAsync is True: return                                          # BrowserGroup
@@ -468,11 +489,17 @@ Example::
             else: raise Exception(f"Exception occurred during BrowserGroup.execute(): {errors[0][0]}. Traceback:\n\n{errors[0][1]} ") # BrowserGroup
         else: print("BrowserGroup.execute() finished")                           # BrowserGroup
     async def a_execute(self, aFn, timeout=20):                                  # BrowserGroup
-        await self._a_setup(); nCancelled = [0]; avaiBs = deque(list(self._browsers)); n = len(self._browsers); errors = [None]; tasks = deque(); startTime = time.time() # BrowserGroup
+        async for x in self.a_execute_gen(self, aFn, timeout): pass              # BrowserGroup
+    async def a_execute_gen(self, aFn, timeout=20):                              # BrowserGroup
+        if timeout is None or timeout < 1: raise Exception(f"Crawl session timeout not realistic (<1s)") # BrowserGroup
+        isAsyncGen = inspect.isasyncgenfunction(aFn); yields = deque(); await self._a_setup(); nCancelled = [0] # BrowserGroup
+        avaiBs = deque(list(self._browsers)); n = len(self._browsers); errors = [None]; tasks = deque(); startTime = time.time() # BrowserGroup
         async def inner(b):                                                      # BrowserGroup
             try:                                                                 # BrowserGroup
-                if timeout is None: await aFn(b); avaiBs.append(b)               # BrowserGroup
-                else: await asyncio.wait_for(aFn(b), timeout); avaiBs.append(b)  # BrowserGroup
+                if isAsyncGen:                                                   # BrowserGroup
+                    async for x in iterate_with_timeout(aFn(b), timeout): yields.append(x) # BrowserGroup
+                else: await asyncio.wait_for(aFn(b), timeout)                    # BrowserGroup
+                avaiBs.append(b)                                                 # BrowserGroup
             except BrowserCancel: nCancelled[0] += 1                             # BrowserGroup
             except asyncio.TimeoutError: avaiBs.append(b)                        # BrowserGroup
             except Exception as e: errors[0] = [f"{type(e)}, {e}", traceback.format_exc()] # BrowserGroup
@@ -484,6 +511,7 @@ Example::
                 e, tb = errors[0]; raise Exception(f"Exception occured during BrowserGroup.a_execute(): {e}. Traceback:\n\n{tb}") # BrowserGroup
             print(f"\rExecuting. Elapsed={k1.fmt.time(time.time()-startTime, metric=True)} #browsers={n} #running={n-nCancelled[0]} #tasks={len(tasks)}     ", end="") # BrowserGroup
             try:                                                                 # BrowserGroup
+                while len(yields) > 0: yield yields.popleft()                    # BrowserGroup
                 if len(avaiBs) == 0:                                             # BrowserGroup
                     if nCancelled[0] >= len(self._browsers): print("BrowserGroup.a_execute() finished"); break # BrowserGroup
                     await asyncio.sleep(0.1)                                     # BrowserGroup
